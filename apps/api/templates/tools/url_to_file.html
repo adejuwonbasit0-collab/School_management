@@ -1,0 +1,55 @@
+{% extends "public_base.html" %}
+{% block title %}URL to File Converter — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-12">
+  <div class="text-center mb-8">
+    <a href="{{ url_for('ai.index') }}" class="text-xs text-gray-400 hover:text-white mb-2 inline-block">← Tools Hub</a>
+    <h1 class="text-3xl font-extrabold text-white mb-2">🌐 Normal URL to File Converter</h1>
+    <p class="text-gray-400 text-sm">Convert any public webpage URL into a downloadable Word/PDF document (.doc) or HTML file.</p>
+  </div>
+
+  <div class="glass border border-white/10 rounded-2xl p-6 text-white mb-8">
+    <form id="url-to-file-form" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Target Webpage URL</label>
+        <input type="url" id="web-url" required class="input-field w-full" placeholder="e.g. https://example.com/article"/>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Target File Format</label>
+        <select id="web-format" class="input-field w-full">
+          <option value="pdf">PDF Document (.doc / .pdf)</option>
+          <option value="html">HTML File (.html)</option>
+        </select>
+      </div>
+
+      <div class="flex justify-center">
+        <button type="submit" class="btn-neon px-8 py-3 font-bold text-sm">Convert Webpage to File</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('url-to-file-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = document.getElementById('web-url').value.trim();
+  const format = document.getElementById('web-format').value;
+
+  try {
+    const res = await fetch('/ai/api/webpage-to-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ url, format })
+    });
+    const blob = await res.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `webpage_export.${format === 'pdf' ? 'doc' : 'html'}`;
+    link.click();
+  } catch(err) {
+    alert("Conversion error: " + err.message);
+  }
+});
+</script>
+{% endblock %}

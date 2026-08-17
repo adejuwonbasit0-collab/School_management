@@ -1,0 +1,71 @@
+{% extends "public_base.html" %}
+{% block title %}Lorem Ipsum Generator — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:760px;margin:0 auto;padding:48px 20px }
+textarea.admin-input { width:100%;min-height:260px;font-family:monospace }
+.opt-row { display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Lorem Ipsum Generator</h1>
+    <p style="color:var(--c-text-2)">Generate placeholder text — paragraphs, sentences, or words.</p>
+  </div>
+
+  <div class="opt-row">
+    <label style="font-size:13px;color:#9fb3d1">Type:
+      <select id="unit" class="admin-input" style="width:130px">
+        <option value="paragraphs" selected>Paragraphs</option>
+        <option value="sentences">Sentences</option>
+        <option value="words">Words</option>
+      </select>
+    </label>
+    <label style="font-size:13px;color:#9fb3d1">Count: <input id="count" type="number" min="1" max="50" value="3" class="admin-input" style="width:70px"></label>
+    <label style="font-size:13px;color:#9fb3d1"><input type="checkbox" id="startClassic" checked> Start with "Lorem ipsum…"</label>
+    <button class="btn-neon" id="genBtn">Generate</button>
+    <button class="btn-ghost-neon" id="copyBtn">Copy</button>
+  </div>
+
+  <textarea id="output" class="admin-input" readonly></textarea>
+</div>
+<script>
+const WORDS = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure reprehenderit voluptate velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa officia deserunt mollit anim id est laborum".split(" ");
+function rndWord() { return WORDS[Math.floor(Math.random() * WORDS.length)]; }
+function sentence(minW=6, maxW=14) {
+  const n = minW + Math.floor(Math.random() * (maxW - minW));
+  let words = Array.from({length:n}, rndWord);
+  words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+  return words.join(" ") + ".";
+}
+function paragraph(sentences=5) {
+  return Array.from({length:sentences}, () => sentence()).join(" ");
+}
+document.getElementById('genBtn').addEventListener('click', () => {
+  const unit = document.getElementById('unit').value;
+  const count = Math.max(1, Math.min(50, parseInt(document.getElementById('count').value) || 1));
+  const classic = document.getElementById('startClassic').checked;
+  let result = '';
+  if (unit === 'words') {
+    let words = Array.from({length:count}, rndWord);
+    if (classic) words = "lorem ipsum dolor sit amet".split(" ").concat(words).slice(0, count);
+    result = words.join(' ') + '.';
+  } else if (unit === 'sentences') {
+    let sentences = Array.from({length:count}, sentence);
+    if (classic) sentences[0] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
+    result = sentences.join(' ');
+  } else {
+    let paras = Array.from({length:count}, () => paragraph());
+    if (classic) paras[0] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " + paragraph(4);
+    result = paras.join('\n\n');
+  }
+  document.getElementById('output').value = result;
+});
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('output').value);
+});
+document.getElementById('genBtn').click();
+</script>
+{% endblock %}

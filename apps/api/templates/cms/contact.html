@@ -1,0 +1,48 @@
+{% extends "public_base.html" %}
+{% block title %}Contact — {{ site_name }}{% endblock %}
+{% block content %}
+{% set c = contact or {} %}
+<section class="py-16 px-4">
+  <div class="max-w-5xl mx-auto">
+    <div class="text-center mb-12">
+      <h1 class="text-4xl font-bold font-display gradient-text mb-4">{{ c.heading or 'Get In Touch' }}</h1>
+      <p class="text-gray-400">{{ c.subtext or "Have a project in mind? I'd love to hear about it." }}</p>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-10">
+      <div class="lg:col-span-2 space-y-6">
+        {% if c.email %}<div class="glass border border-white/10 rounded-xl p-5"><p class="text-xs text-gray-500 mb-1">Email</p><a href="mailto:{{ c.email }}" class="text-cyan-400 hover:text-cyan-300">{{ c.email }}</a></div>{% endif %}
+        {% if c.phone %}<div class="glass border border-white/10 rounded-xl p-5"><p class="text-xs text-gray-500 mb-1">Phone</p><p class="text-white">{{ c.phone }}</p></div>{% endif %}
+        {% if c.address %}<div class="glass border border-white/10 rounded-xl p-5"><p class="text-xs text-gray-500 mb-1">Address</p><p class="text-white">{{ c.address }}</p></div>{% endif %}
+        {% if c.whatsapp %}<div class="glass border border-white/10 rounded-xl p-5"><p class="text-xs text-gray-500 mb-1">WhatsApp</p><a href="https://wa.me/{{ c.whatsapp }}" target="_blank" class="text-green-400 hover:text-green-300">Message on WhatsApp</a></div>{% endif %}
+      </div>
+      <div class="lg:col-span-3">
+        <div class="glass border border-white/10 rounded-2xl p-8">
+          <form method="POST" action="{{ url_for('cms.contact') }}" class="space-y-5">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Name *</label>
+                <input name="name" required class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500/50 transition-all" placeholder="Your name"/>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Email *</label>
+                <input name="email" type="email" required class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500/50 transition-all" placeholder="you@example.com"/>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Subject</label>
+              <input name="subject" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500/50 transition-all" placeholder="Project inquiry"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Message *</label>
+              <textarea name="message" rows="5" required class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500/50 transition-all resize-none" placeholder="Tell me about your project..."></textarea>
+            </div>
+            <button type="submit" class="w-full btn-neon justify-center py-3">Send Message</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+

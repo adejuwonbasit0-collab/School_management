@@ -1,0 +1,74 @@
+<!--
+  Website Automation: popups. Fetches whatever's eligible for this page,
+  then waits for each popup's own trigger (delay / exit-intent / scroll)
+  before showing it, and remembers per-popup in localStorage so a
+  "once per session/visitor" popup doesn't nag on every page.
+-->
+<div id="site-popup-root"></div>
+<script>
+(function() {
+  const STORAGE_PREFIX = 'popup_seen_';
+
+  function hasBeenSeen(popup) {
+    if (popup.frequency === 'always') return false;
+    const key = STORAGE_PREFIX + popup.id;
+    if (popup.frequency === 'once_per_visitor') return !!localStorage.getItem(key);
+    return !!sessionStorage.getItem(key); // once_per_session
+  }
+  function markSeen(popup) {
+    const key = STORAGE_PREFIX + popup.id;
+    if (popup.frequency === 'once_per_visitor') localStorage.setItem(key, '1');
+    else sessionStorage.setItem(key, '1');
+  }
+
+  function trackEvent(popupId, type) {
+    fetch(`/api/popups/${popupId}/event`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type })
+    }).catch(() => {});
+  }
+
+  function showPopup(popup) {
+    if (hasBeenSeen(popup)) return;
+    markSeen(popup);
+    const root = document.getElementById('site-popup-root');
+    root.innerHTML = `
+      <div id="popup-overlay-${popup.id}" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;
+        display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)">
+        <div style="background:#111214;border:1px solid rgba(255,255,255,0.08);border-radius:16px;max-width:440px;width:100%;
+          padding:32px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+          <button onclick="document.getElementById('popup-overlay-${popup.id}').remove()"
+            style="position:absolute;top:14px;right:14px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1">×</button>
+          <h3 style="color:#fff;font-size:20px;font-weight:800;margin:0 0 12px">${popup.headline}</h3>
+          <div style="color:#aaa;font-size:14px;line-height:1.6;margin-bottom:20px">${popup.body_html}</div>
+          ${popup.cta_text ? `<a href="${popup.cta_url || '#'}" onclick="fetch('/api/popups/${popup.id}/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'click'})})"
+            style="display:inline-block;background:#1db954;color:#000;font-weight:700;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:14px">${popup.cta_text}</a>` : ''}
+        </div>
+      </div>`;
+    trackEvent(popup.id, 'impression');
+  }
+
+  function armTrigger(popup) {
+    if (hasBeenSeen(popup)) return;
+    if (popup.trigger_type === 'delay') {
+      setTimeout(() => showPopup(popup), (popup.trigger_value || 5) * 1000);
+    } else if (popup.trigger_type === 'exit_intent') {
+      const handler = (e) => {
+        if (e.clientY <= 0) { document.removeEventListener('mouseout', handler); showPopup(popup); }
+      };
+      document.addEventListener('mouseout', handler);
+    } else if (popup.trigger_type === 'scroll') {
+      const handler = () => {
+        const pct = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+        if (pct >= (popup.trigger_value || 50)) { window.removeEventListener('scroll', handler); showPopup(popup); }
+      };
+      window.addEventListener('scroll', handler);
+    }
+  }
+
+  fetch('/api/popups/active?path=' + encodeURIComponent(window.location.pathname))
+    .then(r => r.json())
+    .then(popups => popups.forEach(armTrigger))
+    .catch(() => {});
+})();
+</script>

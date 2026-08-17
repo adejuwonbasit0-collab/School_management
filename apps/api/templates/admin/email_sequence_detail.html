@@ -1,0 +1,133 @@
+{% extends "admin/base.html" %}
+{% block page_title %}{{ seq.name }}{% endblock %}
+{% block page_subtitle %}{{ seq.steps | length }} step(s) · {{ 'Active' if seq.active else 'Paused' }}{% endblock %}
+{% block content %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Add a Step</div></div>
+  <div class="a-panel-body">
+    <div style="margin-bottom:14px;padding:12px 14px;background:rgba(255,255,255,0.02);border-radius:8px">
+      <label class="a-label">Describe this email, let AI draft it (optional)</label>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <input type="text" id="ai-step-prompt" class="a-input" placeholder="e.g. Welcome email thanking them for subscribing, friendly tone"/>
+        <button type="button" class="a-btn a-btn-secondary a-btn-sm" onclick="generateStep()" style="white-space:nowrap">✨ Generate</button>
+      </div>
+      <p id="ai-step-status" style="font-size:12px;margin-top:8px"></p>
+    </div>
+    <form method="POST" action="{{ url_for('admin.add_email_sequence_step', sid=seq.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-2" style="gap:14px">
+        <div>
+          <label class="a-label">Subject</label>
+          <input type="text" name="subject" id="step-subject" required class="a-input" style="margin-top:6px"/>
+        </div>
+        <div>
+          <label class="a-label">Send this many days after enrollment</label>
+          <input type="number" name="delay_days" min="0" value="0" class="a-input" style="margin-top:6px"/>
+        </div>
+      </div>
+      <label class="a-label" style="margin-top:14px;display:block">Body (HTML)</label>
+      <textarea name="body_html" id="step-body" required rows="8" class="a-input" style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:12px"
+        placeholder="&lt;p&gt;Hi {{ '{{name}}' }},&lt;/p&gt;&lt;p&gt;...&lt;/p&gt;"></textarea>
+      <p style="font-size:11px;color:var(--text-3);margin-top:6px">
+        Use <code>{{ '{{name}}' }}</code> for the subscriber's name and <code>{{ '{{unsubscribe_url}}' }}</code> for a working unsubscribe link.
+      </p>
+      <button class="a-btn a-btn-primary" style="margin-top:10px">Add Step</button>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Steps (in order)</div></div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not seq.steps %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No steps yet — add one above. Nothing sends until there's at least one step.</p>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">#</th>
+        <th class="text-left px-3 py-3">Subject</th>
+        <th class="text-left px-3 py-3">Sends</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for step in seq.steps %}
+        <tr>
+          <td class="px-5 py-3 text-gray-400">{{ loop.index }}</td>
+          <td class="px-3 py-3 text-white">{{ step.subject }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">Day {{ step.delay_days }}</td>
+          <td class="px-5 py-3 text-right">
+            <form method="POST" action="{{ url_for('admin.delete_email_sequence_step', step_id=step.id) }}" class="inline" onsubmit="return confirm('Remove this step?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Recent Enrollments</div></div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not enrollments %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">Nobody enrolled yet.</p>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Subscriber</th>
+        <th class="text-left px-3 py-3">Progress</th>
+        <th class="text-left px-3 py-3">Enrolled</th>
+        <th class="text-left px-3 py-3">Status</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for enr in enrollments %}
+        <tr>
+          <td class="px-5 py-3 text-white">{{ enr.subscriber.email if enr.subscriber else '(deleted)' }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">Step {{ enr.current_step }} / {{ seq.steps | length }}</td>
+          <td class="px-3 py-3 text-gray-500 text-xs">{{ enr.enrolled_at.strftime('%Y-%m-%d') }}</td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full {% if enr.completed %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+              {{ 'Completed' if enr.completed else 'In progress' }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+async function generateStep() {
+  const prompt = document.getElementById('ai-step-prompt').value.trim();
+  const statusEl = document.getElementById('ai-step-status');
+  if (!prompt) { statusEl.style.color = 'var(--red, #f87171)'; statusEl.textContent = 'Describe the email first.'; return; }
+  statusEl.style.color = 'var(--text-muted)';
+  statusEl.textContent = 'Generating…';
+  try {
+    const res = await fetch('{{ url_for("admin.generate_email_sequence_step_ai") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({ prompt })
+    });
+    const d = await res.json();
+    if (d.error) {
+      statusEl.style.color = 'var(--red, #f87171)';
+      statusEl.textContent = '✕ ' + d.error;
+      return;
+    }
+    document.getElementById('step-subject').value = d.subject || '';
+    document.getElementById('step-body').value = d.body_html || '';
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = '✓ Draft filled in below — review before adding.';
+  } catch (e) {
+    statusEl.style.color = 'var(--red, #f87171)';
+    statusEl.textContent = '✕ Network error';
+  }
+}
+</script>
+{% endblock %}

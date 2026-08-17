@@ -1,0 +1,91 @@
+{% extends "public_base.html" %}
+{% block title %}PDF Merge — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+.tool-shell { max-width:760px;margin:0 auto;padding:48px 20px }
+.drop-zone { border:2px dashed rgba(var(--c-accent-rgb),0.3);border-radius:16px;padding:40px;text-align:center;transition:all .2s;cursor:pointer;background:rgba(var(--c-accent-rgb),0.03) }
+.drop-zone:hover,.drop-zone.drag-over { border-color:rgba(var(--c-accent-rgb),0.7);background:rgba(var(--c-accent-rgb),0.07) }
+.file-row { display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 14px;margin-bottom:8px }
+.file-row .name { flex:1;font-size:13px;color:#cfe6ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.file-row button { background:none;border:none;color:#ff5b7e;cursor:pointer;font-size:16px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">PDF Merge</h1>
+    <p style="color:var(--c-text-2)">Combine multiple PDFs into one — entirely in your browser, no upload.</p>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <p style="color:#9fb3d1;margin-bottom:8px">Drag PDF files here, or</p>
+    <button class="btn-ghost-neon" type="button" onclick="document.getElementById('fileInput').click()">Choose Files</button>
+    <input type="file" id="fileInput" accept="application/pdf" multiple style="display:none">
+  </div>
+
+  <div id="fileList" style="margin-top:18px"></div>
+
+  <div style="margin-top:20px;text-align:center">
+    <button class="btn-neon" id="mergeBtn" disabled>Merge & Download</button>
+  </div>
+  <p id="status" style="text-align:center;color:var(--c-text-2);font-size:13px;margin-top:10px"></p>
+</div>
+<script>
+let files = [];
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const mergeBtn = document.getElementById('mergeBtn');
+const status = document.getElementById('status');
+
+function renderList() {
+  fileList.innerHTML = '';
+  files.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    row.innerHTML = `<span class="name">${i+1}. ${f.name}</span><button data-i="${i}">✕</button>`;
+    fileList.appendChild(row);
+  });
+  fileList.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => { files.splice(parseInt(btn.dataset.i), 1); renderList(); });
+  });
+  mergeBtn.disabled = files.length < 2;
+}
+function addFiles(list) {
+  for (const f of list) if (f.type === 'application/pdf') files.push(f);
+  renderList();
+}
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => addFiles(e.target.files));
+
+mergeBtn.addEventListener('click', async () => {
+  status.textContent = 'Merging…';
+  mergeBtn.disabled = true;
+  try {
+    const { PDFDocument } = PDFLib;
+    const merged = await PDFDocument.create();
+    for (const file of files) {
+      const bytes = await file.arrayBuffer();
+      const src = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    const mergedBytes = await merged.save();
+    const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'merged.pdf'; a.click();
+    URL.revokeObjectURL(url);
+    status.textContent = `Merged ${files.length} files successfully.`;
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+  mergeBtn.disabled = files.length < 2;
+});
+</script>
+{% endblock %}

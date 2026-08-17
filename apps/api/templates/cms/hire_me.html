@@ -1,0 +1,375 @@
+{% extends "public_base.html" %}
+{% block title %}Work With Me — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.hire-shell { max-width:900px;margin:0 auto;padding:60px 20px 80px }
+.chat-box { background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-md);overflow:hidden;max-width:540px }
+.chat-header { padding:16px 18px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;gap:12px }
+.chat-avatar { width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--c-accent),#007AFF);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0 }
+.chat-messages { padding:16px;max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:10px }
+.bubble { max-width:85%;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.55 }
+.bubble.bot { background:var(--c-surface-2);color:var(--c-text);align-self:flex-start;border-bottom-left-radius:4px }
+.bubble.user { background:var(--c-accent);color:#000;font-weight:500;align-self:flex-end;border-bottom-right-radius:4px }
+.faq-chips { display:flex;flex-wrap:wrap;gap:6px;margin-top:8px }
+.faq-chip { background:rgba(29,185,84,0.1);border:1px solid rgba(29,185,84,0.25);color:var(--c-accent);font-size:12px;padding:5px 12px;border-radius:20px;cursor:pointer;transition:all .15s }
+.faq-chip:hover { background:rgba(29,185,84,0.2) }
+.chat-input-row { padding:12px;border-top:1px solid var(--c-border);display:flex;gap:8px }
+.contact-card { ds-card ds-card-glow;padding:24px;border-radius:var(--r-md);border:1px solid var(--c-border);background:var(--c-surface);cursor:pointer;transition:all .2s;text-align:center }
+.contact-card:hover { border-color:var(--c-border-hi);transform:translateY(-3px);box-shadow:var(--shadow-card) }
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .hire-shell { padding:36px 16px 56px }
+  #chat-section { grid-template-columns:1fr !important; gap:24px !important; }
+  .chat-box { max-width:100% !important; }
+}
+@media (max-width: 480px) {
+  .hire-shell { padding:28px 12px 48px }
+  .contact-cards { grid-template-columns:1fr !important; }
+  .chat-messages { max-height:280px !important; }
+  .bubble { max-width:92% !important; font-size:13px !important; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="hire-shell">
+  <!-- Hero -->
+  <div style="text-align:center;margin-bottom:56px" class="reveal">
+    <div class="ds-section-eyebrow">Open for Work</div>
+    <h1 class="ds-heading" style="margin-bottom:14px">Let's Build<br>Something <span class="text-accent">Great</span></h1>
+    <p style="color:var(--c-text-2);max-width:480px;margin:0 auto;font-size:16px">Tell me about your project and I'll get back to you with a full proposal, timeline and quote.</p>
+  </div>
+
+  <!-- Two contact options -->
+  <div class="contact-cards reveal" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:520px;margin:0 auto 48px">
+    <div class="contact-card" onclick="document.getElementById('chat-section').scrollIntoView({behavior:'smooth'})">
+      <div style="font-size:32px;margin-bottom:10px">💬</div>
+      <div style="font-weight:700;color:var(--c-text);margin-bottom:4px">Chat Here</div>
+      <div style="font-size:12px;color:var(--c-text-2)">Start with quick questions, then submit your brief</div>
+    </div>
+    <a class="contact-card" href="{{ whatsapp_url if whatsapp_url else '#' }}" target="_blank" id="whatsapp-link">
+      <div style="font-size:32px;margin-bottom:10px">📱</div>
+      <div style="font-weight:700;color:var(--c-text);margin-bottom:4px">WhatsApp</div>
+      <div style="font-size:12px;color:var(--c-text-2)">Chat directly on WhatsApp for faster replies</div>
+    </a>
+  </div>
+
+  <!-- Chat section -->
+  <div id="chat-section" style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start" class="reveal">
+    <!-- Auto-reply chat -->
+    <div class="chat-box">
+      <div class="chat-header">
+        <div class="chat-avatar">👋</div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--c-text)">Bazillin Studio</div>
+          <div style="font-size:11px;color:var(--c-accent)">● Usually replies in &lt; 24h</div>
+        </div>
+      </div>
+      <div class="chat-messages" id="chat-msgs">
+        <div class="bubble bot">Hey! 👋 I'm glad you're here. What can I help you with today?</div>
+        <div style="align-self:flex-start">
+          <div class="faq-chips" id="faq-chips">
+            {% for faq in faqs[:6] %}
+            <span class="faq-chip" onclick="askFaq({{ faq.id }}, this)">{{ faq.question }}</span>{% endfor %}
+            <span class="faq-chip" onclick="showProjectForm()">📋 I want to start a project →</span>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" class="ds-input" style="flex:1;padding:8px 12px;font-size:13px" placeholder="Ask something or type your message…" onkeydown="if(event.key==='Enter')sendChatMsg()">
+        <button class="ds-btn ds-btn-primary ds-btn-sm" onclick="sendChatMsg()">Send</button>
+      </div>
+    </div>
+
+    <!-- Project form (hidden until triggered) -->
+    <div id="project-form-wrap" style="display:none">
+      <h3 style="font-size:18px;font-weight:700;color:var(--c-text);margin-bottom:20px">Tell me about your project</h3>
+      <form id="hire-form" style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label class="ds-label">Full Name *</label>
+          <input name="name" required class="ds-input" placeholder="Jane Doe">
+        </div>
+        <div>
+          <label class="ds-label">Email *</label>
+          <input name="email" type="email" required class="ds-input" placeholder="jane@company.com">
+        </div>
+        {% if not current_user.is_authenticated %}
+        <div id="hire-password-wrap">
+          <label class="ds-label">Set a Password *</label>
+          <input name="password" id="hire-password-input" type="password" minlength="8" required class="ds-input" placeholder="At least 8 characters">
+          <p style="font-size:11px;color:var(--c-text-3);margin-top:4px">This creates your account so you can log in later and track your project. If you already have an account with this email, this is ignored — just log in normally.</p>
+        </div>
+        {% endif %}
+        <div>
+          <label class="ds-label">Company (optional)</label>
+          <input name="company" class="ds-input" placeholder="Acme Inc.">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="ds-label">Country</label>
+            <input name="country" class="ds-input" placeholder="e.g. Nigeria">
+          </div>
+          <div>
+            <label class="ds-label">Preferred Currency</label>
+            <select name="currency" class="ds-input ds-select">
+              <option value="NGN">₦ NGN — Nigerian Naira</option>
+              <option value="USD">$ USD — US Dollar</option>
+              <option value="GBP">£ GBP — British Pound</option>
+              <option value="EUR">€ EUR — Euro</option>
+              <option value="KES">KSh KES — Kenyan Shilling</option>
+            </select>
+            <p style="font-size:11px;color:var(--c-text-3);margin-top:4px">Your proposal and invoice will be quoted in this currency.</p>
+          </div>
+        </div>
+        <div>
+          <label class="ds-label">Project Type</label>
+          <select name="project_type" class="ds-input ds-select">
+            <option value="">— Select —</option>
+            <option>Website</option><option>Web App</option><option>Mobile App</option>
+            <option>AI/Automation</option><option>Hosting Setup</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="ds-label">Budget Range</label>
+          <select name="budget_range" class="ds-input ds-select">
+            <option value="">— Select —</option>
+            {% if (g.currency if g is defined and g.currency else site_currency) == 'NGN' %}
+            <option>Under ₦500,000</option>
+            <option>₦500,000 – ₦1,500,000</option>
+            <option>₦1,500,000 – ₦5,000,000</option>
+            <option>₦5,000,000 – ₦15,000,000</option>
+            <option>₦15,000,000+</option>
+            {% else %}
+            <option>Under $500</option>
+            <option>$500 – $1,500</option>
+            <option>$1,500 – $5,000</option>
+            <option>$5,000 – $15,000</option>
+            <option>$15,000+</option>
+            {% endif %}
+          </select>
+        </div>
+        <div>
+          <label class="ds-label">Timeline</label>
+          <select name="timeline" class="ds-input ds-select">
+            <option value="">— Select —</option>
+            <option>ASAP</option><option>1–2 weeks</option>
+            <option>1 month</option><option>2–3 months</option><option>Flexible</option>
+          </select>
+        </div>
+        <div>
+          <label class="ds-label">Describe Your Project *</label>
+          <textarea name="description" required rows="4" class="ds-input" placeholder="What are you building? What problem does it solve? Any tech preferences?"></textarea>
+        </div>
+        <button type="submit" class="ds-btn ds-btn-primary" style="width:100%">Send Project Brief →</button>
+        <p id="form-status" style="font-size:12px;color:var(--c-text-2);text-align:center"></p>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const chatMsgs = document.getElementById('chat-msgs');
+const WHATSAPP_NUMBER = "{{ whatsapp_number if whatsapp_number else '' }}";
+if (WHATSAPP_NUMBER) {
+  document.getElementById('whatsapp-link').href = `https://wa.me/${WHATSAPP_NUMBER.replace(/\D/g,'')}?text=${encodeURIComponent('Hi, I found you on Bazillin Studio and I\'d like to discuss a project.')}`;
+}
+
+const isAuthenticated = {{ 'true' if current_user.is_authenticated else 'false' }};
+const adminUserId = {{ admin_user.id if admin_user else 'null' }};
+const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+const threadId = adminUserId && currentUserId ? [adminUserId, currentUserId].sort((a,b)=>a-b).join('-') : '';
+
+let isHumanChat = false;
+let lastMessageId = 0;
+let pollInterval = null;
+
+function appendMsg(text, isUser) {
+  const div = document.createElement('div');
+  div.className = 'bubble ' + (isUser ? 'user' : 'bot');
+  div.textContent = text;
+  chatMsgs.appendChild(div);
+  chatMsgs.scrollTop = 99999;
+}
+
+async function askFaq(id, chip) {
+  appendMsg(chip.textContent, true);
+  chip.style.opacity = '.4'; chip.style.pointerEvents = 'none';
+  const res = await fetch(`/api/faq/${id}`);
+  const data = await res.json();
+  appendMsg(data.answer, false);
+  
+  const more = document.createElement('div');
+  more.className = 'bubble bot faq-followup-actions';
+  more.style.alignSelf = 'flex-start';
+  more.innerHTML = 'What would you like to do next?<div class="faq-chips" style="margin-top:6px">' +
+    '<span class="faq-chip" style="background:rgba(var(--c-accent-rgb),0.15);color:var(--c-accent)" onclick="showProjectForm()">📋 Start Project Brief</span>' +
+    '<span class="faq-chip" style="background:rgba(250,204,21,0.15);color:#facc15" onclick="startHumanChat()">💬 Talk to Human</span>' +
+    '</div>';
+  chatMsgs.appendChild(more);
+  chatMsgs.scrollTop = 99999;
+}
+
+async function startHumanChat() {
+  if (!isAuthenticated) {
+    appendMsg("I'm heading over to get a human for you! Please Sign In or Register to start a secure live chat thread directly in this window.", false);
+    const linkDiv = document.createElement('div');
+    linkDiv.className = 'bubble bot';
+    linkDiv.style.alignSelf = 'flex-start';
+    linkDiv.innerHTML = '<a href="/auth/login?next=/hire-me" class="ds-btn ds-btn-primary ds-btn-sm" style="display:inline-block;margin-right:8px">Sign In</a>' +
+                        '<a href="/auth/register?next=/hire-me" class="ds-btn ds-btn-ghost ds-btn-sm" style="display:inline-block">Register</a>';
+    chatMsgs.appendChild(linkDiv);
+    chatMsgs.scrollTop = 99999;
+    return;
+  }
+  
+  if (isHumanChat) return;
+  isHumanChat = true;
+  
+  // Update UI Status
+  const statusEl = document.querySelector('.chat-header div div:last-child');
+  if (statusEl) {
+    statusEl.textContent = '● Live Chatting with Admin';
+    statusEl.style.color = '#1DB954';
+  }
+  
+  appendMsg("Initializing direct chat connection...", false);
+  
+  try {
+    // Fetch previous chat history
+    const res = await fetch(`/messages/${threadId}/poll?since=0`);
+    const data = await res.json();
+    
+    // Clear initial FAQ suggestions
+    const chipsWrap = document.getElementById('faq-chips');
+    if (chipsWrap) chipsWrap.parentElement.remove();
+    
+    if (data.messages && data.messages.length) {
+      appendMsg("--- Previous Conversation ---", false);
+      data.messages.forEach(m => {
+        appendMsg(m.content, m.sender_id === currentUserId);
+        lastMessageId = Math.max(lastMessageId, m.id);
+      });
+      appendMsg("--- Connected Live ---", false);
+    } else {
+      appendMsg("Connected! Type a message below to start chatting with the team.", false);
+    }
+    
+    // Start Polling Loop
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(pollForReplies, 3000);
+  } catch (e) {
+    appendMsg("Could not connect to live chat. Please refresh the page.", false);
+  }
+}
+
+async function pollForReplies() {
+  if (!isHumanChat || !threadId) return;
+  try {
+    const res = await fetch(`/messages/${threadId}/poll?since=${lastMessageId}`);
+    const data = await res.json();
+    if (data.messages && data.messages.length) {
+      data.messages.forEach(m => {
+        // Only append if it's from the other user (admin)
+        if (m.sender_id !== currentUserId) {
+          appendMsg(m.content, false);
+        }
+        lastMessageId = Math.max(lastMessageId, m.id);
+      });
+    }
+  } catch (e) {}
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chat-input');
+  const q = input.value.trim();
+  if (!q) return;
+  
+  appendMsg(q, true);
+  input.value = '';
+  
+  if (isHumanChat) {
+    try {
+      const res = await fetch('/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ receiver_id: adminUserId, content: q })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        lastMessageId = Math.max(lastMessageId, data.id);
+      }
+    } catch(e) {
+      appendMsg("[System Error: Message failed to send. Please check your connection.]", false);
+    }
+    return;
+  }
+  
+  // Normal FAQ flow
+  const res = await fetch(`/api/faq/search?q=${encodeURIComponent(q)}`);
+  const data = await res.json();
+  if (data.results && data.results.length) {
+    appendMsg(`I found ${data.results.length} answer(s):`, false);
+    const chips = document.createElement('div');
+    chips.className = 'faq-chips';
+    chips.style.alignSelf = 'flex-start';
+    data.results.forEach(r => {
+      const chip = document.createElement('span');
+      chip.className = 'faq-chip';
+      chip.textContent = r.question;
+      chip.onclick = () => askFaq(r.id, chip);
+      chips.appendChild(chip);
+    });
+    chatMsgs.appendChild(chips);
+  } else {
+    appendMsg("I don't have an automated answer for that. Would you like to submit a project brief or chat with a human directly?", false);
+    const btns = document.createElement('div');
+    btns.className = 'bubble bot';
+    btns.style.alignSelf = 'flex-start';
+    btns.innerHTML = '<div class="faq-chips" style="margin-top:6px">' +
+      '<span class="faq-chip" style="background:rgba(var(--c-accent-rgb),0.15);color:var(--c-accent)" onclick="showProjectForm()">📋 Submit Project Brief</span>' +
+      '<span class="faq-chip" style="background:rgba(250,204,21,0.15);color:#facc15" onclick="startHumanChat()">💬 Talk to Human</span>' +
+      '</div>';
+    chatMsgs.appendChild(btns);
+  }
+  chatMsgs.scrollTop = 99999;
+}
+
+function showProjectForm() {
+  document.getElementById('project-form-wrap').style.display = 'block';
+  document.getElementById('project-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  appendMsg("Great! Fill in the brief on the right and I'll send a full proposal. 🚀", false);
+}
+
+document.getElementById('hire-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type="submit"]');
+  const status = document.getElementById('form-status');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const fd = new FormData(e.target);
+  const payload = Object.fromEntries(fd.entries());
+  const res = await fetch('{{ url_for("cms.hire_me_submit") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (res.ok && data.success) {
+    let accountNote = '';
+    if (data.account_created) {
+      accountNote = `<div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:10px;padding:14px;margin-top:16px;text-align:left">
+        <p style="font-size:13px;font-weight:600;color:var(--c-text);margin-bottom:6px">🔐 Your account is ready — save these to log in later:</p>
+        <p style="font-size:13px;color:var(--c-text-2)">Email: <strong>${data.email}</strong></p>
+        <p style="font-size:13px;color:var(--c-text-2)">Password: <strong>${data.account_password}</strong></p>
+        <p style="font-size:11px;color:var(--c-text-3);margin-top:6px">You're already logged in on this device — this is just so you can log back in from anywhere.</p>
+      </div>`;
+    }
+    e.target.innerHTML = `<div style="text-align:center;padding:40px 0"><div style="font-size:48px;margin-bottom:12px">🎉</div><p style="font-size:18px;font-weight:700;color:var(--c-text);margin-bottom:8px">Brief received!</p><p style="color:var(--c-text-2);font-size:14px">I'll review your project and send a detailed proposal to your email within 24 hours. Keep an eye on your inbox!</p>${accountNote}</div>`;
+    appendMsg("Your brief is in! I'll review it and send a proposal. Can't wait to work with you! 🚀", false);
+  } else {
+    status.textContent = data.error || 'Something went wrong. Please try again.';
+    btn.disabled = false; btn.textContent = 'Send Project Brief →';
+  }
+});
+</script>
+{% endblock %}

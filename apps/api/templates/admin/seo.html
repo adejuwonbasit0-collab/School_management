@@ -1,0 +1,84 @@
+{% extends "admin/base.html" %}
+{% block page_title %}SEO Configuration{% endblock %}
+{% block page_subtitle %}Full control over how your site appears in search and social{% endblock %}
+{% block content %}
+{% macro sv(key, default='') %}{{ settings.get(key, default) if settings is defined else default }}{% endmacro %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Defaults</div>
+    <span id="seo-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-3);margin-bottom:16px">Used on any page that doesn't set its own title/description (blog posts, projects, and products can override these individually where you edit them).</p>
+    <div style="margin-bottom:14px">
+      <label class="a-label">Default Page Title</label>
+      <input type="text" value="{{ sv('seo_default_title') }}" placeholder="{{ site_name }} — Full-Stack Developer"
+        class="a-input" onblur="saveSetting('seo_default_title', this.value, document.getElementById('seo-status'))"/>
+    </div>
+    <div style="margin-bottom:14px">
+      <label class="a-label">Default Meta Description</label>
+      <textarea rows="2" class="a-input" placeholder="A short, compelling summary shown in Google search results (150-160 characters is ideal)."
+        onblur="saveSetting('seo_default_description', this.value, document.getElementById('seo-status'))">{{ sv('seo_default_description') }}</textarea>
+    </div>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Default Social Share Image (OG Image)</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" id="field-seo_og_image" value="{{ sv('seo_og_image') }}" placeholder="1200x630px recommended" class="a-input" style="flex:1;margin-top:0"
+            onblur="saveSetting('seo_og_image', this.value, document.getElementById('seo-status'))"/>
+          <button type="button" class="media-picker-btn" data-media-target="field-seo_og_image" style="padding:0 14px;background:rgba(29,185,84,0.1);border:1px solid rgba(29,185,84,0.25);border-radius:8px;color:#1DB954;font-size:12px;cursor:pointer">📁</button>
+        </div>
+      </div>
+      <div>
+        <label class="a-label">Favicon URL</label>
+        <input type="text" value="{{ sv('seo_favicon_url') }}" placeholder="/static/favicon.ico" class="a-input"
+          onblur="saveSetting('seo_favicon_url', this.value, document.getElementById('seo-status'))"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Social & Verification</div></div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Twitter / X Handle</label>
+        <input type="text" value="{{ sv('seo_twitter_handle') }}" placeholder="yourhandle" class="a-input"
+          onblur="saveSetting('seo_twitter_handle', this.value, document.getElementById('seo-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Google Analytics Measurement ID</label>
+        <input type="text" value="{{ sv('seo_google_analytics_id') }}" placeholder="G-XXXXXXXXXX" class="a-input"
+          onblur="saveSetting('seo_google_analytics_id', this.value, document.getElementById('seo-status'))"/>
+      </div>
+      <div style="grid-column:span 2">
+        <label class="a-label">Google Search Console Verification Code</label>
+        <input type="text" value="{{ sv('seo_google_verification') }}" placeholder="Paste just the content= value from the meta tag Google gives you" class="a-input"
+          onblur="saveSetting('seo_google_verification', this.value, document.getElementById('seo-status'))"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Advanced</div></div>
+  <div class="a-panel-body">
+    <div style="margin-bottom:14px">
+      <label class="a-label">Custom robots.txt (leave blank for the default "allow everything")</label>
+      <textarea rows="4" class="a-input mono" style="font-size:12px" placeholder="User-agent: *&#10;Allow: /"
+        onblur="saveSetting('seo_robots_txt', this.value, document.getElementById('seo-status'))">{{ sv('seo_robots_txt') }}</textarea>
+      <p style="font-size:11px;color:var(--text-3);margin-top:4px">Live at <a href="{{ url_for('cms.robots_txt') }}" target="_blank" style="color:#1DB954">/robots.txt</a></p>
+    </div>
+    <div>
+      <label class="a-label">Force robots meta tag (rare — use to noindex the whole site during development)</label>
+      <select class="a-input" onchange="saveSetting('seo_robots_override', this.value, document.getElementById('seo-status'))">
+        <option value="" {% if not sv('seo_robots_override') %}selected{% endif %}>Default (index, follow)</option>
+        <option value="noindex, nofollow" {% if sv('seo_robots_override') == 'noindex, nofollow' %}selected{% endif %}>noindex, nofollow (hide entire site from search)</option>
+      </select>
+    </div>
+    <p style="font-size:11px;color:var(--text-3);margin-top:14px">Sitemap auto-generated from your published content, always up to date: <a href="{{ url_for('cms.sitemap_xml') }}" target="_blank" style="color:#1DB954">/sitemap.xml</a></p>
+  </div>
+</div>
+{% endblock %}

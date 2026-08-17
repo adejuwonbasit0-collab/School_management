@@ -1,0 +1,81 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% set page_title = "Payment Gateways" %}
+{% set page_subtitle = "Connect your own accounts — customer payments go straight to you" %}
+
+{% block content %}
+<div class="max-w-3xl">
+  <div class="flex items-center justify-between mb-6">
+    <a href="{{ url_for('dashboard.payment_links') }}" class="text-xs text-gray-400 hover:text-white inline-flex items-center gap-1">
+      <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Back to Payment Links
+    </a>
+  </div>
+
+  <div class="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 mb-6 text-sm text-blue-300">
+    Connect your own Stripe, Paystack, Flutterwave, or PayPal account below. Every payment link you create charges directly into <strong>your</strong> connected account — we never see or hold your customers' money.
+  </div>
+
+  <div class="space-y-4">
+    {% for key, info in gateway_fields.items() %}
+    {% set row = connected.get(key) %}
+    <div class="glass border border-white/10 rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center">
+            <i data-lucide="credit-card" class="w-5 h-5 text-gray-300"></i>
+          </div>
+          <div>
+            <h3 class="text-white font-semibold">{{ info.name }}</h3>
+            {% if row %}
+              <p class="text-xs {{ 'text-green-400' if row.active else 'text-gray-500' }}">
+                {{ 'Connected' if row.active else 'Connected (paused)' }}{% if row.last4 %} · ending {{ row.last4 }}{% endif %}
+              </p>
+            {% else %}
+              <p class="text-xs text-gray-500">Not connected</p>
+            {% endif %}
+          </div>
+        </div>
+        {% if row %}
+        <div class="flex items-center gap-2">
+          <form method="POST" action="{{ url_for('dashboard.payment_gateways_toggle', gateway=key) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors">
+              {{ 'Pause' if row.active else 'Resume' }}
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('dashboard.payment_gateways_disconnect', gateway=key) }}" onsubmit="return confirm('Disconnect {{ info.name }}? Payment links using it will stop working until you reconnect.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors">Disconnect</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+
+      <details {{ 'open' if not row }}>
+        <summary class="text-xs text-gray-400 hover:text-white cursor-pointer select-none">{{ 'Update credentials' if row else 'Connect' }}</summary>
+        <form method="POST" action="{{ url_for('dashboard.payment_gateways_connect', gateway=key) }}" class="mt-3 space-y-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          {% if key in ('stripe', 'paystack') %}
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Mode</label>
+            <select name="mode" class="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              <option value="live">Live</option>
+              <option value="test">Test</option>
+            </select>
+          </div>
+          {% endif %}
+          {% for field_key, label, placeholder in info.fields %}
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">{{ label }}</label>
+            <input type="password" name="{{ field_key }}" placeholder="{{ placeholder }}" autocomplete="off" class="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-[#1DB954]"/>
+          </div>
+          {% endfor %}
+          <button type="submit" class="text-sm px-4 py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-semibold rounded-lg transition-colors">
+            {{ 'Save' if row else 'Connect ' + info.name }}
+          </button>
+        </form>
+      </details>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

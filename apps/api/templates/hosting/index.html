@@ -1,0 +1,173 @@
+{% extends "public_base.html" %}
+{% block title %}Hosting — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.dm-tabs { display:flex; gap:4px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:4px; margin-bottom:16px; }
+.dm-tab { flex:1; text-align:center; padding:10px; border-radius:9px; font-size:13px; font-weight:600; color:#8899b0; cursor:pointer; transition:all .15s; }
+.dm-tab.active { background:linear-gradient(135deg,#00f5ff,#bf00ff); color:#000; }
+.dm-status { font-size:12px; margin-top:6px; min-height:16px; }
+.dm-status.ok { color:#4ade80; }
+.dm-status.bad { color:#f87171; }
+.dm-status.pending { color:#8899b0; }
+@media (max-width: 480px) {
+  .domain-input-row { flex-direction:column !important; }
+  .domain-input-row .suffix { text-align:left !important; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-12">
+  <div class="text-center mb-12">
+    <h1 class="text-4xl font-bold font-display gradient-text mb-3">Managed Hosting</h1>
+    <p class="text-gray-400">Fast, reliable hosting with zero config. Get a free subdomain instantly, or connect your own domain.</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+    {% for plan in plans %}
+    <div class="glass border {% if plan.featured %}border-cyan-500/50{% else %}border-white/10{% endif %} rounded-2xl p-7 flex flex-col relative">
+      {% if plan.featured %}<div class="absolute -top-3 left-1/2 -translate-x-1/2 text-xs px-4 py-1 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-black font-bold">Most Popular</div>{% endif %}
+      <h3 class="text-xl font-bold text-white mb-1">{{ plan.name }}</h3>
+      <p class="text-sm text-gray-400 mb-5">{{ plan.description }}</p>
+      <div class="mb-6">
+        <span class="text-4xl font-bold font-display {% if plan.featured %}gradient-text{% else %}text-white{% endif %}">{{ plan.monthly_price | int | money }}</span>
+        <span class="text-gray-400">/mo</span>
+        {% if plan.annual_price %}<p class="text-xs text-gray-500 mt-1">{{ plan.annual_price | int | money }}/yr (save {{ ((1 - plan.annual_price / (plan.monthly_price * 12)) * 100) | int }}%)</p>{% endif %}
+      </div>
+      <ul class="space-y-2 mb-8 flex-1">
+        {% for f in plan.features %}
+        <li class="flex items-center gap-2 text-sm text-gray-300"><span class="text-green-400 flex-shrink-0">✓</span>{{ f }}</li>{% endfor %}
+      </ul>
+      {% if current_user.is_authenticated %}
+      <button onclick="toggleModal('subscribe-{{ plan.id }}')" class="{% if plan.featured %}btn-neon{% else %}btn-ghost-neon{% endif %} w-full justify-center py-3">Get Started</button>
+      {% else %}
+      <a href="{{ url_for('auth.register') }}" class="{% if plan.featured %}btn-neon{% else %}btn-ghost-neon{% endif %} w-full justify-center py-3">Get Started</a>{% endif %}
+    </div>
+    <!-- subscribe modal -->
+    <div id="subscribe-{{ plan.id }}" class="modal-overlay hidden">
+      <div class="modal-box max-w-md">
+        <div class="flex justify-between items-center mb-5">
+          <h3 class="text-lg font-bold text-white">Subscribe to {{ plan.name }}</h3>
+          <button onclick="toggleModal('subscribe-{{ plan.id }}')" class="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <form method="POST" action="{{ url_for('hosting.subscribe', plan_id=plan.id) }}" class="space-y-4" onsubmit="return dmValidateSubmit(this)">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <input type="hidden" name="domain_type" id="domain-type-{{ plan.id }}" value="subdomain"/>
+
+          <div class="dm-tabs">
+            <div class="dm-tab active" data-plan="{{ plan.id }}" data-type="subdomain" onclick="dmSwitchTab(this)">Free Subdomain</div>
+            <div class="dm-tab" data-plan="{{ plan.id }}" data-type="own_domain" onclick="dmSwitchTab(this)">I Own a Domain</div>
+          </div>
+
+          <!-- Subdomain option -->
+          <div id="dm-subdomain-{{ plan.id }}">
+            <label class="admin-label">Choose your subdomain</label>
+            <div class="flex gap-0 domain-input-row" style="margin-top:4px">
+              <input name="subdomain" class="admin-input" style="border-radius:8px 0 0 8px" placeholder="yourname"
+                     oninput="dmCheckSubdomain(this, {{ plan.id }})"/>
+              <span class="suffix" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-left:none;border-radius:0 8px 8px 0;padding:0 12px;display:flex;align-items:center;font-size:13px;color:#8899b0;white-space:nowrap">.{{ base_domain }}</span>
+            </div>
+            <p class="dm-status pending" id="dm-sub-status-{{ plan.id }}">3+ characters, letters/numbers/hyphens.</p>
+          </div>
+
+          <!-- Own domain option -->
+          <div id="dm-owndomain-{{ plan.id }}" style="display:none">
+            <label class="admin-label">Your domain</label>
+            <div class="flex gap-2" style="margin-top:4px">
+              <input name="domain" class="admin-input flex-1" placeholder="yourdomain.com" id="dm-domain-input-{{ plan.id }}"/>
+              <button type="button" class="btn-ghost-neon text-xs px-3" onclick="dmCheckDomain({{ plan.id }})">Check</button>
+            </div>
+            <p class="dm-status pending" id="dm-domain-status-{{ plan.id }}">We'll check if it's already registered and show you DNS setup steps after you subscribe.</p>
+          </div>
+
+          <div><label class="admin-label">Billing Cycle</label>
+            <select name="billing_cycle" class="admin-input w-full mt-1">
+              <option value="monthly">Monthly — {{ plan.monthly_price | int | money }}/mo</option>
+              {% if plan.annual_price %}<option value="annual">Annual — {{ plan.annual_price | int | money }}/yr</option>{% endif %}
+            </select>
+          </div>
+          <button class="w-full btn-neon justify-center py-3">Subscribe</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function dmSwitchTab(el) {
+  const planId = el.dataset.plan, type = el.dataset.type;
+  el.parentElement.querySelectorAll('.dm-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('domain-type-' + planId).value = type;
+  document.getElementById('dm-subdomain-' + planId).style.display = type === 'subdomain' ? 'block' : 'none';
+  document.getElementById('dm-owndomain-' + planId).style.display = type === 'own_domain' ? 'block' : 'none';
+}
+
+let dmDebounce = {};
+function dmCheckSubdomain(input, planId) {
+  const status = document.getElementById('dm-sub-status-' + planId);
+  clearTimeout(dmDebounce[planId]);
+  const value = input.value.trim().toLowerCase();
+  if (!value) { status.textContent = '3+ characters, letters/numbers/hyphens.'; status.className = 'dm-status pending'; return; }
+  status.textContent = 'Checking…'; status.className = 'dm-status pending';
+  dmDebounce[planId] = setTimeout(async () => {
+    try {
+      const res = await fetch(`{{ url_for('hosting.api_check_subdomain') }}?value=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (data.available) {
+        status.textContent = `✓ ${data.full} is available!`;
+        status.className = 'dm-status ok';
+      } else {
+        status.textContent = data.error || 'Not available.';
+        status.className = 'dm-status bad';
+      }
+    } catch (e) {
+      status.textContent = 'Could not check right now.';
+      status.className = 'dm-status bad';
+    }
+  }, 400);
+}
+
+async function dmCheckDomain(planId) {
+  const input = document.getElementById('dm-domain-input-' + planId);
+  const status = document.getElementById('dm-domain-status-' + planId);
+  const domain = input.value.trim();
+  if (!domain) { status.textContent = 'Enter a domain first.'; status.className = 'dm-status bad'; return; }
+  status.textContent = 'Checking WHOIS…'; status.className = 'dm-status pending';
+  try {
+    const res = await fetch('{{ url_for("hosting.api_check_domain") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ domain }),
+    });
+    const data = await res.json();
+    if (data.available === true) {
+      status.textContent = `${domain} looks unregistered — if you don't own it yet, you'd need to register it elsewhere first (we don't sell new domains yet). If it's yours, subscribe below and we'll show you the DNS records to connect it.`;
+      status.className = 'dm-status ok';
+    } else if (data.available === false) {
+      status.textContent = `${domain} is already registered. If it's yours, subscribe below and we'll show you the DNS records to connect it.`;
+      status.className = 'dm-status pending';
+    } else {
+      status.textContent = data.reason || "Couldn't determine availability for this domain.";
+      status.className = 'dm-status bad';
+    }
+  } catch (e) {
+    status.textContent = 'Could not reach the check service.';
+    status.className = 'dm-status bad';
+  }
+}
+
+function dmValidateSubmit(form) {
+  const planId = form.action.match(/subscribe\/(\d+)/)[1];
+  const type = document.getElementById('domain-type-' + planId).value;
+  if (type === 'subdomain') {
+    const sub = form.querySelector('[name="subdomain"]').value.trim();
+    if (!sub) { alert('Please choose a subdomain.'); return false; }
+  } else {
+    const dom = form.querySelector('[name="domain"]').value.trim();
+    if (!dom || !dom.includes('.')) { alert('Please enter a valid domain.'); return false; }
+  }
+  return true;
+}
+</script>
+{% endblock %}

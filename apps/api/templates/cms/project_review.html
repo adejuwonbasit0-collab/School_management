@@ -1,0 +1,60 @@
+{% extends "public_base.html" %}
+{% block title %}Project Update: {{ update.project.title }} — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-16">
+  <p class="text-xs text-cyan-400 uppercase tracking-wide font-semibold mb-2">Project Update</p>
+  <h1 class="text-2xl font-bold text-white mb-1">{{ update.project.title }}</h1>
+  <p class="text-gray-500 text-sm mb-8">{{ update.created_at.strftime('%B %d, %Y') }}</p>
+
+  <div class="glass-card-premium rounded-2xl p-6 mb-8">
+    <p class="text-gray-200 leading-relaxed whitespace-pre-wrap">{{ update.message }}</p>
+
+    {% if update.progress_percent is not none %}
+    <div class="mt-6">
+      <div class="flex justify-between text-xs text-gray-500 mb-1.5">
+        <span>Progress</span><span>{{ update.progress_percent }}%</span>
+      </div>
+      <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+        <div class="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full" style="width:{{ update.progress_percent }}%"></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if update.image_url %}
+    <img src="{{ update.image_url }}" class="w-full rounded-xl mt-6 border border-white/10"/>
+    {% endif %}
+
+    {% if update.preview_url %}
+    <a href="{{ update.preview_url }}" target="_blank" rel="noopener" class="btn-neon inline-flex mt-6">View Live Preview →</a>
+    {% endif %}
+  </div>
+
+  <h2 class="text-lg font-bold text-white mb-4">Feedback & Comments ({{ comments|length }})</h2>
+
+  <div class="space-y-4 mb-8">
+    {% for c in comments %}
+    <div class="glass border border-white/10 rounded-xl p-4">
+      <div class="flex justify-between items-center mb-1">
+        <span class="text-sm font-semibold text-white">{{ c.author_name or 'Anonymous' }}</span>
+        <span class="text-xs text-gray-600">{{ c.created_at.strftime('%b %d, %H:%M') }}</span>
+      </div>
+      <p class="text-sm text-gray-300">{{ c.body }}</p>
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-500">No comments yet — be the first to leave feedback.</p>
+    {% endfor %}
+  </div>
+
+  <form method="POST" class="glass-card-premium rounded-2xl p-6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    {% if not current_user.is_authenticated %}
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <input name="name" placeholder="Your name" class="input-premium"/>
+      <input name="email" type="email" placeholder="Your email (optional)" class="input-premium"/>
+    </div>
+    {% endif %}
+    <textarea name="body" rows="3" required placeholder="Leave your feedback or approval here…" class="input-premium w-full mb-3"></textarea>
+    <button class="btn-neon">Post Comment</button>
+  </form>
+</div>
+{% endblock %}

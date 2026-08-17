@@ -1,0 +1,67 @@
+{% extends "public_base.html" %}
+{% block title %}SQL Formatter — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:900px;margin:0 auto;padding:48px 20px }
+textarea.admin-input { width:100%;min-height:280px;font-family:monospace;font-size:13px }
+.grid2 { display:grid;grid-template-columns:1fr 1fr;gap:16px }
+@media (max-width:700px){ .grid2{grid-template-columns:1fr} }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">SQL Formatter</h1>
+    <p style="color:var(--c-text-2)">Pretty-prints existing SQL — keyword casing + clause line breaks. Pure algorithmic formatting, no AI involved.</p>
+  </div>
+  <div class="opt-row" style="margin-bottom:12px"><button class="btn-neon" id="fmt-btn">Format</button> <button class="btn-ghost-neon" id="copy-btn">Copy</button></div>
+  <div class="grid2">
+    <textarea id="input" class="admin-input" placeholder="select id,name from users where active=1 and role='admin' order by created_at desc"></textarea>
+    <textarea id="output" class="admin-input" readonly placeholder="Formatted SQL appears here…"></textarea>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const KEYWORDS = ['SELECT','FROM','WHERE','AND','OR','JOIN','LEFT JOIN','RIGHT JOIN','INNER JOIN',
+  'OUTER JOIN','ON','GROUP BY','ORDER BY','HAVING','LIMIT','OFFSET','INSERT INTO','VALUES',
+  'UPDATE','SET','DELETE FROM','CREATE TABLE','ALTER TABLE','DROP TABLE','NOT','IN','IS NULL',
+  'IS NOT NULL','LIKE','BETWEEN','UNION','UNION ALL','AS','DISTINCT','CASE','WHEN','THEN','ELSE','END'];
+
+const NEWLINE_BEFORE = ['FROM','WHERE','AND','OR','JOIN','LEFT JOIN','RIGHT JOIN','INNER JOIN',
+  'OUTER JOIN','GROUP BY','ORDER BY','HAVING','LIMIT','OFFSET','VALUES','SET','UNION','UNION ALL'];
+
+function formatSql(sql) {
+  let s = sql.replace(/\s+/g, ' ').trim();
+  // uppercase keywords (longest first to avoid partial matches like JOIN inside LEFT JOIN)
+  const sorted = [...KEYWORDS].sort((a,b) => b.length - a.length);
+  for (const kw of sorted) {
+    const re = new RegExp(`\\b${kw.replace(/ /g, '\\s+')}\\b`, 'gi');
+    s = s.replace(re, kw);
+  }
+  for (const kw of NEWLINE_BEFORE) {
+    const re = new RegExp(`\\s${kw}\\b`, 'g');
+    s = s.replace(re, `\n${kw}`);
+  }
+  // indent AND/OR under WHERE
+  s = s.split('\n').map(line => {
+    if (/^\s*(AND|OR)\b/.test(line)) return '  ' + line.trim();
+    return line.trim();
+  }).join('\n');
+  // commas in SELECT list onto new lines for readability if line is long
+  s = s.replace(/^SELECT (.+)$/m, (match, cols) => {
+    if (cols.length < 60) return match;
+    return 'SELECT\n  ' + cols.split(',').map(c => c.trim()).join(',\n  ');
+  });
+  return s;
+}
+
+document.getElementById('fmt-btn').addEventListener('click', () => {
+  document.getElementById('output').value = formatSql(document.getElementById('input').value);
+});
+document.getElementById('copy-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('output').value);
+});
+</script>
+{% endblock %}

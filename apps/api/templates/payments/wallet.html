@@ -1,0 +1,78 @@
+{% extends "public_base.html" %}
+{% block title %}My Wallet{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-16">
+  <h1 class="text-2xl sm:text-3xl font-bold text-white mb-8">My Wallet</h1>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+    <div class="glass-card-premium rounded-2xl p-6">
+      <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Available Balance</p>
+      <p class="text-3xl font-bold text-white">{{ wallet.balance | money(wallet.currency) }}</p>
+    </div>
+    {% if wallet.pending_balance and wallet.pending_balance > 0 %}
+    <div class="glass-card-premium rounded-2xl p-6">
+      <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Pending</p>
+      <p class="text-3xl font-bold text-yellow-400">{{ wallet.pending_balance | money(wallet.currency) }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <p class="text-xs text-gray-500 mb-4">Your wallet balance can be used to pay any invoice at checkout — in full, or partially if the balance doesn't cover the whole amount.</p>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+    <div class="glass-card-premium rounded-2xl p-5">
+      <p class="text-sm font-semibold text-white mb-3">Send to Another Account</p>
+      <form method="POST" action="{{ url_for('payments.wallet_transfer') }}" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="email" name="email" required placeholder="Recipient's email" class="input-field w-full text-sm"/>
+        <input type="number" name="amount" step="0.01" min="0.01" required placeholder="Amount" class="input-field w-full text-sm"/>
+        <button type="submit" class="w-full text-sm font-medium bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-2 text-white transition-colors">Send</button>
+      </form>
+    </div>
+    <div class="glass-card-premium rounded-2xl p-5">
+      <p class="text-sm font-semibold text-white mb-3">Withdraw to Bank / Other</p>
+      <form method="POST" action="{{ url_for('payments.wallet_withdraw') }}" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="number" name="amount" step="0.01" min="0.01" required placeholder="Amount" class="input-field w-full text-sm"/>
+        <textarea name="destination" required rows="2" placeholder="Bank name, account number, or other payout details" class="input-field w-full text-sm"></textarea>
+        <button type="submit" class="w-full text-sm font-medium bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-2 text-white transition-colors">Request Withdrawal</button>
+      </form>
+      <p class="text-xs text-gray-600 mt-2">Your balance is reserved immediately; we'll process it manually and confirm once sent.</p>
+    </div>
+  </div>
+
+  {% if withdrawals %}
+  <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Withdrawal Requests</h2>
+  <div class="space-y-2 mb-10">
+    {% for w in withdrawals %}
+    <div class="glass-card-premium rounded-xl px-5 py-3 flex items-center justify-between">
+      <div>
+        <p class="text-sm text-white">{{ w.amount | money(w.currency) }}</p>
+        <p class="text-xs text-gray-500">{{ w.created_at.strftime('%B %d, %Y') }}</p>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded-full {% if w.status=='paid' %}bg-green-500/20 text-green-400{% elif w.status=='rejected' %}bg-red-500/20 text-red-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">{{ w.status }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">History</h2>
+  {% if wallet.transactions %}
+  <div class="space-y-2">
+    {% for tx in wallet.transactions %}
+    <div class="glass-card-premium rounded-xl px-5 py-3 flex items-center justify-between">
+      <div>
+        <p class="text-sm text-white">{{ tx.note or tx.kind.replace('_',' ').title() }}</p>
+        <p class="text-xs text-gray-500">{{ tx.created_at.strftime('%B %d, %Y %H:%M') }}</p>
+      </div>
+      <p class="text-sm font-semibold {{ 'text-green-400' if tx.amount > 0 else 'text-red-400' }}">
+        {{ '+' if tx.amount > 0 else '' }}{{ tx.amount | money(wallet.currency) }}
+      </p>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-sm text-gray-500">No wallet activity yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

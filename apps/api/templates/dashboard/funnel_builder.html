@@ -1,0 +1,1775 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block title %}Sales Funnel Builder{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/dracula.min.css">
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-display font-bold text-white tracking-tight">Sales Funnel Builder</h1>
+            <p class="text-gray-400 text-sm mt-1">Design high-converting funnels with a real visual flow</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="document.getElementById('newFunnelModal').classList.remove('hidden')" class="px-4 py-2 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 border border-[#1DB954]/20 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                New Funnel
+            </button>
+            <button onclick="downloadFunnelZip()" id="download-funnel-btn" class="px-4 py-2 bg-white/5 text-white hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                Download ZIP
+            </button>
+            <button onclick="downloadFunnelWordPressPlugin()" id="download-funnel-wp-btn" class="px-4 py-2 bg-white/5 text-white hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                <i data-lucide="package" class="w-4 h-4"></i>
+                WordPress Plugin
+            </button>
+            <button onclick="openLicenseKeysModal()" class="px-3 py-2 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5" title="See which sites are running this funnel's WordPress plugin">
+                <i data-lucide="key" class="w-3.5 h-3.5"></i>
+                Licenses
+            </button>
+            <button onclick="publishFunnel()" class="px-4 py-2 bg-[#1DB954] text-black hover:bg-[#1ed760] rounded-lg text-sm font-bold transition-all duration-200 flex items-center gap-2 shadow-[0_0_15px_rgba(29,185,84,0.3)]">
+                <i data-lucide="globe" class="w-4 h-4"></i>
+                Publish
+            </button>
+            <button onclick="openFunnelSettings()" class="px-4 py-2 bg-white/5 text-white hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                Settings
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- Sidebar: Funnel List -->
+        <div class="lg:col-span-1 space-y-4">
+            <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-4 h-full flex flex-col">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <i data-lucide="filter" class="w-5 h-5 text-[#F2C94C]"></i>
+                    My Funnels
+                </h2>
+
+                <div id="funnelListContainer" class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                    {% for funnel in funnels %}
+                    <div class="p-3 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 rounded-xl transition-all duration-200 cursor-pointer group flex flex-col gap-2 relative" onclick="loadFunnel('{{ funnel.id }}')">
+                        <div class="flex justify-between items-start">
+                            <h3 class="text-white font-medium truncate pr-6">{{ funnel.title }}</h3>
+                            {% if funnel.published %}
+                            <span class="px-2 py-0.5 bg-[#1DB954]/20 text-[#1DB954] rounded text-[10px] font-bold tracking-wider uppercase">Live</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded text-[10px] font-bold tracking-wider uppercase">Draft</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-gray-400">
+                            <span class="flex items-center gap-1"><i data-lucide="layers" class="w-3 h-3"></i> {{ funnel.pages.count() }} Pages</span>
+                            <span>{{ funnel.created_at.strftime('%b %d, %Y') if funnel.created_at else '' }}</span>
+                        </div>
+
+                        <!-- Actions overlay -->
+                        <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-[#0a0a0a] rounded shadow-lg p-1 border border-white/10">
+                            <button onclick="event.stopPropagation(); loadFunnel('{{ funnel.id }}')" class="p-1 text-gray-400 hover:text-white transition-colors" title="Edit">
+                                <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="event.stopPropagation(); deleteFunnel('{{ funnel.id }}')" class="p-1 text-gray-400 hover:text-red-400 transition-colors" title="Delete">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8 text-gray-500 flex flex-col items-center">
+                        <i data-lucide="inbox" class="w-8 h-8 mb-2 opacity-50"></i>
+                        <p class="text-sm">No funnels yet.</p>
+                        <p class="text-xs mt-1">Create one to get started.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Area: Funnel Builder -->
+        <div class="lg:col-span-3 space-y-6">
+            <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 min-h-[600px] flex flex-col">
+                <div class="flex justify-between items-center mb-2 border-b border-white/10 pb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-3">
+                            <i data-lucide="git-merge" class="w-5 h-5 text-[#1DB954]"></i>
+                            <span id="currentFunnelTitle">Select a funnel</span>
+                        </h2>
+                        <p id="currentFunnelUrl" class="text-xs text-gray-500 mt-1 ml-8"></p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5">
+                            <button onclick="setFunnelView('list')" id="view-toggle-list" class="px-3 py-1 rounded-md text-xs font-semibold transition-all bg-white/10 text-white">List</button>
+                            <button onclick="setFunnelView('flow')" id="view-toggle-flow" class="px-3 py-1 rounded-md text-xs font-semibold transition-all text-gray-400">Flow</button>
+                        </div>
+                        <button onclick="openAddPageModal()" id="addPageBtn" disabled class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed">
+                            <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Page
+                        </button>
+                    </div>
+                </div>
+                <p id="viewHintText" class="text-xs text-gray-500 mb-4">Drag a page by its handle to reorder. Every change here saves instantly — there's no separate "Save" step.</p>
+
+                <!-- Flow Visualization Container (List view) -->
+                <div id="funnelStepsContainer" class="flex-1 flex flex-col items-center gap-0 overflow-y-auto py-4">
+                    <div class="text-center text-gray-500 py-12 w-full">
+                        <i data-lucide="mouse-pointer-click" class="w-12 h-12 mx-auto mb-3 opacity-20"></i>
+                        <p>Select a funnel from the sidebar or create a new one to start building.</p>
+                    </div>
+                </div>
+
+                <!-- Flow Canvas (Flow view) — drag boxes to reposition, drag from a
+                     colored dot to another box to connect Next/Accept/Decline,
+                     double-click a line to remove that connection. -->
+                <div id="funnelCanvasWrap" class="hidden flex-1 relative overflow-auto border border-white/5 rounded-xl bg-black/20" style="min-height:520px;">
+                    <svg id="funnelCanvasSvg" style="position:absolute;top:0;left:0;pointer-events:none;"></svg>
+                    <div id="funnelCanvasNodes" style="position:relative;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toasts -->
+<div id="toastStack" class="fixed bottom-6 right-6 z-[100] flex flex-col gap-2 items-end"></div>
+
+<!-- New Funnel Modal -->
+<div id="newFunnelModal" class="fixed inset-0 z-[110] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#1DB954] to-[#F2C94C]"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white">Create New Funnel</h3>
+                <button onclick="document.getElementById('newFunnelModal').classList.add('hidden')" class="text-gray-400 hover:text-white transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Funnel Title</label>
+                    <input type="text" id="newFunnelTitle" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] transition-all" placeholder="e.g., Summer Course Launch">
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <button onclick="document.getElementById('newFunnelModal').classList.add('hidden')" class="px-4 py-2 text-gray-400 hover:text-white transition-colors text-sm font-medium">Cancel</button>
+                <button onclick="createFunnel()" class="px-5 py-2 bg-[#1DB954] text-black hover:bg-[#1ed760] rounded-xl text-sm font-bold transition-all shadow-[0_0_10px_rgba(29,185,84,0.3)]">Create Funnel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Page Modal -->
+<div id="addStepModal" class="fixed inset-0 z-[110] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="p-6 border-b border-white/10 flex justify-between items-center">
+            <h3 class="text-xl font-bold text-white">Add Funnel Page</h3>
+            <button onclick="document.getElementById('addStepModal').classList.add('hidden')" class="text-gray-400 hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <div class="px-6 pt-4">
+            <div class="flex gap-2 border-b border-white/10">
+                <button id="addPageTabBlank" onclick="switchAddPageTab('blank')" class="px-4 py-2 text-sm font-semibold text-white border-b-2 border-[#1DB954]">Blank Page</button>
+                <button id="addPageTabTemplate" onclick="switchAddPageTab('template')" class="px-4 py-2 text-sm font-semibold text-gray-400 border-b-2 border-transparent hover:text-white">Start From Template</button>
+            </div>
+        </div>
+
+        <div id="addPageBlankPane" class="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {% for ptype, plabel in page_types.items() %}
+            <button onclick="addStep('{{ ptype }}', '{{ plabel }}')" class="p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#1DB954]/50 rounded-xl flex flex-col items-center gap-3 transition-all text-center group">
+                <div class="w-12 h-12 rounded-full bg-white/5 border border-white/10 text-gray-300 flex items-center justify-center group-hover:scale-110 group-hover:text-[#1DB954] transition-transform" data-page-icon="{{ ptype }}"><i data-lucide="file" class="w-6 h-6"></i></div>
+                <span class="text-white font-medium text-sm">{{ plabel }}</span>
+            </button>
+            {% endfor %}
+        </div>
+
+        <div id="addPageTemplatePane" class="hidden p-6 overflow-y-auto space-y-2">
+            <p class="text-xs text-gray-500 mb-2">Starts the page pre-filled with real content in Blocks mode — fully editable right after.</p>
+            <div id="templateList" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="text-sm text-gray-500 col-span-2 text-center py-6">Loading templates…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- License Keys Modal (WordPress plugin per-install domain licensing) -->
+<div id="licenseKeysModal" class="fixed inset-0 z-[110] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[85vh]">
+        <div class="p-6 border-b border-white/10 flex justify-between items-center">
+            <h3 class="text-lg font-bold text-white">WordPress License Keys</h3>
+            <button onclick="document.getElementById('licenseKeysModal').classList.add('hidden')" class="text-gray-400 hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto flex-1">
+            <p class="text-xs text-gray-500 mb-4">Every "WordPress Plugin" download mints a fresh key, bound to the first domain that activates it. Revoke one to shut off that specific install without touching your Bazillin funnel.</p>
+            <div id="licenseKeysList" class="space-y-2">
+                <p class="text-sm text-gray-500 text-center py-6">Loading…</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Funnel Settings Modal (domain, unpublish, analytics, orders) -->
+<div id="funnelSettingsModal" class="fixed inset-0 z-[110] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl relative overflow-hidden flex flex-col max-h-[85vh]">
+        <div class="p-6 border-b border-white/10 flex justify-between items-center">
+            <h3 class="text-xl font-bold text-white">Funnel Settings</h3>
+            <button onclick="document.getElementById('funnelSettingsModal').classList.add('hidden')" class="text-gray-400 hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-400 mb-1">Custom Domain <span class="text-gray-600">(optional)</span></label>
+                <input type="text" id="settingsCustomDomain" placeholder="funnels.yourbrand.com" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                <p class="text-xs text-gray-600 mt-1">Point this domain's DNS at your hosting once connected — stored here for reference, doesn't configure DNS automatically.</p>
+                <button onclick="saveFunnelDomain()" class="mt-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all">Save Domain</button>
+            </div>
+
+            <div class="border-t border-white/10 pt-5">
+                <p class="text-sm font-medium text-white mb-1">Payments &amp; Notifications</p>
+                <p class="text-xs text-gray-600 mb-3">Own settings for this Funnel Builder product — not shared with Payment Links, so this works even if you never buy that separately.</p>
+
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Payment Gateway</p>
+                <div id="settingsGatewayList" class="space-y-2 mb-4"></div>
+
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 mt-5">Outbound Email</p>
+                <div id="settingsSmtpStatus" class="mb-2 p-2.5 bg-white/5 border border-white/10 rounded-lg text-xs text-gray-400"></div>
+                <div id="settingsSmtpForm" class="space-y-2 mb-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="smtpHost" placeholder="smtp.yourhost.com" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#1DB954]">
+                        <input type="number" id="smtpPort" placeholder="587" value="587" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#1DB954]">
+                    </div>
+                    <input type="text" id="smtpUsername" placeholder="Username" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#1DB954]">
+                    <input type="password" id="smtpPassword" placeholder="Password" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#1DB954]">
+                    <input type="email" id="smtpFromEmail" placeholder="From email (defaults to username)" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#1DB954]">
+                    <label class="flex items-center gap-2 text-xs text-gray-400"><input type="checkbox" id="smtpUseTls" checked class="rounded"> Use TLS</label>
+                </div>
+                <p class="text-xs text-gray-600 mb-2">Optional — connect your own mailbox so receipts genuinely send from your account. Leave disconnected to keep using the platform's shared relay with your name/reply-to attached (already on by default, see below).</p>
+                <div class="flex gap-2 mb-5">
+                    <button onclick="connectFunnelSmtp()" id="smtpConnectBtn" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all">Test &amp; Connect</button>
+                    <button onclick="testFunnelSmtp()" id="smtpTestBtn" class="hidden px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all">Re-test</button>
+                    <button onclick="disconnectFunnelSmtp()" id="smtpDisconnectBtn" class="hidden px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 rounded-lg text-xs font-bold transition-all">Disconnect</button>
+                </div>
+
+                <label class="block text-sm font-medium text-gray-400 mb-1">Emails appear from</label>
+                <input type="text" id="settingsSenderName" placeholder="Your Business Name" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954] mb-1">
+                <p class="text-xs text-gray-600 mb-3">The name buyers see as the sender on their receipt. Leave blank to use this funnel's title.</p>
+                <label class="block text-sm font-medium text-gray-400 mb-1">Buyer replies go to</label>
+                <input type="email" id="settingsReplyTo" placeholder="you@yourbusiness.com" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954] mb-1">
+                <p class="text-xs text-gray-600 mb-3">If a buyer hits "Reply" on their receipt, it lands here — not in the platform's inbox. Leave blank to use your account email.</p>
+                <label class="block text-sm font-medium text-gray-400 mb-1">Sale notification email</label>
+                <input type="email" id="settingsNotificationEmail" placeholder="you@yourbusiness.com" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954] mb-1">
+                <p class="text-xs text-gray-600 mb-3">Where "you got a sale" emails go. Leave blank to use your account email.</p>
+                <label class="block text-sm font-medium text-gray-400 mb-1">Buyer receipt subject (optional)</label>
+                <input type="text" id="settingsBuyerSubject" placeholder="Payment received — {{ '{{product_name}}' }}" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954] mb-1">
+                <label class="block text-sm font-medium text-gray-400 mb-1 mt-2">Buyer receipt message (optional)</label>
+                <textarea id="settingsBuyerBody" rows="3" placeholder="Hi {{ '{{customer_name}}' }}, thanks for your purchase of {{ '{{product_name}}' }}!" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954] resize-none"></textarea>
+                <p class="text-xs text-gray-600 mt-1 mb-2">Leave both blank to use the default receipt. Supports {{ '{{customer_name}}' }}, {{ '{{product_name}}' }}, {{ '{{amount}}' }}, {{ '{{currency}}' }}.</p>
+                <button onclick="saveFunnelEmailSettings()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all">Save Email Settings</button>
+            </div>
+
+            <div class="border-t border-white/10 pt-5 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-white">Publish status</p>
+                    <p class="text-xs text-gray-500" id="settingsPublishStatus"></p>
+                </div>
+                <button onclick="unpublishFunnel()" class="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 rounded-lg text-xs font-bold transition-all">Unpublish</button>
+            </div>
+
+            <div class="border-t border-white/10 pt-5">
+                <a href="#" id="settingsAnalyticsLink" class="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white text-sm font-semibold transition-all">
+                    <span class="flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-4 h-4 text-[#1DB954]"></i> View Full Analytics</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4 text-gray-500"></i>
+                </a>
+                <p class="text-xs text-gray-600 mt-2">Revenue, orders, traffic sources, devices, browsers, and per-page performance — on its own page, not squeezed into this modal.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Page Editor Modal -->
+<div id="stepEditorModal" class="fixed inset-0 z-[110] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-6xl shadow-2xl relative overflow-hidden flex flex-col h-[88vh]">
+        <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <i data-lucide="edit-3" class="w-5 h-5 text-[#F2C94C]"></i>
+                Edit Page: <span id="editorStepTitle" class="text-gray-300"></span>
+            </h3>
+            <button onclick="closeStepEditor()" class="text-gray-400 hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Basic fields + mode tabs -->
+        <div class="px-5 pt-4 pb-2 border-b border-white/10 flex flex-wrap items-end gap-4 bg-[#0a0a0a]">
+            <input type="hidden" id="editPageId">
+            <div class="flex-1 min-w-[180px]">
+                <label class="block text-xs font-medium text-gray-400 mb-1">Page Title</label>
+                <input type="text" id="editStepName" onchange="saveBasicPageFields()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] transition-all">
+            </div>
+            <div class="min-w-[180px]">
+                <label class="block text-xs font-medium text-gray-400 mb-1">Type</label>
+                <select id="editStepType" onchange="saveBasicPageFields()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] transition-all">
+                    {% for ptype, plabel in page_types.items() %}
+                    <option value="{{ ptype }}">{{ plabel }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="branchConnectors" class="hidden flex gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">If Accepted →</label>
+                    <select id="branchAccept" onchange="updateConnection('accept', this.value)" class="bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-white text-xs"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">If Declined →</label>
+                    <select id="branchDecline" onchange="updateConnection('decline', this.value)" class="bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-white text-xs"></select>
+                </div>
+            </div>
+
+            <div class="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1 ml-auto">
+                <button onclick="switchEditorTab('ai')" data-tab-btn="ai" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5">
+                    <i data-lucide="wand-2" class="w-3.5 h-3.5"></i> AI Builder
+                </button>
+                <button onclick="switchEditorTab('blocks')" data-tab-btn="blocks" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5">
+                    <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> Blocks
+                </button>
+                <button onclick="switchEditorTab('code')" data-tab-btn="code" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5">
+                    <i data-lucide="code-2" class="w-3.5 h-3.5"></i> Code
+                </button>
+                <button onclick="switchEditorTab('settings')" data-tab-btn="settings" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5">
+                    <i data-lucide="settings" class="w-3.5 h-3.5"></i> Settings
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-hidden flex">
+
+            <!-- AI TAB -->
+            <div id="tabPanel-ai" class="editor-tab-panel hidden flex-1 flex flex-col lg:flex-row overflow-hidden">
+                <div class="w-full lg:w-1/3 border-r border-white/10 p-5 overflow-y-auto space-y-4 bg-[#0a0a0a]">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400 mb-1">Describe this page</label>
+                        <textarea id="editStepPrompt" rows="8" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] transition-all resize-none" placeholder="Describe how this page should look and what content it should have..."></textarea>
+                    </div>
+                    <button onclick="generateStepPage()" id="generateBtn" class="w-full py-2.5 bg-gradient-to-r from-[#1DB954] to-emerald-400 text-black rounded-xl text-sm font-bold transition-all hover:opacity-90 flex items-center justify-center gap-2">
+                        <i data-lucide="wand-2" class="w-4 h-4"></i> Generate with AI
+                    </button>
+                    <p class="text-xs text-gray-500">AI-generated pages save immediately — nothing is lost if you close this window right after generating.</p>
+                </div>
+                <div class="w-full lg:w-2/3 bg-[#111] relative flex flex-col p-2">
+                    <div class="flex-1 bg-white rounded-lg overflow-hidden border border-white/10 relative">
+                        <iframe id="aiPreviewFrame" class="w-full h-full border-0"></iframe>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS TAB -->
+            <div id="tabPanel-settings" class="editor-tab-panel hidden flex-1 overflow-y-auto p-6 bg-[#0a0a0a]">
+                <div class="max-w-2xl mx-auto space-y-8">
+                    <div>
+                        <h4 class="text-white font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="search" class="w-4 h-4 text-[#F2C94C]"></i> SEO</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Page Title (browser tab / search results)</label>
+                                <input type="text" id="seoTitle" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Meta Description</label>
+                                <textarea id="seoDescription" rows="2" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] resize-none"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-white font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="lock" class="w-4 h-4 text-[#F2C94C]"></i> Password Protection</h4>
+                        <input type="text" id="pageSettingsPassword" placeholder="Leave blank for public access" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                        <p class="text-xs text-gray-500 mt-1">If set, visitors must enter this password before this specific page loads.</p>
+                    </div>
+
+                    <div>
+                        <h4 class="text-white font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="code" class="w-4 h-4 text-[#F2C94C]"></i> Custom Scripts</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Header (before &lt;/head&gt;) — analytics, pixels, etc.</label>
+                                <textarea id="scriptsHeader" rows="3" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#1DB954] resize-none" placeholder="<script>...</script>"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Footer (before &lt;/body&gt;)</label>
+                                <textarea id="scriptsFooter" rows="3" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#1DB954] resize-none" placeholder="<script>...</script>"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="checkoutConfigSection" class="hidden">
+                        <h4 class="text-white font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="credit-card" class="w-4 h-4 text-[#F2C94C]"></i> Checkout Product</h4>
+                        {% if not connected_gateways %}
+                        <p class="text-xs text-amber-400 mb-3 p-2 bg-amber-400/10 border border-amber-400/20 rounded-lg">
+                            No payment gateway connected yet — connect one in <a href="{{ url_for('dashboard.payment_gateways') }}" class="underline" target="_blank">Payment Gateway Manager</a> before publishing a checkout page, or visitors won't see any way to pay.
+                        </p>
+                        {% else %}
+                        <p class="text-xs text-gray-500 mb-3">Buyers will be able to pay with: {{ connected_gateways|join(', ') }}. Manage this in <a href="{{ url_for('dashboard.payment_gateways') }}" class="underline text-[#1DB954]" target="_blank">Payment Gateway Manager</a>.</p>
+                        {% endif %}
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Product Name</label>
+                                <input type="text" id="checkoutProductName" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-400 mb-1">Price</label>
+                                    <input type="number" step="0.01" id="checkoutPrice" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-400 mb-1">Currency</label>
+                                    <input type="text" id="checkoutCurrency" maxlength="8" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]" placeholder="USD">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-xs font-medium text-gray-400 mb-1">Description</label>
+                            <textarea id="checkoutDescription" rows="2" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] resize-none"></textarea>
+                        </div>
+                        <div class="mb-3 border-t border-white/10 pt-3">
+                            <label class="block text-xs font-medium text-gray-400 mb-1">After Payment</label>
+                            <select id="checkoutDeliveryType" onchange="toggleDigitalDeliveryFields()" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                                <option value="redirect">Send them to the next page in this funnel (upsell, thank-you, etc.)</option>
+                                <option value="digital">Just hand them a download — no next page needed</option>
+                            </select>
+                            <div id="digitalDeliveryFields" class="hidden mt-2 space-y-2">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-400 mb-1">File / Download URL</label>
+                                    <input type="text" id="checkoutDigitalFileUrl" placeholder="https://... (a link to your PDF, ZIP, Google Drive file, etc.)" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-400 mb-1">Download Button Text</label>
+                                    <input type="text" id="checkoutDigitalFileLabel" placeholder="Download your file" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                                </div>
+                                <p class="text-xs text-gray-600">Host the file anywhere you like (Google Drive share link, Dropbox, your own server) — this just needs a direct link to it. When set, the accept/next-page branch for this page is skipped: the buyer sees a download button right after paying instead.</p>
+                            </div>
+                        </div>
+                        <button onclick="saveCheckoutConfig()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all">Save Checkout Product</button>
+                        <p class="text-xs text-gray-500 mt-2">Saving this automatically builds a ready-to-publish checkout page for this step — no AI/Blocks/Code needed.</p>
+                    </div>
+
+                    <div>
+                        <button onclick="savePageSettings()" class="px-5 py-2.5 bg-[#1DB954] text-black hover:bg-[#1ed760] rounded-xl text-sm font-bold transition-all">Save Page Settings</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BLOCKS TAB -->
+            <div id="tabPanel-blocks" class="editor-tab-panel hidden flex-1 flex overflow-hidden">
+                <!-- Palette -->
+                <div class="w-40 border-r border-white/10 p-3 overflow-y-auto bg-[#0a0a0a] space-y-2">
+                    <p class="text-[10px] uppercase tracking-wider text-gray-500 mb-1 px-1">Add Block</p>
+                    {% for btype, bschema in block_schemas.items() %}
+                    <button onclick="addBlock('{{ btype }}')" class="w-full p-2 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#1DB954]/40 rounded-lg flex flex-col items-center gap-1 transition-all text-center">
+                        <i data-lucide="{{ bschema.icon }}" class="w-4 h-4 text-gray-300"></i>
+                        <span class="text-[10px] text-gray-300">{{ bschema.label }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <!-- Block list -->
+                <div class="w-64 border-r border-white/10 overflow-y-auto bg-[#0a0a0a] p-3 space-y-2" id="blockListContainer"></div>
+                <!-- Settings + preview -->
+                <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                    <div id="blockSettingsPanel" class="w-full lg:w-1/3 border-r border-white/10 p-4 overflow-y-auto bg-[#0a0a0a] space-y-3">
+                        <div class="text-center text-gray-500 text-sm py-8">Select a block to edit its content.</div>
+                    </div>
+                    <div class="w-full lg:w-2/3 bg-[#111] relative flex flex-col p-2">
+                        <div class="flex-1 bg-white rounded-lg overflow-hidden border border-white/10 relative">
+                            <iframe id="blocksPreviewFrame" class="w-full h-full border-0"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CODE TAB -->
+            <div id="tabPanel-code" class="editor-tab-panel hidden flex-1 flex flex-col lg:flex-row overflow-hidden">
+                <div class="w-full lg:w-1/2 border-r border-white/10 flex flex-col overflow-hidden">
+                    <div class="px-3 py-1.5 text-xs text-gray-500 border-b border-white/10 flex justify-between items-center">
+                        <span>HTML / CSS / JS</span>
+                        <button onclick="runCodePreview()" class="px-2 py-1 bg-[#1DB954]/10 text-[#1DB954] rounded text-[10px] font-bold hover:bg-[#1DB954]/20">Run Preview</button>
+                    </div>
+                    <div id="codeEditorHost" class="flex-1 overflow-hidden"></div>
+                </div>
+                <div class="w-full lg:w-1/2 bg-[#111] relative flex flex-col p-2">
+                    <div class="flex-1 bg-white rounded-lg overflow-hidden border border-white/10 relative">
+                        <iframe id="codePreviewFrame" class="w-full h-full border-0"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-3 border-t border-white/10 flex justify-between items-center bg-white/5">
+            <span id="editorSaveStatus" class="text-xs text-gray-500"></span>
+            <button onclick="closeStepEditor()" class="px-4 py-2 text-gray-400 hover:text-white transition-colors text-sm font-medium">Close</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    #tabPanel-ai .editor-tab-panel, #tabPanel-blocks, #tabPanel-code { }
+    [data-tab-btn] { color: #9ca3af; }
+    [data-tab-btn].active { background: #1DB954; color: #000; }
+    .CodeMirror { height: 100% !important; font-size: 13px; }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Real funnel data from the server — each funnel now carries real
+    // `pages` (from FunnelPage rows) instead of a JSON steps blob, so
+    // every action below hits a real endpoint immediately rather than
+    // batching everything into one giant "Save".
+    const FUNNELS = {{ funnels_json|tojson }};
+    const PAGE_TYPE_LABELS = {{ page_types|tojson }};
+    const BLOCK_SCHEMAS = {{ block_schemas|tojson }};
+    const DESIGN_SCHEMA = {{ design_schema|tojson }};
+    const BRANCH_TYPES = new Set(['upsell', 'downsell', 'quiz', 'survey']);
+
+    const PAGE_ICONS = {
+        landing: 'layout-template', sales: 'shopping-bag', checkout: 'credit-card',
+        thank_you: 'heart', upsell: 'trending-up', downsell: 'trending-down',
+        webinar_registration: 'video', webinar_replay: 'play-circle', booking: 'calendar',
+        lead_capture: 'inbox', survey: 'list-checks', quiz: 'help-circle',
+        application: 'clipboard-list', membership_login: 'lock', membership_registration: 'user-plus',
+        order_confirmation: 'package-check', custom: 'file',
+    };
+
+    let currentFunnel = null;   // { id, title, subdomain, published, entry_page_id, pages: [...] }
+    let draggedPageId = null;
+
+    function findFunnel(id) { return FUNNELS.find(f => String(f.id) === String(id)); }
+
+    function getHeaders() {
+        return { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' };
+    }
+
+    function showToast(message, type = 'success') {
+        const stack = document.getElementById('toastStack');
+        const el = document.createElement('div');
+        const color = type === 'error' ? 'border-red-500/40 text-red-300' : 'border-[#1DB954]/40 text-[#1DB954]';
+        el.className = `px-4 py-2.5 bg-[#0a0a0a] border ${color} rounded-xl shadow-2xl text-sm font-medium max-w-sm`;
+        el.textContent = message;
+        stack.appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3200);
+    }
+
+    function apiCall(url, body) {
+        return fetch(url, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body || {}) })
+            .then(res => res.json().then(data => ({ ok: res.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || data.error) throw new Error(data.error || 'Request failed.');
+                return data;
+            });
+    }
+
+    // ── Funnel management ──────────────────────────────────────────
+    function createFunnel() {
+        const title = document.getElementById('newFunnelTitle').value.trim();
+        if (!title) return showToast('Title is required', 'error');
+        apiCall('/dashboard/funnel-builder/create', { title })
+            .then(data => { window.location.href = `/dashboard/funnel-builder?open=${data.funnel.id}`; })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function loadFunnel(id) {
+        const funnel = findFunnel(id);
+        if (!funnel) return showToast('Funnel not found.', 'error');
+        currentFunnel = JSON.parse(JSON.stringify(funnel));
+        document.getElementById('currentFunnelTitle').textContent = currentFunnel.title;
+        document.getElementById('addPageBtn').disabled = false;
+        const urlEl = document.getElementById('currentFunnelUrl');
+        urlEl.textContent = currentFunnel.published && currentFunnel.subdomain
+            ? `Live at /funnels/${currentFunnel.subdomain}` : 'Not published yet';
+        renderSteps();
+    }
+
+    function refreshCurrentFunnelFromServer(serverFunnel) {
+        currentFunnel = serverFunnel;
+        const cached = findFunnel(serverFunnel.id);
+        if (cached) Object.assign(cached, serverFunnel);
+        renderSteps();
+    }
+
+    // ── Flow Canvas (visual drag-and-connect view) ───────────────────
+    let funnelView = 'list';
+    const PAGE_TYPE_COLORS = {
+        checkout: '#F2C94C', upsell: '#1DB954', downsell: '#EB5757',
+        thank_you: '#2D9CDB', sales: '#9B51E0',
+    };
+    function setFunnelView(view) {
+        funnelView = view;
+        document.getElementById('view-toggle-list').classList.toggle('bg-white/10', view === 'list');
+        document.getElementById('view-toggle-list').classList.toggle('text-white', view === 'list');
+        document.getElementById('view-toggle-list').classList.toggle('text-gray-400', view !== 'list');
+        document.getElementById('view-toggle-flow').classList.toggle('bg-white/10', view === 'flow');
+        document.getElementById('view-toggle-flow').classList.toggle('text-white', view === 'flow');
+        document.getElementById('view-toggle-flow').classList.toggle('text-gray-400', view !== 'flow');
+        document.getElementById('funnelStepsContainer').classList.toggle('hidden', view !== 'list');
+        document.getElementById('funnelCanvasWrap').classList.toggle('hidden', view !== 'flow');
+        document.getElementById('viewHintText').textContent = view === 'flow'
+            ? 'Drag a box to move it. Drag from a colored dot to another box to connect Next / Accept / Decline. Double-click a line to remove it.'
+            : 'Drag a page by its handle to reorder. Every change here saves instantly — there\'s no separate "Save" step.';
+        if (view === 'flow') renderFunnelCanvas();
+    }
+
+    let canvasDrag = null;       // { pageId, startX, startY, origX, origY }
+    let canvasConnectFrom = null; // { pageId, kind }
+    let canvasPositionsSaveTimer = null;
+
+    function renderFunnelCanvas() {
+        if (!currentFunnel) return;
+        const svg = document.getElementById('funnelCanvasSvg');
+        const nodesEl = document.getElementById('funnelCanvasNodes');
+        const pages = currentFunnel.pages || [];
+        const positions = currentFunnel.canvas_positions || {};
+
+        // Auto-layout: any page with no saved position gets placed in a
+        // simple left-to-right row so the canvas is never empty/overlapping
+        // on first open.
+        pages.forEach((p, i) => {
+            if (!positions[p.id]) positions[p.id] = { x: 40 + i * 260, y: 40 + (i % 2) * 160 };
+        });
+        currentFunnel.canvas_positions = positions;
+
+        const maxX = Math.max(800, ...pages.map(p => (positions[p.id].x || 0) + 240));
+        const maxY = Math.max(500, ...pages.map(p => (positions[p.id].y || 0) + 200));
+        svg.setAttribute('width', maxX);
+        svg.setAttribute('height', maxY);
+        nodesEl.style.width = maxX + 'px';
+        nodesEl.style.height = maxY + 'px';
+
+        nodesEl.innerHTML = pages.map(p => {
+            const pos = positions[p.id];
+            const color = PAGE_TYPE_COLORS[p.page_type] || '#9CA3AF';
+            const isBranchType = ['upsell', 'downsell', 'quiz', 'application'].includes(p.page_type);
+            return `<div class="funnel-canvas-node" data-page-id="${p.id}"
+                        style="position:absolute;left:${pos.x}px;top:${pos.y}px;width:210px;
+                        background:#111;border:1px solid ${color}55;border-radius:12px;padding:10px 12px;
+                        cursor:grab;user-select:none;box-shadow:0 4px 14px rgba(0,0,0,0.4);z-index:2;"
+                        onmousedown="canvasNodeMouseDown(event, ${p.id})">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                        <span style="width:8px;height:8px;border-radius:99px;background:${color};display:inline-block;"></span>
+                        <span style="color:#fff;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.title || p.page_type)}</span>
+                    </div>
+                    <div style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">${escapeHtml(p.page_type)}</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <div title="Drag to connect: Next page" onmousedown="canvasAnchorMouseDown(event, ${p.id}, 'next')"
+                             style="width:14px;height:14px;border-radius:99px;background:#9CA3AF;border:2px solid #111;cursor:crosshair;"></div>
+                        ${isBranchType ? `
+                        <div title="Drag to connect: Accept" onmousedown="canvasAnchorMouseDown(event, ${p.id}, 'accept')"
+                             style="width:14px;height:14px;border-radius:99px;background:#1DB954;border:2px solid #111;cursor:crosshair;"></div>
+                        <div title="Drag to connect: Decline" onmousedown="canvasAnchorMouseDown(event, ${p.id}, 'decline')"
+                             style="width:14px;height:14px;border-radius:99px;background:#EB5757;border:2px solid #111;cursor:crosshair;"></div>` : ''}
+                    </div>
+                </div>`;
+        }).join('');
+
+        drawCanvasConnections();
+    }
+
+    function nodeCenter(pageId, edge) {
+        const positions = currentFunnel.canvas_positions || {};
+        const pos = positions[pageId] || { x: 0, y: 0 };
+        if (edge === 'out') return { x: pos.x + 40, y: pos.y + 78 };
+        return { x: pos.x + 105, y: pos.y };
+    }
+
+    function drawCanvasConnections(tempLine) {
+        const svg = document.getElementById('funnelCanvasSvg');
+        const pages = currentFunnel.pages || [];
+        const kinds = [
+            { field: 'next_page_id', color: '#9CA3AF', dash: '' },
+            { field: 'branch_yes_id', color: '#1DB954', dash: '' },
+            { field: 'branch_no_id', color: '#EB5757', dash: '4,3' },
+        ];
+        let paths = '';
+        pages.forEach(p => {
+            kinds.forEach(k => {
+                const targetId = p[k.field];
+                if (!targetId) return;
+                const from = nodeCenter(p.id, 'out');
+                const to = nodeCenter(targetId, 'in');
+                const dx = Math.max(40, Math.abs(to.x - from.x) / 2);
+                paths += `<path class="funnel-canvas-line" data-page-id="${p.id}" data-field="${k.field}"
+                    d="M ${from.x} ${from.y} C ${from.x + dx} ${from.y}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}"
+                    stroke="${k.color}" stroke-width="2" fill="none" stroke-dasharray="${k.dash}"
+                    style="pointer-events:stroke;cursor:pointer;" opacity="0.85"
+                    onmousedown="event.stopPropagation()"
+                    ondblclick="canvasDisconnect(${p.id}, '${k.field}')"/>`;
+            });
+        });
+        if (tempLine) {
+            paths += `<path d="M ${tempLine.x1} ${tempLine.y1} L ${tempLine.x2} ${tempLine.y2}" stroke="#F2C94C" stroke-width="2" stroke-dasharray="4,3" fill="none"/>`;
+        }
+        svg.innerHTML = paths;
+    }
+
+    function canvasNodeMouseDown(e, pageId) {
+        if (e.target.closest('[title]')) return; // clicked an anchor, not the node body
+        e.preventDefault();
+        const positions = currentFunnel.canvas_positions || {};
+        const pos = positions[pageId] || { x: 0, y: 0 };
+        canvasDrag = { pageId, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+        document.addEventListener('mousemove', canvasNodeMouseMove);
+        document.addEventListener('mouseup', canvasNodeMouseUp);
+    }
+    function canvasNodeMouseMove(e) {
+        if (!canvasDrag) return;
+        const dx = e.clientX - canvasDrag.startX;
+        const dy = e.clientY - canvasDrag.startY;
+        const positions = currentFunnel.canvas_positions;
+        positions[canvasDrag.pageId] = { x: Math.max(0, canvasDrag.origX + dx), y: Math.max(0, canvasDrag.origY + dy) };
+        const node = document.querySelector(`.funnel-canvas-node[data-page-id="${canvasDrag.pageId}"]`);
+        if (node) { node.style.left = positions[canvasDrag.pageId].x + 'px'; node.style.top = positions[canvasDrag.pageId].y + 'px'; }
+        drawCanvasConnections();
+    }
+    function canvasNodeMouseUp() {
+        document.removeEventListener('mousemove', canvasNodeMouseMove);
+        document.removeEventListener('mouseup', canvasNodeMouseUp);
+        if (canvasDrag) saveCanvasPositionsDebounced();
+        canvasDrag = null;
+    }
+    function saveCanvasPositionsDebounced() {
+        clearTimeout(canvasPositionsSaveTimer);
+        canvasPositionsSaveTimer = setTimeout(() => {
+            apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/canvas-positions`, { positions: currentFunnel.canvas_positions })
+                .catch(err => showToast(err.message, 'error'));
+        }, 500);
+    }
+
+    function canvasAnchorMouseDown(e, pageId, kind) {
+        e.preventDefault();
+        e.stopPropagation();
+        canvasConnectFrom = { pageId, kind };
+        const wrap = document.getElementById('funnelCanvasWrap');
+        const rect = wrap.getBoundingClientRect();
+        function onMove(ev) {
+            const from = nodeCenter(pageId, 'out');
+            drawCanvasConnections({
+                x1: from.x, y1: from.y,
+                x2: ev.clientX - rect.left + wrap.scrollLeft, y2: ev.clientY - rect.top + wrap.scrollTop,
+            });
+        }
+        function onUp(ev) {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const targetNode = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.funnel-canvas-node');
+            drawCanvasConnections();
+            if (targetNode) {
+                const targetId = parseInt(targetNode.dataset.pageId, 10);
+                if (targetId !== pageId) canvasConnect(pageId, kind, targetId);
+            }
+            canvasConnectFrom = null;
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+
+    function canvasConnect(pageId, kind, targetId) {
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/connect`, { connection: kind, target_id: targetId })
+            .then(data => {
+                const p = currentFunnel.pages.find(pg => pg.id === pageId);
+                if (p) Object.assign(p, data.page);
+                drawCanvasConnections();
+                showToast('Connected.');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function canvasDisconnect(pageId, field) {
+        const kind = { next_page_id: 'next', branch_yes_id: 'accept', branch_no_id: 'decline' }[field];
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/connect`, { connection: kind, target_id: null })
+            .then(data => {
+                const p = currentFunnel.pages.find(pg => pg.id === pageId);
+                if (p) Object.assign(p, data.page);
+                drawCanvasConnections();
+                showToast('Connection removed.');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function publishFunnel() {
+        if (!currentFunnel || !currentFunnel.id) return showToast('Select a funnel first.', 'error');
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/publish`)
+            .then(data => {
+                showToast('Funnel published! Live at: ' + data.url);
+                currentFunnel.published = true;
+                currentFunnel.subdomain = data.subdomain;
+                const cached = findFunnel(currentFunnel.id);
+                if (cached) { cached.published = true; cached.subdomain = data.subdomain; }
+                document.getElementById('currentFunnelUrl').textContent = `Live at /funnels/${data.subdomain}`;
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function deleteFunnel(id) {
+        if (!confirm('Are you sure you want to delete this funnel?')) return;
+        apiCall(`/dashboard/funnel-builder/${id}/delete`)
+            .then(() => { showToast('Funnel deleted'); location.reload(); })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function downloadFunnelZip() {
+        if (!currentFunnel || !currentFunnel.id) return showToast('Select a funnel first.', 'error');
+        window.location.href = `/dashboard/funnel-builder/${currentFunnel.id}/download`;
+    }
+
+    function downloadFunnelWordPressPlugin() {
+        if (!currentFunnel || !currentFunnel.id) return showToast('Select a funnel first.', 'error');
+        if (!currentFunnel.pages || !currentFunnel.pages.length) return showToast('Add at least one page first.', 'error');
+        window.location.href = `/dashboard/funnel-builder/${currentFunnel.id}/wordpress-plugin.zip`;
+    }
+
+    function openLicenseKeysModal() {
+        if (!currentFunnel || !currentFunnel.id) return showToast('Select a funnel first.', 'error');
+        document.getElementById('licenseKeysModal').classList.remove('hidden');
+        loadLicenseKeys();
+    }
+
+    function loadLicenseKeys() {
+        const list = document.getElementById('licenseKeysList');
+        list.innerHTML = '<p class="text-sm text-gray-500 text-center py-6">Loading…</p>';
+        fetch(`/dashboard/funnel-builder/${currentFunnel.id}/license-keys`).then(r => r.json()).then(keys => {
+            if (!keys.length) {
+                list.innerHTML = '<p class="text-sm text-gray-500 text-center py-6">No WordPress plugin downloaded yet for this funnel.</p>';
+                return;
+            }
+            list.innerHTML = keys.map(k => `
+                <div class="p-3 bg-white/5 border border-white/10 rounded-lg">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-mono text-gray-300">${escapeHtml(k.key)}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full ${k.status === 'active' ? 'bg-[#1DB954]/10 text-[#1DB954]' : 'bg-red-500/10 text-red-300'}">${escapeHtml(k.status)}</span>
+                    </div>
+                    <p class="text-xs text-gray-500">${k.domain ? 'Active on <strong class="text-gray-300">' + escapeHtml(k.domain) + '</strong>' : 'Not yet activated'}${k.check_count ? ' · ' + k.check_count + ' page load' + (k.check_count === 1 ? '' : 's') : ''}</p>
+                    ${k.status === 'active' ? `<button onclick="revokeLicenseKey(${k.id})" class="text-xs text-red-300 hover:text-red-200 mt-1">Revoke</button>` : ''}
+                </div>`).join('');
+        }).catch(() => { list.innerHTML = '<p class="text-sm text-red-400 text-center py-6">Couldn\'t load license keys.</p>'; });
+    }
+
+    function revokeLicenseKey(keyId) {
+        if (!confirm('Revoke this license key? That WordPress install will stop syncing immediately.')) return;
+        apiCall(`/dashboard/funnel-builder/license-keys/${keyId}/revoke`, {})
+            .then(() => { showToast('License key revoked.'); loadLicenseKeys(); })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    // ── Page management ────────────────────────────────────────────
+    function openAddPageModal() {
+        if (!currentFunnel) return showToast('Select or create a funnel first.', 'error');
+        document.getElementById('addStepModal').classList.remove('hidden');
+        switchAddPageTab('blank');
+    }
+
+    let templatesLoaded = false;
+    function switchAddPageTab(tab) {
+        const blankPane = document.getElementById('addPageBlankPane');
+        const templatePane = document.getElementById('addPageTemplatePane');
+        const blankTab = document.getElementById('addPageTabBlank');
+        const templateTab = document.getElementById('addPageTabTemplate');
+        if (tab === 'template') {
+            blankPane.classList.add('hidden');
+            templatePane.classList.remove('hidden');
+            blankTab.classList.remove('text-white', 'border-[#1DB954]');
+            blankTab.classList.add('text-gray-400', 'border-transparent');
+            templateTab.classList.add('text-white', 'border-[#1DB954]');
+            templateTab.classList.remove('text-gray-400', 'border-transparent');
+            if (!templatesLoaded) loadFunnelTemplates();
+        } else {
+            templatePane.classList.add('hidden');
+            blankPane.classList.remove('hidden');
+            templateTab.classList.remove('text-white', 'border-[#1DB954]');
+            templateTab.classList.add('text-gray-400', 'border-transparent');
+            blankTab.classList.add('text-white', 'border-[#1DB954]');
+            blankTab.classList.remove('text-gray-400', 'border-transparent');
+        }
+    }
+
+    function loadFunnelTemplates() {
+        fetch('/dashboard/funnel-builder/templates', { headers: getHeaders() })
+            .then(res => res.json())
+            .then(data => {
+                templatesLoaded = true;
+                const list = document.getElementById('templateList');
+                const templates = data.templates || [];
+                if (!templates.length) {
+                    list.innerHTML = `<div class="text-sm text-gray-500 col-span-2 text-center py-6">No templates available.</div>`;
+                    return;
+                }
+                list.innerHTML = templates.map(t => `
+                    <button onclick="addStepFromTemplate('${t.id}')" class="text-left p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#1DB954]/50 rounded-xl transition-all">
+                        <p class="text-white font-semibold text-sm">${t.label}</p>
+                        <p class="text-[11px] text-gray-500 mt-0.5">${t.category}</p>
+                        <p class="text-xs text-gray-400 mt-2">${t.description}</p>
+                    </button>
+                `).join('');
+            })
+            .catch(() => {
+                document.getElementById('templateList').innerHTML = `<div class="text-sm text-red-400 col-span-2 text-center py-6">Couldn't load templates.</div>`;
+            });
+    }
+
+    function addStepFromTemplate(templateId) {
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/pages/add`, { template_id: templateId })
+            .then(data => {
+                document.getElementById('addStepModal').classList.add('hidden');
+                refreshCurrentFunnelFromServer(data.funnel);
+                showToast('Page added from template');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function addStep(pageType, label) {
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/pages/add`, { page_type: pageType, title: label })
+            .then(data => {
+                document.getElementById('addStepModal').classList.add('hidden');
+                refreshCurrentFunnelFromServer(data.funnel);
+                showToast('Page added');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function removeStep(pageId) {
+        if (!confirm('Delete this page?')) return;
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/delete`)
+            .then(data => { refreshCurrentFunnelFromServer(data.funnel); showToast('Page deleted'); })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function reorderPages(newOrderIds) {
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/pages/reorder`, { order: newOrderIds })
+            .then(data => refreshCurrentFunnelFromServer(data.funnel))
+            .catch(err => { showToast(err.message, 'error'); renderSteps(); });
+    }
+
+    function updateConnection(connection, targetIdRaw) {
+        const pageId = document.getElementById('editPageId').value;
+        const targetId = targetIdRaw ? parseInt(targetIdRaw, 10) : null;
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/connect`, { connection, target_id: targetId })
+            .then(() => showToast('Connection updated'))
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    // ── Page Editor ────────────────────────────────────────────────
+    function findPage(pageId) {
+        return (currentFunnel.pages || []).find(p => String(p.id) === String(pageId));
+    }
+
+    let activeTab = 'ai';
+    let codeMirrorInstance = null;
+    let blockState = [];          // working copy of the selected page's blocks
+    let selectedBlockId = null;
+    let saveBlocksTimer = null;
+    let saveCodeTimer = null;
+
+    function flashSaveStatus(msg) {
+        const el = document.getElementById('editorSaveStatus');
+        el.textContent = msg;
+        if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2000);
+    }
+
+    function openStepEditor(pageId) {
+        const page = findPage(pageId);
+        if (!page) return;
+        document.getElementById('editPageId').value = page.id;
+        document.getElementById('editStepName').value = page.title;
+        document.getElementById('editStepType').value = page.page_type;
+        document.getElementById('editStepPrompt').value = '';
+        document.getElementById('editorStepTitle').textContent = page.title;
+
+        const branchBox = document.getElementById('branchConnectors');
+        if (BRANCH_TYPES.has(page.page_type)) {
+            branchBox.classList.remove('hidden');
+            const others = (currentFunnel.pages || []).filter(p => p.id !== page.id);
+            const opts = '<option value="">— none —</option>' + others.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+            document.getElementById('branchAccept').innerHTML = opts;
+            document.getElementById('branchAccept').value = page.branch_yes_id || '';
+            document.getElementById('branchDecline').innerHTML = opts;
+            document.getElementById('branchDecline').value = page.branch_no_id || '';
+        } else {
+            branchBox.classList.add('hidden');
+        }
+
+        document.getElementById('aiPreviewFrame').srcdoc = page.html || '';
+        blockState = JSON.parse(JSON.stringify(page.blocks || []));
+        selectedBlockId = null;
+
+        // Settings tab fields
+        const settings = page.settings || {};
+        const seo = settings.seo || {};
+        document.getElementById('seoTitle').value = seo.title || '';
+        document.getElementById('seoDescription').value = seo.description || '';
+        document.getElementById('pageSettingsPassword').value = settings.password || '';
+        const scripts = settings.custom_scripts || {};
+        document.getElementById('scriptsHeader').value = scripts.header || '';
+        document.getElementById('scriptsFooter').value = scripts.footer || '';
+        const checkoutSection = document.getElementById('checkoutConfigSection');
+        if (page.page_type === 'checkout') {
+            checkoutSection.classList.remove('hidden');
+            const checkout = settings.checkout || {};
+            document.getElementById('checkoutProductName').value = checkout.product_name || page.title || '';
+            document.getElementById('checkoutPrice').value = checkout.price || '';
+            document.getElementById('checkoutCurrency').value = checkout.currency || 'USD';
+            document.getElementById('checkoutDescription').value = checkout.description || '';
+            document.getElementById('checkoutDeliveryType').value = checkout.delivery_type || 'redirect';
+            document.getElementById('checkoutDigitalFileUrl').value = checkout.digital_file_url || '';
+            document.getElementById('checkoutDigitalFileLabel').value = checkout.digital_file_label || '';
+            toggleDigitalDeliveryFields();
+        } else {
+            checkoutSection.classList.add('hidden');
+        }
+
+        document.getElementById('stepEditorModal').classList.remove('hidden');
+        switchEditorTab(page.page_type === 'checkout' ? 'settings' : (page.builder_mode || 'ai'));
+        lucide.createIcons();
+    }
+
+    function toggleDigitalDeliveryFields() {
+        const isDigital = document.getElementById('checkoutDeliveryType').value === 'digital';
+        document.getElementById('digitalDeliveryFields').classList.toggle('hidden', !isDigital);
+    }
+
+    function closeStepEditor() {
+        document.getElementById('stepEditorModal').classList.add('hidden');
+        clearTimeout(saveBlocksTimer);
+        clearTimeout(saveCodeTimer);
+    }
+
+    function switchEditorTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll('.editor-tab-panel').forEach(p => p.classList.add('hidden'));
+        document.getElementById(`tabPanel-${tab}`).classList.remove('hidden');
+        document.querySelectorAll('[data-tab-btn]').forEach(b => b.classList.toggle('active', b.dataset.tabBtn === tab));
+
+        if (tab === 'blocks') {
+            renderBlockList();
+            renderBlockSettings();
+            refreshBlocksPreview();
+        } else if (tab === 'code') {
+            initCodeEditor();
+        }
+    }
+
+    function saveBasicPageFields() {
+        const pageId = document.getElementById('editPageId').value;
+        if (!pageId) return;
+        const title = document.getElementById('editStepName').value.trim();
+        const page_type = document.getElementById('editStepType').value;
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/update`, { title, page_type })
+            .then(data => {
+                Object.assign(findPage(pageId), { title, page_type });
+                document.getElementById('editorStepTitle').textContent = title;
+                const branchBox = document.getElementById('branchConnectors');
+                branchBox.classList.toggle('hidden', !BRANCH_TYPES.has(page_type));
+                document.getElementById('checkoutConfigSection').classList.toggle('hidden', page_type !== 'checkout');
+                renderSteps();
+                flashSaveStatus('Saved');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    // ── Settings tab ───────────────────────────────────────────────
+    function savePageSettings() {
+        const pageId = document.getElementById('editPageId').value;
+        if (!pageId) return;
+        const body = {
+            seo: {
+                title: document.getElementById('seoTitle').value.trim(),
+                description: document.getElementById('seoDescription').value.trim(),
+            },
+            password: document.getElementById('pageSettingsPassword').value.trim(),
+            custom_scripts: {
+                header: document.getElementById('scriptsHeader').value,
+                footer: document.getElementById('scriptsFooter').value,
+            },
+        };
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/settings`, body)
+            .then(data => {
+                const page = findPage(pageId);
+                if (page) page.settings = data.page.settings;
+                showToast('Page settings saved');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function saveCheckoutConfig() {
+        const pageId = document.getElementById('editPageId').value;
+        if (!pageId) return;
+        const body = {
+            product_name: document.getElementById('checkoutProductName').value.trim(),
+            price: document.getElementById('checkoutPrice').value,
+            currency: document.getElementById('checkoutCurrency').value.trim() || 'USD',
+            description: document.getElementById('checkoutDescription').value.trim(),
+            delivery_type: document.getElementById('checkoutDeliveryType').value,
+            digital_file_url: document.getElementById('checkoutDigitalFileUrl').value.trim(),
+            digital_file_label: document.getElementById('checkoutDigitalFileLabel').value.trim(),
+        };
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/checkout-config`, body)
+            .then(data => {
+                const page = findPage(pageId);
+                if (page) { page.settings = data.page.settings; page.page_type = data.page.page_type; }
+                showToast('Checkout product saved');
+                renderSteps();
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    // ── Funnel Settings modal ──────────────────────────────────────
+    function openFunnelSettings() {
+        if (!currentFunnel || !currentFunnel.id) return showToast('Select a funnel first.', 'error');
+        const settings = currentFunnel.settings || {};
+        document.getElementById('settingsCustomDomain').value = settings.custom_domain || '';
+        document.getElementById('settingsPublishStatus').textContent =
+            currentFunnel.published ? `Live at /funnels/${currentFunnel.subdomain}` : 'Not published';
+        document.getElementById('settingsAnalyticsLink').href = `/dashboard/funnel-builder/${currentFunnel.id}/analytics`;
+        const emails = settings.emails || {};
+        document.getElementById('settingsSenderName').value = emails.sender_name || '';
+        document.getElementById('settingsReplyTo').value = emails.reply_to || '';
+        document.getElementById('settingsNotificationEmail').value = emails.notification_email || '';
+        document.getElementById('settingsBuyerSubject').value = emails.buyer_subject || '';
+        document.getElementById('settingsBuyerBody').value = emails.buyer_body || '';
+        renderSmtpStatus();
+        loadGatewayList();
+        document.getElementById('funnelSettingsModal').classList.remove('hidden');
+    }
+
+    function renderSmtpStatus() {
+        const connected = currentFunnel.smtp_connected;
+        const summary = currentFunnel.smtp_summary;
+        document.getElementById('settingsSmtpStatus').innerHTML = connected
+            ? `✅ Sending from your own account: <strong>${escapeHtml(summary.from_email || summary.username || '')}</strong> via ${escapeHtml(summary.host || '')}`
+            : `Not connected — receipts currently send via the platform's shared relay (still with your name/reply-to attached, see below).`;
+        document.getElementById('settingsSmtpForm').classList.toggle('hidden', connected);
+        document.getElementById('smtpConnectBtn').classList.toggle('hidden', connected);
+        document.getElementById('smtpTestBtn').classList.toggle('hidden', !connected);
+        document.getElementById('smtpDisconnectBtn').classList.toggle('hidden', !connected);
+    }
+
+    function connectFunnelSmtp() {
+        if (!currentFunnel) return;
+        const body = {
+            host: document.getElementById('smtpHost').value.trim(),
+            port: document.getElementById('smtpPort').value.trim() || 587,
+            username: document.getElementById('smtpUsername').value.trim(),
+            password: document.getElementById('smtpPassword').value,
+            from_email: document.getElementById('smtpFromEmail').value.trim(),
+            use_tls: document.getElementById('smtpUseTls').checked,
+        };
+        if (!body.host || !body.username || !body.password) return showToast('Host, username, and password are required.', 'error');
+        const btn = document.getElementById('smtpConnectBtn');
+        btn.disabled = true; btn.textContent = 'Testing...';
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/connect-smtp`, body)
+            .then(data => {
+                currentFunnel.settings = data.funnel.settings;
+                currentFunnel.smtp_connected = data.funnel.smtp_connected;
+                currentFunnel.smtp_summary = data.funnel.smtp_summary;
+                const cached = findFunnel(currentFunnel.id);
+                if (cached) Object.assign(cached, data.funnel);
+                document.getElementById('smtpPassword').value = '';
+                renderSmtpStatus();
+                showToast(data.message);
+            })
+            .catch(err => showToast(err.message, 'error'))
+            .finally(() => { btn.disabled = false; btn.textContent = 'Test & Connect'; });
+    }
+
+    function testFunnelSmtp() {
+        if (!currentFunnel) return;
+        const btn = document.getElementById('smtpTestBtn');
+        btn.disabled = true; btn.textContent = 'Testing...';
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/test-smtp`, {})
+            .then(data => showToast(data.message))
+            .catch(err => showToast(err.message, 'error'))
+            .finally(() => { btn.disabled = false; btn.textContent = 'Re-test'; });
+    }
+
+    function disconnectFunnelSmtp() {
+        if (!currentFunnel) return;
+        if (!confirm('Disconnect your SMTP account? Receipts will go back to the platform\'s shared relay.')) return;
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/disconnect-smtp`, {})
+            .then(data => {
+                currentFunnel.settings = data.funnel.settings;
+                currentFunnel.smtp_connected = false;
+                currentFunnel.smtp_summary = null;
+                const cached = findFunnel(currentFunnel.id);
+                if (cached) Object.assign(cached, data.funnel);
+                renderSmtpStatus();
+                showToast(data.message);
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function loadGatewayList() {
+        const container = document.getElementById('settingsGatewayList');
+        container.innerHTML = '<p class="text-xs text-gray-600">Loading...</p>';
+        fetch('/dashboard/payment-gateways/status').then(r => r.json()).then(data => {
+            container.innerHTML = data.gateways.map(g => `
+                <div class="p-3 bg-white/5 border border-white/10 rounded-lg">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-white">${escapeHtml(g.name)}</span>
+                        ${g.connected
+                            ? `<span class="flex items-center gap-2"><span class="text-xs text-[#1DB954]">✅ Connected${g.last4 ? ' •••' + escapeHtml(g.last4) : ''}</span>
+                               <button onclick="disconnectGateway('${g.key}')" class="text-xs text-red-300 hover:text-red-200">Disconnect</button></span>`
+                            : `<span class="text-xs text-gray-500">Not connected</span>`}
+                    </div>
+                    ${g.connected ? '' : `
+                    <div class="space-y-1.5">
+                        ${g.fields.map(f => `<input type="text" id="gw-${g.key}-${f.key}" placeholder="${escapeHtml(f.label)}${f.placeholder ? ' (' + escapeHtml(f.placeholder) + ')' : ''}" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-[#1DB954]">`).join('')}
+                        <button onclick="connectGateway('${g.key}', ${JSON.stringify(g.fields.map(f => f.key))})" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all">Connect</button>
+                    </div>`}
+                </div>`).join('');
+        }).catch(() => { container.innerHTML = '<p class="text-xs text-red-400">Couldn\'t load gateway status.</p>'; });
+    }
+
+    function connectGateway(key, fieldKeys) {
+        const body = {};
+        fieldKeys.forEach(fk => { body[fk] = document.getElementById(`gw-${key}-${fk}`).value.trim(); });
+        apiCall(`/dashboard/payment-gateways/${key}/connect-json`, body)
+            .then(data => { showToast(data.message); loadGatewayList(); })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function disconnectGateway(key) {
+        if (!confirm('Disconnect this gateway?')) return;
+        apiCall(`/dashboard/payment-gateways/${key}/disconnect-json`, {})
+            .then(data => { showToast(data.message); loadGatewayList(); })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function saveFunnelEmailSettings() {
+        if (!currentFunnel) return;
+        const emails = {
+            sender_name: document.getElementById('settingsSenderName').value.trim(),
+            reply_to: document.getElementById('settingsReplyTo').value.trim(),
+            notification_email: document.getElementById('settingsNotificationEmail').value.trim(),
+            buyer_subject: document.getElementById('settingsBuyerSubject').value.trim(),
+            buyer_body: document.getElementById('settingsBuyerBody').value.trim(),
+        };
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/settings`, { emails })
+            .then(data => {
+                currentFunnel.settings = data.funnel.settings;
+                const cached = findFunnel(currentFunnel.id);
+                if (cached) cached.settings = data.funnel.settings;
+                showToast('Email settings saved');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function saveFunnelDomain() {
+        if (!currentFunnel) return;
+        const custom_domain = document.getElementById('settingsCustomDomain').value.trim();
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/settings`, { custom_domain })
+            .then(data => {
+                currentFunnel.settings = data.funnel.settings;
+                const cached = findFunnel(currentFunnel.id);
+                if (cached) cached.settings = data.funnel.settings;
+                showToast('Domain saved');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function unpublishFunnel() {
+        if (!currentFunnel || !currentFunnel.id) return;
+        if (!confirm('Take this funnel offline? Its URL stays reserved and you can republish anytime.')) return;
+        apiCall(`/dashboard/funnel-builder/${currentFunnel.id}/unpublish`)
+            .then(data => {
+                currentFunnel.published = false;
+                const cached = findFunnel(currentFunnel.id);
+                if (cached) cached.published = false;
+                document.getElementById('currentFunnelUrl').textContent = 'Not published yet';
+                document.getElementById('settingsPublishStatus').textContent = 'Not published';
+                showToast('Funnel unpublished');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    // ── AI tab ─────────────────────────────────────────────────────
+    function generateStepPage() {
+        const pageId = document.getElementById('editPageId').value;
+        const prompt = document.getElementById('editStepPrompt').value.trim();
+        if (!prompt) return showToast('Describe the page first.', 'error');
+
+        const btn = document.getElementById('generateBtn');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Generating...';
+        btn.disabled = true;
+        lucide.createIcons();
+
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/generate`, { prompt })
+            .then(data => {
+                document.getElementById('aiPreviewFrame').srcdoc = data.html || '';
+                const page = findPage(pageId);
+                if (page) { page.html = data.html; page.builder_mode = 'ai'; }
+                renderSteps();
+                showToast('Page generated and saved');
+            })
+            .catch(err => showToast(err.message, 'error'))
+            .finally(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                lucide.createIcons();
+            });
+    }
+
+    // ── Code tab (CodeMirror, saves debounced on change) ────────────
+    function initCodeEditor() {
+        const pageId = document.getElementById('editPageId').value;
+        const page = findPage(pageId);
+        const host = document.getElementById('codeEditorHost');
+
+        if (!codeMirrorInstance) {
+            host.innerHTML = '';
+            const textarea = document.createElement('textarea');
+            host.appendChild(textarea);
+            codeMirrorInstance = CodeMirror.fromTextArea(textarea, {
+                mode: 'htmlmixed', theme: 'dracula', lineNumbers: true,
+                lineWrapping: true, tabSize: 2,
+            });
+            codeMirrorInstance.on('change', () => {
+                clearTimeout(saveCodeTimer);
+                saveCodeTimer = setTimeout(saveCodeFromEditor, 700);
+            });
+        }
+        codeMirrorInstance.setValue(page.html || '');
+        setTimeout(() => codeMirrorInstance.refresh(), 50);
+        document.getElementById('codePreviewFrame').srcdoc = page.html || '';
+    }
+
+    function runCodePreview() {
+        document.getElementById('codePreviewFrame').srcdoc = codeMirrorInstance.getValue();
+    }
+
+    function saveCodeFromEditor() {
+        const pageId = document.getElementById('editPageId').value;
+        const html = codeMirrorInstance.getValue();
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/update`, { html })
+            .then(data => {
+                const page = findPage(pageId);
+                if (page) { page.html = html; page.builder_mode = 'code'; }
+                document.getElementById('codePreviewFrame').srcdoc = html;
+                renderSteps();
+                flashSaveStatus('Saved');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    // ── Blocks tab ─────────────────────────────────────────────────
+    function addBlock(type) {
+        const schema = BLOCK_SCHEMAS[type];
+        if (!schema) return;
+        blockState.push({ id: 'b_' + Date.now() + '_' + Math.floor(Math.random() * 1000), type, data: JSON.parse(JSON.stringify(schema.defaults)) });
+        selectedBlockId = blockState[blockState.length - 1].id;
+        renderBlockList();
+        renderBlockSettings();
+        saveBlocksDebounced();
+    }
+
+    function selectBlock(id) {
+        selectedBlockId = id;
+        renderBlockList();
+        renderBlockSettings();
+    }
+
+    function deleteBlock(id) {
+        blockState = blockState.filter(b => b.id !== id);
+        if (selectedBlockId === id) selectedBlockId = null;
+        renderBlockList();
+        renderBlockSettings();
+        saveBlocksDebounced();
+    }
+
+    function updateBlockField(blockId, key, value) {
+        const block = blockState.find(b => b.id === blockId);
+        if (!block) return;
+        block.data[key] = value;
+        saveBlocksDebounced();
+        refreshBlocksPreview();
+    }
+
+    function updateBlockListField(blockId, listKey, itemIndex, subKey, value) {
+        const block = blockState.find(b => b.id === blockId);
+        if (!block) return;
+        if (!Array.isArray(block.data[listKey])) block.data[listKey] = [];
+        block.data[listKey][itemIndex][subKey] = value;
+        saveBlocksDebounced();
+        refreshBlocksPreview();
+    }
+
+    function addListItem(blockId, listKey) {
+        const block = blockState.find(b => b.id === blockId);
+        const schema = BLOCK_SCHEMAS[block.type].fields.find(f => f.key === listKey);
+        const blank = {};
+        schema.subfields.forEach(sf => blank[sf.key] = '');
+        block.data[listKey] = block.data[listKey] || [];
+        block.data[listKey].push(blank);
+        renderBlockSettings();
+        saveBlocksDebounced();
+    }
+
+    function removeListItem(blockId, listKey, itemIndex) {
+        const block = blockState.find(b => b.id === blockId);
+        block.data[listKey].splice(itemIndex, 1);
+        renderBlockSettings();
+        saveBlocksDebounced();
+        refreshBlocksPreview();
+    }
+
+    function saveBlocksDebounced() {
+        clearTimeout(saveBlocksTimer);
+        saveBlocksTimer = setTimeout(saveBlocksNow, 500);
+    }
+
+    function saveBlocksNow() {
+        const pageId = document.getElementById('editPageId').value;
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/blocks/save`, { blocks: blockState })
+            .then(data => {
+                const page = findPage(pageId);
+                if (page) { page.blocks = blockState; page.html = data.page.html; page.builder_mode = 'blocks'; }
+                document.getElementById('blocksPreviewFrame').srcdoc = data.page.html;
+                renderSteps();
+                flashSaveStatus('Saved');
+            })
+            .catch(err => showToast(err.message, 'error'));
+    }
+
+    function refreshBlocksPreview() {
+        const pageId = document.getElementById('editPageId').value;
+        apiCall(`/dashboard/funnel-builder/pages/${pageId}/blocks/preview`, { blocks: blockState })
+            .then(data => { document.getElementById('blocksPreviewFrame').srcdoc = data.html; })
+            .catch(() => {});
+    }
+
+    function renderBlockList() {
+        const container = document.getElementById('blockListContainer');
+        if (blockState.length === 0) {
+            const pageId = document.getElementById('editPageId').value;
+            container.innerHTML = `<div class="text-center text-gray-500 text-xs py-6">
+                <p class="mb-3">No blocks yet.</p>
+                <button onclick="loadBlockDefaults()" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-white">Start from a template</button>
+            </div>`;
+            return;
+        }
+        container.innerHTML = blockState.map((b, i) => {
+            const schema = BLOCK_SCHEMAS[b.type];
+            const active = b.id === selectedBlockId;
+            return `<div draggable="true"
+                    ondragstart="handleBlockDragStart(event, '${b.id}')"
+                    ondragover="event.preventDefault()"
+                    ondrop="handleBlockDrop(event, '${b.id}')"
+                    onclick="selectBlock('${b.id}')"
+                    class="p-2.5 rounded-lg border cursor-pointer flex items-center justify-between gap-2 transition-all ${active ? 'bg-[#1DB954]/10 border-[#1DB954]/40' : 'bg-white/5 border-white/5 hover:border-white/20'}">
+                <div class="flex items-center gap-2 min-w-0">
+                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-gray-600 shrink-0"></i>
+                    <i data-lucide="${schema.icon}" class="w-3.5 h-3.5 text-gray-400 shrink-0"></i>
+                    <span class="text-xs text-white truncate">${schema.label}</span>
+                </div>
+                <button onclick="event.stopPropagation(); deleteBlock('${b.id}')" class="text-gray-500 hover:text-red-400 shrink-0">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    function loadBlockDefaults() {
+        const pageId = document.getElementById('editPageId').value;
+        fetch(`/dashboard/funnel-builder/pages/${pageId}/blocks/defaults`)
+            .then(r => r.json())
+            .then(data => {
+                blockState = data.blocks;
+                renderBlockList();
+                renderBlockSettings();
+                saveBlocksDebounced();
+                refreshBlocksPreview();
+            });
+    }
+
+    let draggedBlockId = null;
+    function handleBlockDragStart(e, id) { draggedBlockId = id; }
+    function handleBlockDrop(e, targetId) {
+        e.preventDefault();
+        if (!draggedBlockId || draggedBlockId === targetId) return;
+        const fromIdx = blockState.findIndex(b => b.id === draggedBlockId);
+        const toIdx = blockState.findIndex(b => b.id === targetId);
+        const [moved] = blockState.splice(fromIdx, 1);
+        blockState.splice(toIdx, 0, moved);
+        renderBlockList();
+        saveBlocksDebounced();
+        refreshBlocksPreview();
+        draggedBlockId = null;
+    }
+
+    function renderBlockSettings() {
+        const panel = document.getElementById('blockSettingsPanel');
+        const block = blockState.find(b => b.id === selectedBlockId);
+        if (!block) {
+            panel.innerHTML = '<div class="text-center text-gray-500 text-sm py-8">Select a block to edit its content.</div>';
+            return;
+        }
+        const schema = BLOCK_SCHEMAS[block.type];
+        const tab = window.__blockSettingsTab || 'content';
+        const tabsHtml = `<div class="flex gap-1 mb-3 bg-white/5 rounded-lg p-1">
+            <button onclick="switchBlockSettingsTab('content')" class="flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${tab === 'content' ? 'bg-white/10 text-white' : 'text-gray-400'}">Content</button>
+            <button onclick="switchBlockSettingsTab('design')" class="flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${tab === 'design' ? 'bg-white/10 text-white' : 'text-gray-400'}">Design</button>
+        </div>`;
+        if (tab === 'design') {
+            block.design = block.design || {};
+            const groups = {};
+            DESIGN_SCHEMA.forEach(f => {
+                const g = f.group || 'Style';
+                (groups[g] = groups[g] || []).push(f);
+            });
+            const groupOrder = ['Color', 'Typography', 'Layout', 'Spacing', 'Animation', 'Style'];
+            const groupsHtml = groupOrder.filter(g => groups[g]).map(g => `
+                <div class="mb-4">
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 pb-1 border-b border-white/10">${g}</p>
+                    ${groups[g].map(f => renderDesignFieldInput(block, f)).join('')}
+                </div>`).join('');
+            panel.innerHTML = `<p class="text-xs font-bold text-[#F2C94C] uppercase tracking-wider mb-3">${schema.label} — Design</p>` +
+                tabsHtml +
+                groupsHtml +
+                `<button onclick="resetBlockDesign('${block.id}')" class="w-full mt-2 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[11px] text-gray-400">Reset to default</button>`;
+        } else {
+            panel.innerHTML = `<p class="text-xs font-bold text-[#F2C94C] uppercase tracking-wider mb-3">${schema.label}</p>` +
+                tabsHtml +
+                schema.fields.map(f => renderFieldInput(block, f)).join('');
+        }
+        lucide.createIcons();
+    }
+
+    function switchBlockSettingsTab(tab) {
+        window.__blockSettingsTab = tab;
+        renderBlockSettings();
+    }
+
+    function renderDesignFieldInput(block, field) {
+        const val = (block.design || {})[field.key];
+        const onchange = `updateBlockDesignField('${block.id}', '${field.key}', this.value)`;
+        if (field.type === 'color') {
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <div class="flex items-center gap-2">
+                    <input type="color" value="${val || '#ffffff'}" onchange="${onchange}" class="h-9 w-14 bg-white/5 border border-white/10 rounded-lg cursor-pointer">
+                    <button onclick="updateBlockDesignField('${block.id}', '${field.key}', '')" class="text-[10px] text-gray-500 hover:text-gray-300">Clear</button>
+                </div></div>`;
+        }
+        if (field.type === 'select') {
+            const opts = ['<option value="">Default</option>'].concat(field.options.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`)).join('');
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <select onchange="${onchange}" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs">${opts}</select></div>`;
+        }
+        if (field.type === 'number') {
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <input type="number" value="${val ?? ''}" onchange="${onchange}" placeholder="Default" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs"></div>`;
+        }
+        return '';
+    }
+
+    function updateBlockDesignField(blockId, key, value) {
+        const block = blockState.find(b => b.id === blockId);
+        if (!block) return;
+        block.design = block.design || {};
+        if (value) block.design[key] = value; else delete block.design[key];
+        saveBlocksDebounced();
+        refreshBlocksPreview();
+    }
+
+    function resetBlockDesign(blockId) {
+        const block = blockState.find(b => b.id === blockId);
+        if (!block) return;
+        block.design = {};
+        saveBlocksDebounced();
+        refreshBlocksPreview();
+        renderBlockSettings();
+    }
+
+    function renderFieldInput(block, field) {
+        const val = block.data[field.key];
+        const onchange = `updateBlockField('${block.id}', '${field.key}', this.value)`;
+        if (field.type === 'textarea') {
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <textarea rows="3" onchange="${onchange}" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs resize-none">${(val || '').toString().replace(/</g, '&lt;')}</textarea></div>`;
+        }
+        if (field.type === 'color') {
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <input type="color" value="${val || '#000000'}" onchange="${onchange}" class="w-full h-9 bg-white/5 border border-white/10 rounded-lg cursor-pointer"></div>`;
+        }
+        if (field.type === 'select') {
+            const opts = field.options.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('');
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <select onchange="${onchange}" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs">${opts}</select></div>`;
+        }
+        if (field.type === 'number') {
+            return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                <input type="number" value="${val ?? ''}" onchange="${onchange}" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs"></div>`;
+        }
+        if (field.type === 'list') {
+            const items = block.data[field.key] || [];
+            const itemsHtml = items.map((item, idx) => `
+                <div class="p-2 bg-white/5 border border-white/10 rounded-lg mb-2 space-y-1.5">
+                    ${field.subfields.map(sf => `
+                        <div>
+                            <label class="block text-[10px] text-gray-500">${sf.label}</label>
+                            ${sf.type === 'textarea'
+                                ? `<textarea rows="2" onchange="updateBlockListField('${block.id}', '${field.key}', ${idx}, '${sf.key}', this.value)" class="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-white text-[11px] resize-none">${(item[sf.key] || '').toString().replace(/</g, '&lt;')}</textarea>`
+                                : sf.type === 'select'
+                                ? `<select onchange="updateBlockListField('${block.id}', '${field.key}', ${idx}, '${sf.key}', this.value)" class="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-white text-[11px]">${sf.options.map(o => `<option value="${o}" ${item[sf.key]===o?'selected':''}>${o}</option>`).join('')}</select>`
+                                : `<input type="text" value="${(item[sf.key] || '').toString().replace(/"/g, '&quot;')}" onchange="updateBlockListField('${block.id}', '${field.key}', ${idx}, '${sf.key}', this.value)" class="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-white text-[11px]">`}
+                        </div>`).join('')}
+                    <button onclick="removeListItem('${block.id}', '${field.key}', ${idx})" class="text-[10px] text-red-400 hover:text-red-300">Remove</button>
+                </div>`).join('');
+            return `<div class="mb-3">
+                <label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                ${itemsHtml}
+                <button onclick="addListItem('${block.id}', '${field.key}')" class="w-full py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[11px] text-white">+ Add</button>
+            </div>`;
+        }
+        // text | url
+        return `<div class="mb-3"><label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+            <input type="text" value="${(val ?? '').toString().replace(/"/g, '&quot;')}" onchange="${onchange}" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs"></div>`;
+    }
+
+    // ── Drag & drop reorder (native HTML5 D&D, no external library) ──
+
+    function handleDragStart(e, pageId) {
+        draggedPageId = pageId;
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.classList.add('opacity-40');
+    }
+    function handleDragEnd(e) {
+        e.currentTarget.classList.remove('opacity-40');
+    }
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    }
+    function handleDrop(e, targetPageId) {
+        e.preventDefault();
+        if (!draggedPageId || String(draggedPageId) === String(targetPageId)) return;
+        const pages = currentFunnel.pages.slice();
+        const fromIdx = pages.findIndex(p => String(p.id) === String(draggedPageId));
+        const toIdx = pages.findIndex(p => String(p.id) === String(targetPageId));
+        if (fromIdx === -1 || toIdx === -1) return;
+        const [moved] = pages.splice(fromIdx, 1);
+        pages.splice(toIdx, 0, moved);
+        currentFunnel.pages = pages;
+        renderSteps();
+        reorderPages(pages.map(p => p.id));
+        draggedPageId = null;
+    }
+
+    // ── Rendering the visual flow ─────────────────────────────────
+    function renderSteps() {
+        const container = document.getElementById('funnelStepsContainer');
+        const pages = (currentFunnel && currentFunnel.pages) || [];
+        if (funnelView === 'flow') renderFunnelCanvas();
+
+        if (pages.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-gray-500 py-12 w-full">
+                    <i data-lucide="layout-template" class="w-12 h-12 mx-auto mb-3 opacity-20"></i>
+                    <p class="text-sm">No pages yet.</p>
+                    <button onclick="openAddPageModal()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white transition-all inline-flex items-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Add your first page
+                    </button>
+                </div>
+            `;
+            lucide.createIcons();
+            return;
+        }
+
+        let html = '';
+        pages.forEach((page, i) => {
+            if (i > 0) {
+                html += `
+                    <div class="flex flex-col items-center my-1">
+                        <div class="w-0.5 h-6 bg-gradient-to-b from-white/20 to-[#1DB954]/50"></div>
+                        <i data-lucide="arrow-down" class="w-4 h-4 text-[#1DB954] -mt-1"></i>
+                    </div>
+                `;
+            }
+
+            const icon = PAGE_ICONS[page.page_type] || 'file';
+            const branchNote = BRANCH_TYPES.has(page.page_type)
+                ? `<div class="text-[10px] text-gray-500 mt-1 flex items-center gap-2">
+                        <span class="flex items-center gap-1"><i data-lucide="check" class="w-3 h-3 text-[#1DB954]"></i> ${page.branch_yes_id ? pageTitleById(page.branch_yes_id) : 'not connected'}</span>
+                        <span class="flex items-center gap-1"><i data-lucide="x" class="w-3 h-3 text-red-400"></i> ${page.branch_no_id ? pageTitleById(page.branch_no_id) : 'not connected'}</span>
+                   </div>`
+                : '';
+
+            html += `
+                <div draggable="true"
+                     ondragstart="handleDragStart(event, ${page.id})"
+                     ondragend="handleDragEnd(event)"
+                     ondragover="handleDragOver(event)"
+                     ondrop="handleDrop(event, ${page.id})"
+                     class="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-xl p-4 shadow-lg flex items-center justify-between group hover:border-white/30 transition-all cursor-grab active:cursor-grabbing">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="grip-vertical" class="w-4 h-4 text-gray-600"></i>
+                        <div class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-400">
+                            <i data-lucide="${icon}" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-[#1DB954] uppercase tracking-wider mb-0.5">${PAGE_TYPE_LABELS[page.page_type] || page.page_type}</div>
+                            <h4 class="text-white font-medium text-sm">${page.title}</h4>
+                            ${page.html ? '' : '<span class=\"text-[10px] text-amber-400\">No content yet</span>'}
+                            ${branchNote}
+                        </div>
+                    </div>
+
+                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="openStepEditor(${page.id})" class="p-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition-colors" title="Edit Page">
+                            <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="removeStep(${page.id})" class="p-1.5 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded transition-colors" title="Delete Page">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        lucide.createIcons();
+    }
+
+    function pageTitleById(id) {
+        const p = findPage(id);
+        return p ? p.title : '?';
+    }
+
+    // Populate the "Add Page" grid icons from the shared PAGE_ICONS map.
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('[data-page-icon]').forEach(el => {
+            const type = el.getAttribute('data-page-icon');
+            const icon = PAGE_ICONS[type] || 'file';
+            el.innerHTML = `<i data-lucide="${icon}" class="w-6 h-6"></i>`;
+        });
+        lucide.createIcons();
+
+        const params = new URLSearchParams(window.location.search);
+        const openId = params.get('open');
+        if (openId) loadFunnel(openId);
+    });
+</script>
+{% endblock %}

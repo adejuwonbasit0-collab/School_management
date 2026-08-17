@@ -1,0 +1,36 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Orders{% endblock %}
+{% block page_subtitle %}Total Revenue: {{ total_revenue | int | money }}{% endblock %}
+{% block content %}
+<div class="flex gap-3 mb-6">
+  {% for s in ['','paid','pending','failed'] %}
+  <a href="{{ url_for('admin.orders', status=s) }}" class="text-xs px-4 py-2 rounded-lg border {% if current_status==s %}border-cyan-500 text-cyan-400{% else %}border-white/10 text-gray-400 hover:border-white/20{% endif %} transition-all">{{ s | title if s else 'All' }}</a>
+  {% endfor %}
+</div>
+<div class="glass border border-white/10 rounded-2xl overflow-hidden">
+  <table class="w-full text-sm">
+    <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+      <th class="text-left px-5 py-3">Order</th>
+      <th class="text-left px-3 py-3 hidden md:table-cell">Product</th>
+      <th class="text-left px-3 py-3">Amount</th>
+      <th class="text-left px-3 py-3">Gateway</th>
+      <th class="text-left px-3 py-3">Status</th>
+      <th class="text-left px-3 py-3 hidden lg:table-cell">Date</th>
+    </tr></thead>
+    <tbody class="divide-y divide-white/5">
+      {% for o in orders.items %}
+      <tr class="hover:bg-white/3 transition-colors">
+        <td class="px-5 py-3">
+          <p class="font-mono text-xs text-gray-400">#{{ o.id }}</p>
+          <p class="text-sm text-white">{{ o.user.email if o.user else '—' }}</p>
+        </td>
+        <td class="px-3 py-3 hidden md:table-cell text-gray-300 text-sm">{{ o.product.title if o.product else '—' }}</td>
+        <td class="px-3 py-3 font-mono font-semibold text-white">{{ o.amount | int | money(o.currency) }}</td>
+        <td class="px-3 py-3 text-gray-400 text-xs">{{ o.gateway }}</td>
+        <td class="px-3 py-3"><span class="text-xs px-2 py-0.5 rounded-full {% if o.status=='paid' %}bg-green-500/20 text-green-400{% elif o.status=='pending' %}bg-yellow-500/20 text-yellow-400{% else %}bg-red-500/20 text-red-400{% endif %}">{{ o.status }}</span></td>
+        <td class="px-3 py-3 hidden lg:table-cell text-gray-500 text-xs">{{ o.created_at | timeago }}</td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

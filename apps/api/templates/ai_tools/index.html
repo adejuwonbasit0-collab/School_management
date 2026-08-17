@@ -1,0 +1,80 @@
+{% extends "public_base.html" %}
+{% block title %}AI Tools Hub — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:1300px;margin:0 auto;padding:56px 20px 80px">
+  <div style="text-align:center;margin-bottom:56px">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(var(--c-accent-rgb),0.08);border:1px solid rgba(var(--c-accent-rgb),0.2);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;color:var(--c-accent);letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--c-accent);animation:pulse 2s infinite;display:inline-block"></span>
+      Powered by Claude AI
+    </div>
+    <h1 style="font-size:clamp(36px,6vw,64px);font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:14px;line-height:1.1">AI Tools Hub</h1>
+    <p style="font-size:16px;color:var(--c-text-2);max-width:540px;margin:0 auto 20px">Genuine Claude-powered tools only. Looking for non-AI utilities, icons, or components? Check the <a href="{{ url_for('tools.index') }}" style="color:var(--c-accent)">Dev Tools Hub</a>.</p>
+    {% if current_user.is_authenticated %}
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(var(--c-accent-rgb),0.06);border:1px solid rgba(var(--c-accent-rgb),0.15);border-radius:20px;padding:7px 16px;font-size:13px">
+      <span style="color:var(--c-accent);font-weight:700;font-family:'JetBrains Mono',monospace">{{ current_user.credits }}</span>
+      <span style="color:var(--c-text-2)">AI credits remaining</span>
+    </div>
+    {% else %}
+    <a href="{{ url_for('auth.register') }}" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));color:#000;font-weight:700;font-size:13px;padding:10px 20px;border-radius:10px;text-decoration:none">Get 10 Free Credits →</a>
+    {% endif %}
+  </div>
+
+  <div id="tools-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const TOOLS = [
+  // ── Core AI Chat & Code ──────────────────────────────────────────────
+  { name:'AI Chat Assistant',      icon:'💬', desc:'General-purpose Claude assistant for any dev or creative question',           url:'{{ url_for("ai.chat_page") }}' },
+  { name:'AI Code Reviewer',       icon:'🔍', desc:'Deep code review for bugs, security, performance and style',                  url:'{{ url_for("ai.code_review_page") }}' },
+  { name:'AI Debugger',            icon:'🐛', desc:'Paste error + code, get root cause and exact fix instantly',                   url:'{{ url_for("ai.debugger_page") }}' },
+  { name:'Code Explainer',        icon:'📖', desc:'Paste any code and get a plain-English explanation of what it does',           url:'{{ url_for("ai.code_explain_page") }}' },
+
+  // ── Code Generation ──────────────────────────────────────────────────
+  { name:'README Generator',      icon:'📄', desc:'Generate a complete professional README.md from your project description',     url:'{{ url_for("ai.readme_gen_page") }}' },
+  { name:'SQL Generator',          icon:'🗄️', desc:'Convert plain English to SQL — any dialect, any schema',                       url:'{{ url_for("ai.sql_gen_page") }}' },
+  { name:'API Designer',           icon:'🔗', desc:'Describe your product, get a full REST API design with schemas',              url:'{{ url_for("ai.api_design_page") }}' },
+  { name:'Code Refactorer',       icon:'♻️', desc:'Refactor messy code into clean, well-structured, documented code',             url:'{{ url_for("ai_browser.refactor_page") }}' },
+  { name:'Docstring Generator',   icon:'📘', desc:'Auto-generate docstrings and JSDoc comments for any function',                 url:'{{ url_for("ai_browser.docstring_page") }}' },
+  { name:'Test Writer',           icon:'🧪', desc:'Generate comprehensive unit tests — happy path, edge cases, and errors',        url:'{{ url_for("ai.test_writer_page") }}' },
+
+  // ── Content & Communication ──────────────────────────────────────────
+  { name:'Commit Message Writer', icon:'📝', desc:'Paste a diff and get a perfect conventional commit message',                   url:'{{ url_for("ai_browser.commit_writer_page") }}' },
+  { name:'Blog Post Writer',      icon:'✍️', desc:'Draft a complete blog post from a topic and a few bullet points',              url:'{{ url_for("ai.blog_writer_page") }}' },
+  { name:'Email Writer',          icon:'📧', desc:'Write polished, context-aware emails for any situation',                       url:'{{ url_for("ai.email_writer_page") }}' },
+  { name:'Prompt Engineer',       icon:'🧠', desc:'Turn a rough idea into a well-structured prompt for any AI model',             url:'{{ url_for("ai.prompt_eng_page") }}' },
+
+  // ── Audio & Media ────────────────────────────────────────────────────
+  { name:'Audio Metadata',        icon:'🎵', desc:'Read and extract metadata from audio files',                                   url:'{{ url_for("ai_browser.audio_meta") }}' },
+
+  // ── Time & Converters ────────────────────────────────────────────────
+  { name:'Timestamp Converter',   icon:'⏱️', desc:'Convert Unix timestamps to human dates and back, any timezone',               url:'{{ url_for("ai.timestamp") }}' },
+  { name:'Image to Text (OCR)',   icon:'📷', desc:'Extract text from images or scanned photos with OCR',                          url:'{{ url_for("ai_browser.image_to_text_page") }}' },
+  { name:'Image to Word (.docx)', icon:'🖼️', desc:'Convert scanned images or screenshots to editable Word docs',                   url:'{{ url_for("ai_browser.image_to_word_page") }}' },
+  { name:'Real PDF Content Editor', icon:'📝', desc:'Interactive PDF editor: Edit text content, reorder & annotate pages',          url:'{{ url_for("ai_browser.pdf_editor") }}' },
+  { name:'PDF to Word Converter', icon:'📄', desc:'Convert PDF documents into editable Word (.docx) files',                          url:'{{ url_for("ai_browser.pdf_to_word_page") }}' },
+  { name:'Word to PDF Converter', icon:'📕', desc:'Convert Word (.docx, .doc) files to standard PDF documents',                  url:'{{ url_for("ai_browser.word_to_pdf_page") }}' },
+  { name:'Social Media Downloader', icon:'📥', desc:'Download MP4 video, audio or images from YouTube, IG, TikTok, X, FB',           url:'{{ url_for("ai_browser.social_downloader_page") }}' },
+  { name:'Webpage URL to File',   icon:'🌐', desc:'Convert any public webpage URL to PDF or HTML file download',                  url:'{{ url_for("ai_browser.url_to_file_page") }}' },
+  { name:'MOV to MP4 Converter',   icon:'🎬', desc:'Convert Apple QuickTime (.mov) videos to universally-playable .mp4',           url:'{{ url_for("ai_browser.mov_to_mp4_page") }}' },
+  { name:'Video Compressor',       icon:'🗜️', desc:'Shrink a video file size for sharing or uploading',                            url:'{{ url_for("ai_browser.video_compressor_page") }}' },
+];
+
+function render() {
+  document.getElementById("tools-grid").innerHTML = TOOLS.map(t => `
+    <a href="${t.url}" class="glass-card-premium card-hover" style="display:block;text-decoration:none;border-radius:16px;overflow:hidden;position:relative">
+      <div style="position:absolute;top:10px;right:10px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));color:#000;font-size:9px;font-weight:800;padding:2px 8px;border-radius:8px">AI</div>
+      <div style="padding:20px">
+        <div style="font-size:28px;margin-bottom:10px">${t.icon}</div>
+        <div style="font-size:14px;font-weight:700;color:var(--c-text);margin-bottom:6px">${t.name}</div>
+        <div style="font-size:12px;color:var(--c-text-2);line-height:1.6">${t.desc}</div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:flex-end">
+        <span style="font-size:11px;color:var(--c-accent)">Open →</span>
+      </div>
+    </a>`).join("");
+}
+render();
+</script>
+{% endblock %}

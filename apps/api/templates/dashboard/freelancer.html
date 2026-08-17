@@ -1,0 +1,144 @@
+{% extends "public_base.html" %}
+{% block title %}Freelancer Dashboard — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:1100px;margin:0 auto;padding:32px 20px 80px">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:32px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#1DB954,#F2C94C);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#000;flex-shrink:0">
+        {{ (current_user.name or current_user.email or 'F')[0]|upper }}
+      </div>
+      <div>
+        <h1 style="font-size:22px;font-weight:800;color:#e8edf8;font-family:Space Grotesk,sans-serif;margin-bottom:3px">
+          Welcome, {{ current_user.name or 'Freelancer' }}
+        </h1>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          {% if profile and profile.verified %}
+          <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(0,232,122,0.1);border:1px solid rgba(0,232,122,0.25);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#00e87a">
+            <span style="width:5px;height:5px;border-radius:50%;background:#00e87a;display:inline-block"></span>Verified
+          </span>
+          {% elif profile and profile.verification_submitted %}
+          <span style="background:rgba(255,211,42,0.1);border:1px solid rgba(255,211,42,0.25);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#ffd32a">Verification Pending</span>
+          {% else %}
+          <span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:3px 10px;font-size:11px;color:#6b7a9a">Not Verified</span>
+          {% endif %}
+          {% if profile and profile.title %}
+          <span style="font-size:13px;color:#6b7a9a">{{ profile.title }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="{{ url_for('freelance.setup_profile') }}" style="padding:9px 18px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#e8edf8;font-size:13px;font-weight:600;text-decoration:none;transition:all .2s" onmouseover="this.style.borderColor='rgba(29, 185, 84,.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,.12)'">Edit Profile</a>
+      {% if profile and not profile.verification_submitted %}
+      <form method="POST" action="{{ url_for('freelance.submit_verification') }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" style="padding:9px 18px;background:linear-gradient(135deg,#1DB954,#F2C94C);border:none;border-radius:10px;color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Request Verification</button>
+      </form>{% endif %}
+    </div>
+  </div>
+
+  <!-- Stats cards -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:28px">
+    {% for value, label, color in [
+      (profile.completed_jobs if profile else 0,        'Jobs Completed',   '#1DB954'),
+      (proposals|length,                                  'Proposals Sent',   '#F2C94C'),
+      ('$'~((profile.total_earned|int) if profile else 0),'Total Earned',     '#00e87a'),
+      (profile.profile_views if profile else 0,           'Profile Views',    '#ffd32a'),
+    ] %}
+    <div style="background:rgba(255,255,255,0.04);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;transition:border-color .2s, transform .2s;box-shadow:0 1px 0 rgba(255,255,255,0.05) inset" onmouseover="this.style.borderColor='rgba(255,255,255,.15)'" onmouseout="this.style.borderColor='rgba(255,255,255,.07)'">
+      <div style="font-size:28px;font-weight:900;color:{{ color }};font-family:Space Grotesk,sans-serif;margin-bottom:4px">{{ value }}</div>
+      <div style="font-size:11px;color:#6b7a9a;text-transform:uppercase;letter-spacing:.05em">{{ label }}</div>
+    </div>{% endfor %}
+  </div>
+
+  <!-- Profile completeness banner if no profile -->
+  {% if not profile or not profile.title %}
+  <div style="background:rgba(29, 185, 84,0.05);border:1px solid rgba(29, 185, 84,0.2);border-radius:14px;padding:20px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="font-size:28px">⚡</div>
+    <div style="flex:1;min-width:200px">
+      <div style="font-size:14px;font-weight:700;color:#e8edf8;margin-bottom:4px">Complete your profile to get hired</div>
+      <div style="font-size:13px;color:#6b7a9a">Add your title, skills, hourly rate, and bio to appear in search results.</div>
+    </div>
+    <a href="{{ url_for('freelance.setup_profile') }}" style="padding:10px 20px;background:linear-gradient(135deg,#1DB954,#F2C94C);border-radius:10px;color:#000;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap">Set Up Profile →</a>
+  </div>{% endif %}
+
+  <!-- Main grid -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+    <!-- Proposals -->
+    <div style="background:rgba(255,255,255,0.03);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 1px 0 rgba(255,255,255,0.05) inset, 0 10px 28px rgba(0,0,0,0.25);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:space-between">
+        <h3 style="font-size:14px;font-weight:700;color:#e8edf8">My Proposals</h3>
+        <span style="font-size:12px;color:#6b7a9a">{{ proposals|length }} total</span>
+      </div>
+      {% if proposals %}
+      <div style="max-height:360px;overflow-y:auto">
+        {% for p in proposals %}
+        <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="flex:1;min-width:0">
+            <a href="{{ url_for('freelance.job_detail', job_id=p.job_id) }}" style="font-size:13px;font-weight:600;color:#e8edf8;text-decoration:none;display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" onmouseover="this.style.color='#1DB954'" onmouseout="this.style.color='#e8edf8'">
+              {{ p.job.title if p.job else 'Job #'+p.job_id|string }}
+            </a>
+            <div style="font-size:11px;color:#6b7a9a;margin-top:3px">
+              {% if p.bid_amount %}{{ p.bid_amount|int | money }} · {% endif %}{{ p.created_at | timeago }}
+            </div>
+          </div>
+          <span style="font-size:11px;padding:3px 9px;border-radius:20px;font-weight:700;white-space:nowrap;flex-shrink:0;
+            {% if p.status=='accepted' %}background:rgba(0,232,122,0.1);color:#00e87a;border:1px solid rgba(0,232,122,0.25)
+            {% elif p.status=='rejected' %}background:rgba(255,71,87,0.1);color:#ff4757;border:1px solid rgba(255,71,87,0.25)
+            {% else %}background:rgba(255,211,42,0.1);color:#ffd32a;border:1px solid rgba(255,211,42,0.25){% endif %}">
+            {{ p.status|title }}
+          </span>
+        </div>{% endfor %}
+      </div>{% else %}
+      <div style="padding:48px 20px;text-align:center;color:#3a4a62">
+        <div style="font-size:32px;margin-bottom:12px;opacity:.4">📋</div>
+        <div style="font-size:14px;font-weight:600;color:#5a6a88;margin-bottom:6px">No proposals yet</div>
+        <a href="{{ url_for('freelance.jobs') }}" style="font-size:13px;color:#1DB954;text-decoration:none">Browse open jobs →</a>
+      </div>{% endif %}
+    </div>
+
+    <!-- Open Jobs -->
+    <div style="background:rgba(255,255,255,0.03);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 1px 0 rgba(255,255,255,0.05) inset, 0 10px 28px rgba(0,0,0,0.25);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:space-between">
+        <h3 style="font-size:14px;font-weight:700;color:#e8edf8">Open Jobs</h3>
+        <a href="{{ url_for('freelance.jobs') }}" style="font-size:12px;color:#1DB954;text-decoration:none">View all →</a>
+      </div>
+      {% if jobs %}
+      <div style="max-height:360px;overflow-y:auto">
+        {% for j in jobs %}
+        <a href="{{ url_for('freelance.job_detail', job_id=j.id) }}" style="display:block;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.04);text-decoration:none;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.02)'" onmouseout="this.style.background='transparent'">
+          <div style="font-size:13px;font-weight:600;color:#e8edf8;margin-bottom:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ j.title }}</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:11px;color:#6b7a9a">{{ j.category }}</span>
+            {% if j.budget_max %}<span style="font-size:11px;color:#00e87a;font-family:JetBrains Mono,monospace;font-weight:600">{{ j.budget_max|int | money }}</span>{% endif %}
+            <span style="font-size:11px;color:#3a4a62">{{ j.created_at | timeago }}</span>
+            <span style="font-size:11px;color:#6b7a9a;margin-left:auto">{{ j.proposals.count() }} proposals</span>
+          </div>
+          {% if j.skills %}
+          <div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">
+            {% for s in (j.skills or [])[:3] %}<span style="font-size:10px;padding:2px 7px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#8899b0">{{ s }}</span>{% endfor %}
+          </div>{% endif %}
+        </a>{% endfor %}
+      </div>{% else %}
+      <div style="padding:48px 20px;text-align:center">
+        <div style="font-size:32px;margin-bottom:12px;opacity:.4">💼</div>
+        <div style="font-size:14px;color:#5a6a88">No open jobs right now</div>
+      </div>{% endif %}
+    </div>
+
+  </div>
+
+  <!-- Skills display -->
+  {% if profile and profile.skills %}
+  <div style="margin-top:20px;background:rgba(255,255,255,0.03);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 1px 0 rgba(255,255,255,0.05) inset, 0 10px 28px rgba(0,0,0,0.25);padding:20px">
+    <h3 style="font-size:14px;font-weight:700;color:#e8edf8;margin-bottom:14px">Your Skills</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      {% for skill in profile.skills %}
+      <span style="font-size:12px;padding:6px 14px;background:rgba(29, 185, 84,0.07);border:1px solid rgba(29, 185, 84,0.18);border-radius:20px;color:#1DB954;font-weight:600">{{ skill }}</span>{% endfor %}
+    </div>
+  </div>{% endif %}
+
+</div>
+{% endblock %}

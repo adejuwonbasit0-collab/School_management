@@ -1,0 +1,68 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Knowledge Base{% endblock %}
+{% block page_subtitle %}What your AI Console, Agents, and the public chat widget actually search before answering{% endblock %}
+{% block content %}
+
+<div class="a-grid a-grid-4" style="gap:14px;margin-bottom:20px">
+  {% for label, count in counts.items() %}
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">{{ label }}</p>
+    <p style="font-size:22px;font-weight:700">{{ count }}</p>
+  </div></div>
+  {% endfor %}
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-3)">
+      This is real-time keyword search across the tables above (not a vector/embedding index) — whenever an
+      agent or the AI Console needs facts about your services, portfolio, blog, FAQs, or products, it searches
+      these live, so there's nothing to "sync": the answer is always as current as the database. What's
+      <em>not</em> yet searchable here: downloads, courses, media library captions, PDFs/docs, and anything
+      requiring semantic (meaning-based, not just keyword) matching.
+    </p>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Test the Search</div></div>
+  <div class="a-panel-body">
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input type="text" id="kb-query" class="a-input" placeholder="e.g. website packages, hotel projects, refund policy" style="flex:1"/>
+      <button type="button" class="a-btn a-btn-primary" onclick="testKnowledgeSearch()">Search</button>
+    </div>
+    <div id="kb-results"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function testKnowledgeSearch() {
+  const query = document.getElementById('kb-query').value.trim();
+  const resultsEl = document.getElementById('kb-results');
+  if (!query) return;
+  resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text-3)">Searching…</p>';
+  try {
+    const res = await fetch("{{ url_for('admin.knowledge_base_test_search') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ query })
+    });
+    const data = await res.json();
+    if (data.error) { resultsEl.innerHTML = `<p style="font-size:12px;color:#f87171">${data.error}</p>`; return; }
+    if (!data.results.length) { resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text-3)">No matching records — this is exactly what the AI would see, so it would say it couldn\'t find anything rather than guessing.</p>'; return; }
+    resultsEl.innerHTML = data.results.map(r => `
+      <div style="border:1px solid var(--border-1,rgba(255,255,255,0.08));border-radius:8px;padding:10px;margin-bottom:8px">
+        <span style="font-size:10px;padding:2px 8px;border-radius:999px;background:rgba(56,189,248,0.15);color:#38bdf8">${r.type}</span>
+        <div style="font-size:13px;font-weight:600;margin-top:6px">${r.title}</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:4px">${r.detail}</div>
+        <div style="font-size:11px;color:#38bdf8;margin-top:4px">${r.url}</div>
+      </div>`).join('');
+  } catch (e) {
+    resultsEl.innerHTML = `<p style="font-size:12px;color:#f87171">Request failed: ${e.message}</p>`;
+  }
+}
+</script>
+{% endblock %}

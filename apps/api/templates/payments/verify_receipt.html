@@ -1,0 +1,20 @@
+{% extends "public_base.html" %}
+{% block title %}Receipt Verification{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-24 text-center">
+  {% if receipt %}
+    <div class="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center text-3xl mx-auto mb-6">✅</div>
+    <h1 class="text-2xl font-bold text-white mb-2">Payment Verified</h1>
+    <p class="text-gray-400 text-sm mb-8">This confirms a real payment was received and recorded.</p>
+    <div class="glass-card-premium rounded-2xl p-6 text-left space-y-3">
+      <div class="flex justify-between text-sm"><span class="text-gray-500">Reference</span><span class="text-white font-mono">{{ receipt.reference }}</span></div>
+      <div class="flex justify-between text-sm"><span class="text-gray-500">Amount</span><span class="text-white font-semibold">{{ amount_str }}</span></div>
+      <div class="flex justify-between text-sm"><span class="text-gray-500">Paid On</span><span class="text-white">{{ receipt.paid_at.strftime('%B %d, %Y') }}</span></div>
+    </div>
+  {% else %}
+    <div class="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-3xl mx-auto mb-6">❌</div>
+    <h1 class="text-2xl font-bold text-white mb-2">Reference Not Found</h1>
+    <p class="text-gray-400 text-sm">No receipt matches this reference number. If you believe this is an error, contact support with the reference shown on your receipt.</p>
+  {% endif %}
+</div>
+{% endblock %}

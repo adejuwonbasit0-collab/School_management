@@ -1,0 +1,175 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Manage your account{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8">
+
+  <!-- Profile Section -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-6 md:p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <i data-lucide="user" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-xl font-display font-semibold text-white">Profile</h2>
+    </div>
+    <form id="profileForm" class="space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-sm text-muted mb-1.5">Name</label>
+          <input type="text" id="profileName" value="{{ current_user.name or '' }}"
+            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary focus:outline-none transition-colors" />
+        </div>
+        <div>
+          <label class="block text-sm text-muted mb-1.5">Email</label>
+          <input type="email" value="{{ current_user.email }}" disabled
+            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-muted cursor-not-allowed" />
+          <p class="text-xs text-muted/60 mt-1">Email cannot be changed here</p>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm text-muted mb-1.5">Phone</label>
+        <input type="tel" id="profilePhone" value="{{ current_user.phone or '' }}"
+          class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary focus:outline-none transition-colors" />
+      </div>
+      <button type="button" onclick="saveProfile()" class="px-6 py-2.5 rounded-xl bg-primary text-black font-semibold hover:bg-primary/80 transition-colors">
+        Save Changes
+      </button>
+    </form>
+  </div>
+
+  <!-- Credits & Billing summary — full detail (subscriptions, purchase
+       history, orders) now lives on its own Billing page. -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-6 md:p-8">
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <i data-lucide="credit-card" class="w-5 h-5 text-[#F59E0B]"></i>
+        <h2 class="text-xl font-display font-semibold text-white">Credits &amp; Billing</h2>
+      </div>
+      <a href="{{ url_for('dashboard.billing') }}" class="text-sm text-primary hover:underline flex items-center gap-1">
+        View Billing <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+      </a>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div class="rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 p-5 text-center">
+        <div class="text-3xl font-bold text-primary">{{ current_user.credits }}</div>
+        <div class="text-sm text-muted mt-1">AI Credits</div>
+      </div>
+      <div class="rounded-xl bg-white/5 border border-white/10 p-5 text-center">
+        <div class="text-3xl font-bold text-white">{{ unlocked_count|default(0) }}</div>
+        <div class="text-sm text-muted mt-1">Products Unlocked</div>
+      </div>
+      <div class="rounded-xl bg-white/5 border border-white/10 p-5 text-center">
+        <a href="{{ url_for('dashboard.credits_home') }}" class="block">
+          <div class="text-lg font-semibold text-secondary">Get More Credits</div>
+          <div class="text-sm text-muted mt-1">Buy Credits →</div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preferences -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-6 md:p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <i data-lucide="sliders" class="w-5 h-5 text-secondary"></i>
+      <h2 class="text-xl font-display font-semibold text-white">Preferences</h2>
+    </div>
+    <div class="space-y-5">
+      <label class="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 p-4 cursor-pointer">
+        <div>
+          <div class="text-white font-medium">Email Notifications</div>
+          <div class="text-sm text-muted">Payment confirmations, product updates, and alerts</div>
+        </div>
+        <input type="checkbox" id="prefEmailNotifications" {{ 'checked' if current_user.email_notifications != False }}
+          onchange="savePreferences()" class="w-5 h-5 accent-primary" />
+      </label>
+      <div>
+        <label class="block text-sm text-muted mb-1.5">Timezone</label>
+        <select id="prefTimezone" onchange="savePreferences()"
+          class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary focus:outline-none transition-colors">
+          {% for tz in ["UTC","Africa/Lagos","Europe/London","America/New_York","America/Los_Angeles","Asia/Dubai","Asia/Kolkata","Asia/Singapore","Australia/Sydney"] %}
+          <option value="{{ tz }}" {{ 'selected' if (current_user.timezone or 'UTC') == tz }}>{{ tz }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-6 md:p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <i data-lucide="shield" class="w-5 h-5 text-[#EF4444]"></i>
+      <h2 class="text-xl font-display font-semibold text-white">Security</h2>
+    </div>
+    <div class="space-y-4">
+      <a href="/auth/change-password" class="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 transition-colors">
+        <div class="flex items-center gap-3">
+          <i data-lucide="key" class="w-5 h-5 text-muted"></i>
+          <div>
+            <div class="text-white font-medium">Change Password</div>
+            <div class="text-sm text-muted">Update your account password</div>
+          </div>
+        </div>
+        <i data-lucide="chevron-right" class="w-5 h-5 text-muted"></i>
+      </a>
+      <a href="/auth/two-factor" class="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 transition-colors">
+        <div class="flex items-center gap-3">
+          <i data-lucide="smartphone" class="w-5 h-5 text-muted"></i>
+          <div>
+            <div class="text-white font-medium">Two-Factor Authentication</div>
+            <div class="text-sm text-muted">Add extra security with TOTP/Email 2FA</div>
+          </div>
+        </div>
+        <i data-lucide="chevron-right" class="w-5 h-5 text-muted"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="rounded-2xl border border-red-500/20 bg-red-500/5 p-6 md:p-8">
+    <div class="flex items-center gap-3 mb-4">
+      <i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i>
+      <h2 class="text-xl font-display font-semibold text-red-400">Danger Zone</h2>
+    </div>
+    <p class="text-sm text-muted mb-4">Actions here are irreversible. Proceed with caution.</p>
+    <div class="flex flex-wrap gap-3">
+      <a href="/auth/logout" class="px-5 py-2.5 rounded-xl border border-white/10 text-muted hover:text-white hover:bg-white/10 transition-colors text-sm font-medium">
+        <i data-lucide="log-out" class="w-4 h-4 inline mr-1.5"></i>Sign Out
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function saveProfile() {
+  const name = document.getElementById('profileName').value;
+  const phone = document.getElementById('profilePhone').value;
+  fetch('/auth/update-profile', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+    body: JSON.stringify({name, phone})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.error) showToast(d.error, 'error');
+    else showToast('Profile updated!', 'success');
+  })
+  .catch(() => showToast('Failed to save profile.', 'error'));
+}
+
+function savePreferences() {
+  const email_notifications = document.getElementById('prefEmailNotifications').checked;
+  const timezone = document.getElementById('prefTimezone').value;
+  fetch('{{ url_for("dashboard.update_preferences") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+    body: JSON.stringify({email_notifications, timezone})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.error) showToast(d.error, 'error');
+    else showToast('Preferences saved.', 'success');
+  })
+  .catch(() => showToast('Failed to save preferences.', 'error'));
+}
+</script>
+{% endblock %}

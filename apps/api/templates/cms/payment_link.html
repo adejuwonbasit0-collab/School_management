@@ -1,0 +1,63 @@
+{% extends "standalone_public.html" %}
+{% block title %}{{ link.title }} — Pay {{ link.amount }} {{ link.currency }}{% endblock %}
+{% block meta_desc %}{{ link.description or link.title }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-12">
+  <div class="glass border border-white/10 rounded-2xl p-8 text-center">
+    {% if link.image_url %}
+    <img src="{{ link.image_url }}" class="w-full max-h-64 object-cover rounded-xl mb-6"/>
+    {% endif %}
+    <h1 class="text-2xl font-bold font-display text-white mb-2">{{ link.title }}</h1>
+    {% if link.description %}<p class="text-gray-400 text-sm mb-6 whitespace-pre-line">{{ link.description }}</p>{% endif %}
+    <div class="text-4xl font-bold gradient-text mb-8">{{ link.amount }} {{ link.currency }}</div>
+
+    {% if not gateway_methods and not manual_methods %}
+    <p class="text-red-400 text-sm">No payment methods are currently available on this link.</p>
+    {% else %}
+    <form id="payer-form" class="text-left space-y-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">Your name</label>
+        <input id="payer_name" type="text" class="input-premium" placeholder="Jane Doe"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">Your email (for your receipt)</label>
+        <input id="payer_email" type="email" required class="input-premium" placeholder="you@example.com"/>
+      </div>
+    </form>
+
+    <div class="space-y-3">
+      {% set icons = {'paystack':'💳','flutterwave':'🌊','paypal':'🅿️','stripe':'💳','bank_transfer':'🏦','crypto':'🪙','wave':'📱','payoneer':'💠'} %}
+      {% set labels = {'paystack':'Pay with Paystack','flutterwave':'Pay with Flutterwave','paypal':'Pay with PayPal','stripe':'Pay with Card (Stripe)','bank_transfer':'Pay by Bank Transfer','crypto':'Pay with Crypto','wave':'Pay with Wave','payoneer':'Pay with Payoneer'} %}
+      {% for g in gateway_methods %}
+      <button type="button" onclick="submitPaymentMethod('{{ url_for('cms.payment_link_checkout', slug=link.slug, gateway=g) }}')" class="w-full btn-neon justify-center py-3 text-sm font-semibold">{{ icons.get(g,'💰') }} {{ labels.get(g, g.title()) }}</button>
+      {% endfor %}
+      {% for m in manual_methods %}
+      <button type="button" onclick="submitPaymentMethod('{{ url_for('cms.payment_link_manual', slug=link.slug, method=m) }}', true)" class="w-full btn-neon justify-center py-3 text-sm font-semibold" style="background:rgba(255,255,255,0.06)">{{ icons.get(m,'💰') }} {{ labels.get(m, m.title()) }}</button>
+      {% endfor %}
+    </div>
+    <p id="payer-error" class="text-red-400 text-xs mt-4 hidden">Please enter your email first.</p>
+    {% endif %}
+  </div>
+</div>
+<script>
+function submitPaymentMethod(baseUrl, isGetRedirect) {
+  const email = document.getElementById('payer_email').value.trim();
+  const name = document.getElementById('payer_name').value.trim();
+  const err = document.getElementById('payer-error');
+  if (!email) { err.classList.remove('hidden'); return; }
+  err.classList.add('hidden');
+  if (isGetRedirect) {
+    window.location.href = baseUrl;
+    return;
+  }
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = baseUrl;
+  form.innerHTML = `<input type="hidden" name="payer_name" value="${name.replace(/"/g,'&quot;')}">
+                     <input type="hidden" name="payer_email" value="${email.replace(/"/g,'&quot;')}">
+                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`;
+  document.body.appendChild(form);
+  form.submit();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,243 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Hosting{% endblock %}
+{% block content %}
+<!-- stats -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Active Sites</p><p class="text-2xl font-bold text-white">{{ active_count }}</p></div>
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Total Subscriptions</p><p class="text-2xl font-bold text-white">{{ subscriptions | length }}</p></div>
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Hosting Revenue</p><p class="text-2xl font-bold text-white">{{ hosting_rev | int | money }}/mo</p></div>
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Plans</p><p class="text-2xl font-bold text-white">{{ plans | length }}</p></div>
+</div>
+
+<!-- tabs -->
+<div class="flex gap-1 border-b border-white/10 mb-6">
+  {% for tab, label in [('plans','Hosting Plans'),('subscriptions','Subscriptions'),('servers','Provisioning Servers')] %}
+  <button onclick="showTab('{{ tab }}')" id="tab-btn-{{ tab }}" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all {% if loop.first %}border-cyan-500 text-cyan-400{% else %}border-transparent text-gray-400{% endif %}">{{ label }}</button>{% endfor %}
+</div>
+
+<div id="tab-plans" class="tab-panel">
+  <div class="flex justify-between items-center mb-4">
+    <p class="text-gray-400 text-sm">{{ plans | length }} plans</p>
+    <button onclick="toggleModal('add-plan-modal')" class="btn-neon text-xs py-2 px-4">+ Add Plan</button>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    {% for p in plans %}
+    <div class="glass border {% if p.featured %}border-cyan-500/40{% else %}border-white/10{% endif %} rounded-2xl p-5 {% if not p.active %}opacity-50{% endif %}">
+      {% if p.featured %}<span class="text-xs text-cyan-400 font-mono mb-2 block">★ Featured</span>{% endif %}
+      {% if not p.active %}<span class="text-xs text-gray-500 font-mono mb-2 block">○ Inactive</span>{% endif %}
+      <h3 class="font-bold text-white text-lg mb-1">{{ p.name }}</h3>
+      <p class="text-sm text-gray-400 mb-4">{{ p.description }}</p>
+      <p class="text-3xl font-bold font-display text-white mb-1">{{ p.monthly_price | int | money }}<span class="text-sm text-gray-400">/mo</span></p>
+      {% if p.annual_price %}<p class="text-xs text-gray-500 mb-2">{{ p.annual_price | int | money }}/yr</p>{% endif %}
+      {% if p.limits and p.limits.get('server') %}<p class="text-xs text-cyan-400/70 mb-2">Server: {{ p.limits.get('server') }}</p>{% endif %}
+      <ul class="space-y-1.5 text-sm mb-4">
+        {% for f in (p.features or []) %}<li class="flex items-center gap-2 text-gray-300"><span class="text-green-400 text-xs">✓</span>{{ f }}</li>{% endfor %}
+      </ul>
+      <div class="flex gap-2 pt-3 border-t border-white/5">
+        <button onclick='openEditPlan({{ {"id": p.id, "name": p.name, "description": p.description or "", "monthly_price": p.monthly_price|float, "annual_price": (p.annual_price|float if p.annual_price else 0), "features": (p.features or [])|join("\n"), "featured": p.featured, "server": (p.limits.get("server") if p.limits else "")} | tojson }})' class="text-xs px-2 py-1 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">Edit</button>
+        <form method="POST" action="{{ url_for('admin.toggle_hosting_plan_active', pid=p.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button class="text-xs px-2 py-1 rounded border {% if p.active %}border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10{% else %}border-green-500/30 text-green-400 hover:bg-green-500/10{% endif %}">{{ 'Deactivate' if p.active else 'Activate' }}</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin.delete_hosting_plan', pid=p.id) }}" class="inline" onsubmit="return confirm('Delete this plan?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Delete</button>
+        </form>
+      </div>
+    </div>{% endfor %}
+  </div>
+</div>
+
+<div id="tab-subscriptions" class="tab-panel hidden">
+  <div class="glass border border-white/10 rounded-2xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Domain</th>
+        <th class="text-left px-3 py-3">Plan</th>
+        <th class="text-left px-3 py-3 hidden md:table-cell">Owner</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-left px-3 py-3 hidden lg:table-cell">Expiry</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for s in subscriptions %}
+        <tr class="hover:bg-white/3 transition-colors">
+          <td class="px-5 py-3 font-mono text-sm text-white">
+            {{ s.domain }}
+            {% if s.domain_type == 'own_domain' %}
+              <span class="block text-[10px] mt-0.5 {% if s.dns_verified %}text-green-400{% else %}text-yellow-400{% endif %}">{{ 'DNS verified' if s.dns_verified else 'Awaiting DNS' }}</span>
+            {% else %}
+              <span class="block text-[10px] mt-0.5 text-gray-500">free subdomain</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-3 text-gray-300">{{ s.plan.name if s.plan else '—' }}</td>
+          <td class="px-3 py-3 hidden md:table-cell text-gray-400 text-xs">{{ s.user.email if s.user else '—' }}</td>
+          <td class="px-3 py-3"><span class="text-xs px-2 py-0.5 rounded-full {% if s.status=='active' %}bg-green-500/20 text-green-400{% elif s.status=='pending' %}bg-yellow-500/20 text-yellow-400{% elif s.status=='cancelled' %}bg-gray-500/20 text-gray-400{% else %}bg-red-500/20 text-red-400{% endif %}">{{ s.status }}</span></td>
+          <td class="px-3 py-3 hidden lg:table-cell text-gray-500 text-xs">{{ s.expires_at.strftime('%Y-%m-%d') if s.expires_at else '—' }}</td>
+          <td class="px-5 py-3 text-right whitespace-nowrap space-x-1">
+            {% if s.domain_type == 'own_domain' and not s.dns_verified %}
+            <form method="POST" action="{{ url_for('admin.verify_dns_hosting_sub', sid=s.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-purple-500/30 text-purple-400 hover:bg-purple-500/10">Verify DNS</button>
+            </form>
+            {% endif %}
+            {% if s.status == 'pending' %}
+            <form method="POST" action="{{ url_for('admin.activate_hosting_sub', sid=s.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10">Activate</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('admin.toggle_hosting_sub', sid=s.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border {% if s.status=='active' %}border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10{% else %}border-green-500/30 text-green-400 hover:bg-green-500/10{% endif %}">{{ 'Suspend' if s.status=='active' else 'Activate' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.renew_hosting_sub', sid=s.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">Renew</button>
+            </form>
+            {% endif %}
+            {% if s.status != 'cancelled' %}
+            <form method="POST" action="{{ url_for('admin.cancel_hosting_sub', sid=s.id) }}" class="inline" onsubmit="return confirm('Cancel this subscription?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Cancel</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>{% else %}
+        <tr><td colspan="6" class="px-5 py-10 text-center text-gray-500">No subscriptions yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="tab-servers" class="tab-panel hidden">
+  <div class="flex justify-between items-center mb-4">
+    <p class="text-gray-400 text-sm">{{ servers | length }} provisioning server(s) configured. Credentials entered here can be referenced by plans above (no source-code changes needed).</p>
+    <button onclick="toggleModal('add-server-modal')" class="btn-neon text-xs py-2 px-4">+ Add Server</button>
+  </div>
+  <div class="glass border border-white/10 rounded-2xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Label</th>
+        <th class="text-left px-3 py-3">Provider</th>
+        <th class="text-left px-3 py-3 hidden md:table-cell">Endpoint</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for s in servers %}
+        <tr class="hover:bg-white/3 transition-colors">
+          <td class="px-5 py-3 font-medium text-white">{{ s.label }}</td>
+          <td class="px-3 py-3 text-gray-300 uppercase text-xs">{{ s.provider }}</td>
+          <td class="px-3 py-3 hidden md:table-cell text-gray-500 text-xs font-mono">{{ s.api_endpoint or '—' }}</td>
+          <td class="px-3 py-3"><span class="text-xs px-2 py-0.5 rounded-full {% if s.active %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ 'active' if s.active else 'inactive' }}</span></td>
+          <td class="px-5 py-3 text-right">
+            <form method="POST" action="{{ url_for('admin.delete_hosting_server', sid=s.id) }}" class="inline" onsubmit="return confirm('Remove this server config?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Remove</button>
+            </form>
+          </td>
+        </tr>{% else %}
+        <tr><td colspan="5" class="px-5 py-10 text-center text-gray-500">No provisioning servers configured yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add server modal -->
+<div id="add-server-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-lg">
+    <div class="flex justify-between items-center mb-5"><h3 class="text-lg font-bold text-white">Add Provisioning Server</h3><button onclick="toggleModal('add-server-modal')" class="text-gray-400 hover:text-white">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_hosting_server') }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Label *</label><input name="label" required class="admin-input w-full mt-1" placeholder="US-East Shared Cluster 1"/></div>
+      <div><label class="admin-label">Provider</label>
+        <select name="provider" class="admin-input w-full mt-1">
+          <option value="cpanel">cPanel</option>
+          <option value="whm">WHM</option>
+          <option value="plesk">Plesk</option>
+          <option value="directadmin">DirectAdmin</option>
+          <option value="cloud">Cloud Provider</option>
+        </select>
+      </div>
+      <div><label class="admin-label">API Endpoint</label><input name="api_endpoint" class="admin-input w-full mt-1" placeholder="https://server.example.com:2087"/></div>
+      <div><label class="admin-label">API Key / Token</label><input name="api_key" type="password" class="admin-input w-full mt-1"/></div>
+      <div><label class="admin-label">Notes</label><textarea name="notes" rows="2" class="admin-input w-full mt-1"></textarea></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="toggleModal('add-server-modal')" class="admin-btn-ghost text-sm">Cancel</button><button class="btn-neon text-sm py-2 px-5">Add Server</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit plan modal -->
+<div id="edit-plan-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-xl">
+    <div class="flex justify-between items-center mb-5"><h3 class="text-lg font-bold text-white">Edit Hosting Plan</h3><button onclick="toggleModal('edit-plan-modal')" class="text-gray-400 hover:text-white">✕</button></div>
+    <form method="POST" id="edit-plan-form" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Plan Name *</label><input name="name" id="ep-name" required class="admin-input w-full mt-1"/></div>
+      <div><label class="admin-label">Description</label><input name="description" id="ep-description" class="admin-input w-full mt-1"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="admin-label">Monthly Price ($)</label><input name="monthly_price" id="ep-monthly" type="number" step="0.01" class="admin-input w-full mt-1"/></div>
+        <div><label class="admin-label">Annual Price ($)</label><input name="annual_price" id="ep-annual" type="number" step="0.01" class="admin-input w-full mt-1"/></div>
+      </div>
+      <div><label class="admin-label">Provisioning Server</label>
+        <select name="server" id="ep-server" class="admin-input w-full mt-1">
+          <option value="">— None —</option>
+          {% for s in servers %}<option value="{{ s.label }}">{{ s.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label class="admin-label">Features (one per line)</label><textarea name="features" id="ep-features" rows="5" class="admin-input w-full mt-1 resize-none font-mono text-xs"></textarea></div>
+      <div class="flex items-center gap-2"><input type="checkbox" name="featured" id="ep-featured" class="accent-cyan-500"/><label for="ep-featured" class="text-sm text-gray-300">Mark as Featured</label></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="toggleModal('edit-plan-modal')" class="admin-btn-ghost text-sm">Cancel</button><button class="btn-neon text-sm py-2 px-5">Save Changes</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Add plan modal -->
+<div id="add-plan-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-xl">
+    <div class="flex justify-between items-center mb-5"><h3 class="text-lg font-bold text-white">Add Hosting Plan</h3><button onclick="toggleModal('add-plan-modal')" class="text-gray-400 hover:text-white">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_hosting_plan') }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Plan Name *</label><input name="name" required class="admin-input w-full mt-1" placeholder="Pro"/></div>
+      <div><label class="admin-label">Description</label><input name="description" class="admin-input w-full mt-1"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="admin-label">Monthly Price ($)</label><input name="monthly_price" type="number" step="0.01" class="admin-input w-full mt-1" placeholder="29"/></div>
+        <div><label class="admin-label">Annual Price ($)</label><input name="annual_price" type="number" step="0.01" class="admin-input w-full mt-1" placeholder="279"/></div>
+      </div>
+      <div><label class="admin-label">Features (one per line)</label><textarea name="features" rows="5" class="admin-input w-full mt-1 resize-none font-mono text-xs" placeholder="5 Sites&#10;50 GB Storage&#10;Free SSL"></textarea></div>
+      <div><label class="admin-label">Provisioning Server</label>
+        <select name="server" class="admin-input w-full mt-1">
+          <option value="">— None —</option>
+          {% for s in servers %}<option value="{{ s.label }}">{{ s.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2"><input type="checkbox" name="featured" id="planfeat" class="accent-cyan-500"/><label for="planfeat" class="text-sm text-gray-300">Mark as Featured</label></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="toggleModal('add-plan-modal')" class="admin-btn-ghost text-sm">Cancel</button><button class="btn-neon text-sm py-2 px-5">Create Plan</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('border-cyan-500','text-cyan-400'); b.classList.add('border-transparent','text-gray-400'); });
+  document.getElementById('tab-'+name).classList.remove('hidden');
+  const btn = document.getElementById('tab-btn-'+name);
+  btn.classList.add('border-cyan-500','text-cyan-400');
+  btn.classList.remove('border-transparent','text-gray-400');
+}
+function openEditPlan(p) {
+  document.getElementById('ep-name').value = p.name;
+  document.getElementById('ep-description').value = p.description;
+  document.getElementById('ep-monthly').value = p.monthly_price;
+  document.getElementById('ep-annual').value = p.annual_price;
+  document.getElementById('ep-features').value = p.features;
+  document.getElementById('ep-featured').checked = !!p.featured;
+  document.getElementById('ep-server').value = p.server || '';
+  document.getElementById('edit-plan-form').action = '/admin/hosting/plan/' + p.id + '/update';
+  toggleModal('edit-plan-modal');
+}
+</script>
+{% endblock %}

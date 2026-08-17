@@ -1,0 +1,582 @@
+{% extends "public_base.html" %}
+{% block title %}{{ site_name }} — {{ site_tagline }}{% endblock %}
+{% block content %}
+
+<!-- ═══════════════════════════════════════════════════════ HERO ══ -->
+<section class="relative min-h-screen flex items-center justify-center overflow-hidden">
+  {% set h = hero or {} %}
+  {% set bg_type = h.background_type or 'default' %}
+
+  {% if bg_type == 'video' and h.video_url %}
+  {% set v_info = h.video_url | video_embed %}
+  <div class="hero-video-bg">
+    {% if v_info.type == 'youtube' or v_info.type == 'vimeo' %}
+    <iframe src="{{ v_info.embed_url }}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" style="position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-height:100vh;min-width:177.77vh;transform:translate(-50%,-50%);pointer-events:none"></iframe>
+    {% else %}
+    <video autoplay muted loop playsinline poster="{{ h.video_poster or '' }}">
+      <source src="{{ v_info.url }}" type="video/mp4"/>
+    </video>
+    {% endif %}
+    <div class="hero-bg-overlay"></div>
+  </div>
+
+  {% elif bg_type == 'image' and h.image_url %}
+  <div class="hero-image-bg" style="background-image:url('{{ h.image_url }}')"></div>
+  <div class="hero-bg-overlay"></div>
+
+  {% elif bg_type == 'slideshow' and h.slideshow_images %}
+  {% set slides = h.slideshow_images if h.slideshow_images is iterable and h.slideshow_images is not string else (h.slideshow_images.split(',') if h.slideshow_images else []) %}
+  <div class="hero-slideshow-bg" id="hero-slideshow">
+    {% for src in slides %}
+    <div class="hero-slide {{ 'active' if loop.first }}" style="background-image:url('{{ src.strip() }}')"></div>
+    {% endfor %}
+  </div>
+  <div class="hero-bg-overlay"></div>
+  
+  <!-- Sleek Slideshow Navigation Controls -->
+  <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-6 z-20 pointer-events-none">
+    <button id="hero-prev-btn" class="pointer-events-auto w-12 h-12 rounded-full border border-white/20 bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur transition-all hover:scale-105 active:scale-95" aria-label="Previous Slide">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+    <button id="hero-next-btn" class="pointer-events-auto w-12 h-12 rounded-full border border-white/20 bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur transition-all hover:scale-105 active:scale-95" aria-label="Next Slide">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <script>
+    (function(){
+      var slides = document.querySelectorAll('#hero-slideshow .hero-slide');
+      if (slides.length < 2) return;
+      var i = 0;
+      var intervalId;
+      var delay = {{ h.slideshow_interval|default(5000) }};
+
+      function showSlide(index) {
+        slides[i].classList.remove('active');
+        i = (index + slides.length) % slides.length;
+        slides[i].classList.add('active');
+      }
+
+      function nextSlide() {
+        showSlide(i + 1);
+      }
+
+      function prevSlide() {
+        showSlide(i - 1);
+      }
+
+      function resetTimer() {
+        clearInterval(intervalId);
+        intervalId = setInterval(nextSlide, delay);
+      }
+
+      document.getElementById('hero-next-btn').addEventListener('click', function() {
+        nextSlide();
+        resetTimer();
+      });
+
+      document.getElementById('hero-prev-btn').addEventListener('click', function() {
+        prevSlide();
+        resetTimer();
+      });
+
+      // Start initial timer
+      resetTimer();
+    })();
+  </script>
+
+  {% else %}
+  <!-- default: particles + grid + orbs, no photo/video -->
+  <canvas id="particle-canvas"></canvas>
+  <div class="absolute inset-0 grid-pattern opacity-40 z-0"></div>
+  <div class="orb orb-cyan  w-[600px] h-[600px] top-[-100px] left-[-150px] animate-glow-pulse z-0"></div>
+  <div class="orb orb-purple w-[500px] h-[500px] bottom-[-80px] right-[-100px] animate-glow-pulse delay-500 z-0"></div>
+  <div class="orb orb-purple w-[300px] h-[300px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-glow-pulse delay-300 z-0"></div>
+  {% endif %}
+
+  <!-- content -->
+  <div class="relative z-10 max-w-6xl mx-auto px-4 text-center pt-24 pb-16">
+
+    <!-- badge -->
+    {% if h.badge %}
+    <div class="section-badge animate-slide-up opacity-0" style="animation-fill-mode:forwards">
+      <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse inline-block"></span>
+      {{ h.badge }}
+    </div>{% endif %}
+
+    <!-- headline with typewriter -->
+    <h1 class="text-5xl sm:text-7xl lg:text-8xl font-bold font-display leading-none mb-6 animate-slide-up opacity-0 delay-100" style="animation-fill-mode:forwards">
+      <span class="gradient-text animate-neon-flicker block">{{ h.headline or site_name }}</span>
+    </h1>
+
+    <!-- rotating words -->
+    <p class="text-xl sm:text-2xl text-gray-300 max-w-2xl mx-auto mb-4 leading-relaxed animate-slide-up opacity-0 delay-200" style="animation-fill-mode:forwards">
+      {{ h.subheadline or site_tagline }}
+    </p>
+    <p class="text-base text-gray-500 mb-10 animate-slide-up opacity-0 delay-300" style="animation-fill-mode:forwards">
+      I build → <span id="rotating-word" class="text-cyan-400 font-semibold font-mono"></span>
+    </p>
+
+    <!-- CTAs -->
+    <div class="flex flex-wrap gap-4 justify-center animate-slide-up opacity-0 delay-400" style="animation-fill-mode:forwards">
+      <a href="{{ h.primary_cta_url or url_for('cms.about') }}" class="btn-neon text-base py-3.5 px-8 animate-pulse-ring">
+        {{ h.primary_cta_text or 'View My Work' }}
+      </a>
+      <a href="{{ h.secondary_cta_url or url_for('cms.hire_me') }}" class="btn-ghost-neon text-base py-3.5 px-8">
+        {{ h.secondary_cta_text or 'Hire Me' }}
+      </a>
+    </div>
+
+    <!-- stat counters -->
+    {% set stats_list = stats if stats and stats is iterable and stats | length > 0 else [
+      {"value": "50", "label": "Projects Delivered", "suffix": "+"},
+      {"value": "30", "label": "Happy Clients",      "suffix": "+"},
+      {"value": "5",  "label": "Years Experience",   "suffix": "+"},
+      {"value": "15", "label": "Technologies",       "suffix": "+"},
+    ] %}
+    <div class="mt-20 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto animate-slide-up opacity-0 delay-500" style="animation-fill-mode:forwards">
+      {% for s in stats_list %}
+      <div class="stat-card-premium">
+        <div class="stat-card-glow"></div>
+        <div class="text-4xl font-bold font-display gradient-text counter-val" data-target="{{ s.value }}">0</div>
+        <div class="text-[10px] text-gray-500 mt-2 uppercase tracking-widest font-semibold">{{ s.label }}</div>
+      </div>{% endfor %}
+    </div>
+
+    <!-- scroll indicator -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-float">
+      <span class="text-xs text-gray-600 tracking-widest uppercase">Scroll</span>
+      <div class="w-px h-10 bg-gradient-to-b from-transparent via-cyan-500 to-transparent"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════ TECH MARQUEE ══ -->
+<div class="divider-premium"></div>
+<div class="py-8 overflow-hidden w-full relative">
+  <!-- Glowing overlays on left and right for a premium fading look -->
+  <div class="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none"></div>
+  <div class="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none"></div>
+  
+  <div class="flex gap-12 animate-marquee whitespace-nowrap w-max">
+    <!-- First set -->
+    <div class="flex items-center gap-12">
+      {% for tech in ["Python","Flask","React","Next.js","TypeScript","PostgreSQL","Redis","Docker","Stripe","Anthropic AI","TailwindCSS","GraphQL","AWS","Vercel","SQLAlchemy","Node.js","FastAPI","Vue.js","MongoDB","Kubernetes"] %}
+      <span class="text-sm text-gray-500 font-mono tracking-widest uppercase hover:text-cyan-400 transition-colors cursor-default">{{ tech }}</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-cyan-500/50"></span>
+      {% endfor %}
+    </div>
+    <!-- Duplicate second set for seamless infinite loop -->
+    <div class="flex items-center gap-12" aria-hidden="true">
+      {% for tech in ["Python","Flask","React","Next.js","TypeScript","PostgreSQL","Redis","Docker","Stripe","Anthropic AI","TailwindCSS","GraphQL","AWS","Vercel","SQLAlchemy","Node.js","FastAPI","Vue.js","MongoDB","Kubernetes"] %}
+      <span class="text-sm text-gray-500 font-mono tracking-widest uppercase hover:text-cyan-400 transition-colors cursor-default">{{ tech }}</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-cyan-500/50"></span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<div class="divider-premium"></div>
+
+<!-- ══════════════════════════════════════ PARTNERS GRID ══ -->
+{% if active_partners %}
+<section class="py-16 px-4 bg-black/25 relative overflow-hidden">
+  <div class="max-w-6xl mx-auto text-center relative z-10">
+    <h3 class="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-8">Trusted by Global Teams & Partners</h3>
+    <div class="flex flex-wrap gap-8 items-center justify-center opacity-60">
+      {% for p in active_partners %}
+      <div class="h-10 flex items-center justify-center grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-300">
+        {% if p.website %}<a href="{{ p.website }}" target="_blank" rel="noopener">{% endif %}
+        <img src="{{ p.logo_url }}" alt="{{ p.name }}" class="max-h-full max-w-[120px] object-contain"/>
+        {% if p.website %}</a>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+<div class="divider-premium"></div>
+{% endif %}
+
+<!-- ══════════════════════════════════════ SERVICES ══ -->
+{% if services %}
+<section class="py-28 px-4 relative" id="services">
+  <div class="absolute inset-0 dot-pattern opacity-30"></div>
+  <div class="max-w-7xl mx-auto relative z-10">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">What I Do</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Services</h2>
+      <p class="text-gray-400 max-w-xl mx-auto">{{ services_cms.subheading if services_cms else 'End-to-end development tailored to your needs' }}</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {% for s in services %}
+      <div class="glass-card rounded-2xl p-7 card-hover card-glow group reveal" style="animation-delay:{{ loop.index0 * 0.08 }}s">
+        <div class="flex items-start justify-between mb-5">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center text-3xl group-hover:scale-110 group-hover:from-cyan-500/30 group-hover:to-purple-500/30 transition-all">
+            {% set icons = {"Code2":"💻","Palette":"🎨","Bot":"🤖","Package":"📦","Server":"🖥️","Search":"🔍","Zap":"⚡","Globe":"🌐","Shield":"🛡️","Database":"🗄️","Cpu":"⚙️","Layers":"🔲"} %}
+            {{ icons.get(s.icon, "⚡") }}
+          </div>
+          <span class="w-8 h-8 rounded-full flex items-center justify-center text-sm text-gray-600 border border-white/10 opacity-0 group-hover:opacity-100 group-hover:text-white group-hover:border-white/25 group-hover:translate-x-0 -translate-x-2 transition-all duration-300">→</span>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2 group-hover:text-cyan-300 transition-colors">{{ s.title }}</h3>
+        <p class="text-sm text-gray-400 leading-relaxed mb-5">{{ s.description }}</p>
+        {% if s.features %}
+        <ul class="space-y-1.5 mb-5">
+          {% for f in (s.features or [])[:4] %}
+          <li class="flex items-center gap-2 text-xs text-gray-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 flex-shrink-0"></span>{{ f }}
+          </li>{% endfor %}
+        </ul>{% endif %}
+        {% if s.price %}
+        <div class="flex items-center justify-between mt-4">
+          <span class="text-xs text-gray-600">Starting from</span>
+          <span class="text-sm font-bold text-cyan-400 font-mono">{{ s.price }}</span>
+        </div>{% endif %}
+      </div>{% endfor %}
+    </div>
+  </div>
+</section>{% endif %}
+
+<!-- ══════════════════════════════════════ FEATURED PROJECTS ══ -->
+{% if projects %}
+<section class="py-28 px-4 relative overflow-hidden">
+  <div class="orb orb-purple w-96 h-96 top-0 right-0 opacity-60"></div>
+  <div class="max-w-7xl mx-auto relative z-10">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">Portfolio</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Businesses We Have Built For</h2>
+      <p class="text-gray-400">A selection of recent projects that showcase my capabilities</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {% for p in projects %}
+      <a href="{{ url_for('cms.work_detail', identifier=p.slug or p.id) }}" class="group glass-card rounded-2xl overflow-hidden card-hover reveal block no-underline" style="animation-delay:{{ loop.index0 * 0.1 }}s">
+        <div class="relative aspect-video overflow-hidden">
+          {% if p.image_url %}
+          <img src="{{ p.image_url }}" alt="{{ p.title }}"
+            class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"/>
+          {% else %}
+          <div class="w-full h-full bg-gradient-to-br from-cyan-500/15 to-purple-500/15 flex items-center justify-center">
+            <span class="text-6xl opacity-40">🚀</span>
+          </div>{% endif %}
+          <!-- overlay on hover -->
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end p-5">
+            <div class="flex gap-3" onclick="event.stopPropagation();">
+              {% if p.live_url %}<span class="btn-neon text-xs py-1.5 px-4">Live →</span>{% endif %}
+              {% if p.github_url %}<span class="btn-ghost-neon text-xs py-1.5 px-4">GitHub</span>{% endif %}
+            </div>
+          </div>
+          {% if p.featured %}<div class="absolute top-3 right-3 text-xs bg-yellow-500/90 text-black font-bold px-2 py-0.5 rounded-full">★ Featured</div>{% endif %}
+        </div>
+        <div class="p-5">
+          <h3 class="font-bold text-white mb-1.5 group-hover:text-cyan-300 transition-colors">{{ p.title }}</h3>
+          <p class="text-sm text-gray-400 line-clamp-2 mb-4">{{ p.description }}</p>
+          {% if p.tags %}
+          <div class="flex flex-wrap gap-1.5">
+            {% for tag in (p.tags or [])[:5] %}
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-400">{{ tag }}</span>{% endfor %}
+          </div>{% endif %}
+        </div>
+      </a>{% endfor %}
+    </div>
+    <div class="text-center mt-12">
+      <a href="{{ url_for('cms.about') }}" class="btn-ghost-neon">View All Projects →</a>
+    </div>
+  </div>
+</section>{% endif %}
+
+<!-- ══════════════════════════════════════ MARKETPLACE PREVIEW ══ -->
+{% if products %}
+<section class="py-28 px-4 bg-white/2">
+  <div class="max-w-7xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">Marketplace</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Premium Resources</h2>
+      <p class="text-gray-400">Templates, UI kits, and boilerplates built to production standards</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {% for p in products %}
+      <a href="{{ url_for('marketplace.product_detail', slug=p.slug) }}"
+         class="group glass-card rounded-2xl overflow-hidden card-hover reveal" style="animation-delay:{{ loop.index0 * 0.08 }}s">
+        <div class="aspect-video relative overflow-hidden bg-gradient-to-br from-cyan-500/10 to-purple-500/10">
+          {% if p.images and p.images[0] %}
+          <img src="{{ p.images[0] }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
+          {% else %}
+          <div class="flex items-center justify-center h-full text-4xl">📦</div>{% endif %}
+          {% if p.featured %}<span class="absolute top-2 right-2 text-[10px] bg-yellow-500/90 text-black font-bold px-2 py-0.5 rounded-full">Featured</span>{% endif %}
+        </div>
+        <div class="p-4">
+          <p class="text-[10px] text-cyan-400 font-mono uppercase tracking-wider mb-1">{{ p.category }}</p>
+          <h3 class="text-sm font-bold text-white mb-3 line-clamp-2 group-hover:text-cyan-300 transition-colors">{{ p.title }}</h3>
+          <div class="flex items-center justify-between">
+            {% if p.is_free %}<span class="text-green-400 font-bold">Free</span>
+            {% else %}<span class="text-white font-bold font-mono">{{ p.effective_price | int | money }}</span>{% endif %}
+            <span class="text-[10px] text-gray-600">↓ {{ p.download_count }}</span>
+          </div>
+        </div>
+      </a>{% endfor %}
+    </div>
+    <div class="text-center mt-12">
+      <a href="{{ url_for('marketplace.index') }}" class="btn-neon">Browse All Products</a>
+    </div>
+  </div>
+</section>{% endif %}
+
+<!-- ══════════════════════════════════════ TESTIMONIALS ══ -->
+{% if testimonials %}
+<section class="py-28 px-4 relative overflow-hidden">
+  <div class="orb orb-cyan w-80 h-80 bottom-0 left-0 opacity-50"></div>
+  <div class="max-w-7xl mx-auto relative z-10">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">Social Proof</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Client Reviews</h2>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {% for t in testimonials %}
+      <div class="glass-card rounded-2xl p-7 card-hover reveal group" style="animation-delay:{{ loop.index0 * 0.1 }}s">
+        <!-- stars -->
+        <div class="flex gap-1 mb-5">
+          {% for _ in range(t.rating) %}<span class="text-yellow-400">★</span>{% endfor %}
+        </div>
+        <p class="text-gray-300 text-sm leading-relaxed mb-6 italic">"{{ t.content }}"</p>
+        <div class="flex items-center gap-3 mt-4">
+          {% if t.avatar %}
+          <img src="{{ t.avatar }}" class="w-10 h-10 rounded-full object-cover ring-2 ring-cyan-500/30"/>
+          {% else %}
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-black font-bold text-sm flex-shrink-0">{{ t.name[0] }}</div>{% endif %}
+          <div>
+            <p class="text-sm font-bold text-white">{{ t.name }}</p>
+            <p class="text-xs text-gray-500">{{ t.role }}{% if t.company %}, {{ t.company }}{% endif %}</p>
+          </div>
+        </div>
+      </div>{% endfor %}
+    </div>
+  </div>
+</section>{% endif %}
+
+<!-- ══════════════════════════════════════ BLOG ══ -->
+{% if recent_posts %}
+<section class="py-28 px-4 bg-white/2">
+  <div class="max-w-7xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">Knowledge</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Latest Articles</h2>
+      <p class="text-gray-400">Tutorials, opinions, and insights from the dev world</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      {% for post in recent_posts %}
+      <a href="{{ url_for('cms.blog_post', slug=post.slug) }}"
+         class="group glass-card rounded-2xl overflow-hidden card-hover reveal" style="animation-delay:{{ loop.index0 * 0.1 }}s">
+        <div class="aspect-video overflow-hidden bg-gradient-to-br {% if loop.index == 1 %}from-cyan-500/15 to-purple-500/15{% elif loop.index == 2 %}from-purple-500/15 to-pink-500/15{% else %}from-green-500/15 to-cyan-500/15{% endif %}">
+          {% if post.cover_image %}
+          <img src="{{ post.cover_image }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>{% endif %}
+        </div>
+        <div class="p-5">
+          <span class="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">{{ post.category }}</span>
+          <h3 class="font-bold text-white mt-2 mb-2 line-clamp-2 group-hover:text-cyan-300 transition-colors">{{ post.title }}</h3>
+          <p class="text-xs text-gray-500 line-clamp-2 mb-3">{{ post.excerpt }}</p>
+          <div class="flex items-center justify-between text-xs text-gray-600">
+            <span>{{ post.author.name if post.author else 'Admin' }}</span>
+            <span>{{ post.created_at | timeago }}</span>
+          </div>
+        </div>
+      </a>{% endfor %}
+    </div>
+    <div class="text-center mt-12">
+      <a href="{{ url_for('cms.blog') }}" class="btn-ghost-neon">All Articles →</a>
+    </div>
+  </div>
+</section>{% endif %}
+
+<!-- ══════════════════════════════════════ DEV TRENDS ══ -->
+{% if trends %}
+<section class="py-28 px-4">
+  <div class="max-w-7xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">Wire</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Developer Trends</h2>
+      <p class="text-gray-400">Fresh from Hacker News, DEV Community, and GitHub</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      {% for t in trends %}
+      <a href="{{ t.url }}" target="_blank" rel="noopener noreferrer"
+         class="group glass-card rounded-2xl p-5 card-hover reveal" style="animation-delay:{{ loop.index0 * 0.07 }}s">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full
+            {% if t.source == 'Hacker News' %}bg-orange-500/15 text-orange-400
+            {% elif t.source == 'GitHub' %}bg-gray-500/15 text-gray-300
+            {% else %}bg-cyan-500/15 text-cyan-400{% endif %}">{{ t.source }}</span>
+          {% if t.pinned %}<span class="text-xs">📌</span>{% endif %}
+        </div>
+        <h3 class="font-bold text-white text-sm mb-2 line-clamp-2 group-hover:text-cyan-300 transition-colors">{{ t.title }}</h3>
+        {% if t.description %}<p class="text-xs text-gray-500 line-clamp-2">{{ t.description }}</p>{% endif %}
+        <div class="flex items-center gap-1 mt-3 text-[11px] text-gray-600">
+          <span>↗ Opens original source</span>
+        </div>
+      </a>{% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- ══════════════════════════════════════ PLATFORM FEATURES ══ -->
+<section class="py-28 px-4 relative">
+  <div class="max-w-6xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <div class="section-badge">Ecosystem</div>
+      <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Everything You Need</h2>
+      <p class="text-gray-400">A complete developer ecosystem — all under one roof</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      {% for title, desc, icon, href, flag in [
+        ("AI Tools Hub",    "Claude-powered coding assistant, code review, README gen, SQL gen, API designer", "🤖", url_for('ai.index'), none),
+        ("Dev Tools",       "JSON formatter, Base64, Regex tester, Color picker, Markdown preview, CSS gen",   "🔧", url_for('tools.index'), none),
+        ("Code Playground", "Live HTML/CSS/JS editor with autocomplete, themes, and instant preview",          "💻", url_for('tools.playground'), none),
+        ("Animation Studio","500+ CSS animations you can copy, preview, and customise in real time",           "✨", url_for('tools.animations'), none),
+        ("Icon Library",    "500+ icons across multiple styles — copy SVG, PNG, or CSS class instantly",       "🎨", url_for('tools.icons'), none),
+        ("Marketplace",     "Premium templates, UI kits, and boilerplates at startup-friendly prices",         "📦", url_for('marketplace.index'), "marketplace_enabled"),
+        ("Find Freelancers", "Verified freelancers ready to build your next project fast",                      "🤝", url_for('freelance.index'), "freelancer_mode_enabled"),
+        ("Hosting Portal",  "Deploy and manage your sites with one click on managed infrastructure",           "🖥️", url_for('hosting.index'), "hosting_portal_enabled"),
+        ("Blog & Tutorials","In-depth tutorials, code walkthroughs, and industry insights updated weekly",     "📝", url_for('cms.blog'), "blog_enabled"),
+      ] %}
+      {% if flag is none or settings.get(flag, 'true') == 'true' %}
+      <a href="{{ href }}" class="group glass-card rounded-2xl p-6 card-hover reveal" style="animation-delay:{{ loop.index0 * 0.07 }}s">
+        <div class="text-3xl mb-4 group-hover:scale-110 transition-transform">{{ icon }}</div>
+        <h3 class="font-bold text-white mb-2 group-hover:text-cyan-300 transition-colors">{{ title }}</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">{{ desc }}</p>
+      </a>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════ CTA ══ -->
+{% set c = cta or {} %}
+<section class="py-28 px-4">
+  <div class="max-w-4xl mx-auto">
+    <div class="gradient-border p-1 rounded-3xl reveal">
+      <div class="glass-dark rounded-3xl p-16 text-center relative overflow-hidden">
+        <div class="orb orb-cyan w-64 h-64 top-0 left-0 opacity-50"></div>
+        <div class="orb orb-purple w-64 h-64 bottom-0 right-0 opacity-50"></div>
+        <div class="relative z-10">
+          <h2 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">
+            {{ c.headline or "Ready to Build Something Great?" }}
+          </h2>
+          <p class="text-gray-400 text-lg mb-10 max-w-xl mx-auto">
+            {{ c.subtext or "Let's discuss your project and bring your vision to life." }}
+          </p>
+          <div class="flex flex-wrap gap-4 justify-center">
+            <a href="{{ c.button_url or url_for('cms.hire_me') }}" class="btn-neon text-base py-4 px-10">
+              {{ c.button_text or "Start a Project" }}
+            </a>
+            {% if settings.get('marketplace_enabled', 'false') == 'true' %}
+            <a href="{{ url_for('marketplace.index') }}" class="btn-ghost-neon text-base py-4 px-10">Browse Marketplace</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- newsletter strip -->
+<div class="divider-premium" style="max-width:1100px;margin-left:auto;margin-right:auto"></div>
+<div class="py-12 px-4">
+  <div class="max-w-xl mx-auto text-center">
+    <p class="text-white font-semibold mb-2">Get weekly dev tips & updates</p>
+    <form action="{{ url_for('cms.newsletter_subscribe') }}" method="POST" class="flex gap-2 mt-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input name="email" type="email" required placeholder="your@email.com" class="input-field flex-1"/>
+      <button class="btn-neon text-sm py-2.5 px-5 flex-shrink-0">Subscribe</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+/* ── particle canvas ── */
+(function(){
+  const c = document.getElementById('particle-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  let W, H, particles = [];
+  function resize() { W = c.width = innerWidth; H = c.height = innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+  for (let i = 0; i < 80; i++) particles.push({
+    x: Math.random()*W, y: Math.random()*H,
+    r: Math.random()*1.5+0.3, vy: -(Math.random()*0.4+0.1),
+    vx: (Math.random()-0.5)*0.2, o: Math.random()*0.5+0.1,
+    c: Math.random() > 0.5 ? '29, 185, 84' : '242, 201, 76'
+  });
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    particles.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(${p.c},${p.o})`;
+      ctx.fill();
+      p.x += p.vx; p.y += p.vy;
+      if (p.y < -5) { p.y = H+5; p.x = Math.random()*W; }
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ── rotating words ── */
+(function(){
+  const el = document.getElementById('rotating-word');
+  if (!el) return;
+  const words = ["SaaS Platforms","REST APIs","AI Integrations","Marketplaces","Developer Tools","Web Applications","Mobile Apps","Design Systems"];
+  let i = 0, ci = 0, deleting = false, txt = '';
+  function type() {
+    const word = words[i % words.length];
+    txt = deleting ? word.slice(0, ci--) : word.slice(0, ci++);
+    el.textContent = txt;
+    if (!deleting && ci > word.length) { setTimeout(() => { deleting = true; }, 1400); }
+    else if (deleting && ci < 0) { deleting = false; i++; ci = 0; }
+    setTimeout(type, deleting ? 40 : 80);
+  }
+  type();
+})();
+
+/* ── counter animation ── */
+(function(){
+  const els = document.querySelectorAll('.counter-val');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const target = parseInt(e.target.dataset.target) || 0;
+      let cur = 0;
+      const step = Math.ceil(target / 60);
+      const timer = setInterval(() => {
+        cur = Math.min(cur + step, target);
+        e.target.textContent = cur + '+';
+        if (cur >= target) clearInterval(timer);
+      }, 25);
+      obs.unobserve(e.target);
+    });
+  }, { threshold: 0.5 });
+  els.forEach(el => obs.observe(el));
+})();
+
+/* ── scroll reveal ── */
+(function(){
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(32px)';
+    el.style.transition = 'opacity 0.7s ease, transform 0.7s ease';
+    obs.observe(el);
+  });
+})();
+</script>
+{% endblock %}

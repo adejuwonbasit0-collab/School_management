@@ -1,0 +1,119 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Inactive Clients{% endblock %}
+{% block page_subtitle %}Clients who've gone quiet for {{ days_threshold }}+ days on an unfinished project{% endblock %}
+{% block content %}
+
+<div class="a-grid a-grid-3" style="gap:14px;margin-bottom:20px">
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Inactive ({{ days_threshold }}+ days quiet)</p>
+    <p style="font-size:22px;font-weight:700;color:#f87171">{{ inactive|length }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Never Engaged (account exists, zero activity)</p>
+    <p style="font-size:22px;font-weight:700">{{ never_engaged|length }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Active</p>
+    <p style="font-size:22px;font-weight:700;color:#4ade80">{{ active_count }}</p>
+  </div></div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-body" style="display:flex;gap:8px;align-items:center">
+    <span style="font-size:12px;color:var(--text-3)">Quiet threshold:</span>
+    {% for d in [30, 60, 90, 120] %}
+    <a href="{{ url_for('admin.inactive_clients', days=d) }}" class="a-btn a-btn-xs {{ 'a-btn-primary' if days_threshold == d else '' }}">{{ d }}d</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Inactive Clients ({{ inactive|length }})</div></div>
+  <div class="a-panel-body">
+    {% if not inactive %}
+    <p style="color:var(--text-3);font-size:13px">No clients have gone quiet past this threshold — nice.</p>
+    {% endif %}
+    <div style="display:flex;flex-direction:column;gap:2px">
+      {% for row in inactive %}
+      <div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div>
+            <a href="{{ url_for('admin.customer_timeline', user_id=row.client.id) }}" style="font-size:13px;font-weight:600;color:#38bdf8">{{ row.client.name or row.client.email }}</a>
+            <p style="font-size:11px;color:var(--text-3)">Last activity: {{ row.source }}, {{ row.days_quiet }} days ago ({{ row.last_activity.strftime('%b %d, %Y') }})</p>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="a-btn a-btn-xs a-btn-primary" onclick="draftReengagement({{ row.client.id }}, this)">✉️ Draft Re-engagement</button>
+          </div>
+        </div>
+        <div id="reengage-row-{{ row.client.id }}" class="hidden" style="margin-top:10px;max-width:500px;display:flex;flex-direction:column;gap:6px">
+          <input type="text" id="reengage-subject-{{ row.client.id }}" class="a-input" style="font-size:12px" placeholder="Subject"/>
+          <textarea id="reengage-body-{{ row.client.id }}" class="a-input" style="font-size:12px" rows="5" placeholder="Body"></textarea>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="button" class="a-btn a-btn-xs a-btn-primary" onclick="sendReengagement({{ row.client.id }}, this)">Send</button>
+            <span id="reengage-status-{{ row.client.id }}" class="text-xs" style="color:var(--text-3)"></span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if never_engaged %}
+<div class="a-panel" style="margin-top:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Never Engaged ({{ never_engaged|length }})</div></div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-3);margin-bottom:10px">Client accounts with no project, invoice, meeting, ticket, or wallet activity on record — likely signed up but never actually started anything.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      {% for c in never_engaged %}
+      <a href="{{ url_for('admin.customer_timeline', user_id=c.id) }}" style="font-size:12px;color:#38bdf8;background:rgba(255,255,255,0.04);padding:4px 10px;border-radius:999px">{{ c.name or c.email }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function draftReengagement(clientId, btn) {
+  const row = document.getElementById('reengage-row-' + clientId);
+  const subjectEl = document.getElementById('reengage-subject-' + clientId);
+  const bodyEl = document.getElementById('reengage-body-' + clientId);
+  const statusEl = document.getElementById('reengage-status-' + clientId);
+  btn.disabled = true;
+  row.classList.remove('hidden');
+  statusEl.textContent = 'Drafting…';
+  subjectEl.value = ''; bodyEl.value = '';
+  try {
+    const res = await fetch(`/admin/crm/inactive-clients/${clientId}/draft-reengagement`, {
+      method: 'POST', headers: { 'X-CSRFToken': getCsrf() },
+    });
+    const data = await res.json();
+    if (data.error) { statusEl.textContent = '⚠ ' + data.error; }
+    else { subjectEl.value = data.subject; bodyEl.value = data.body; statusEl.textContent = 'Review and edit before sending.'; }
+  } catch (e) { statusEl.textContent = '⚠ Request failed: ' + e.message; }
+  btn.disabled = false;
+}
+
+async function sendReengagement(clientId, btn) {
+  const subjectEl = document.getElementById('reengage-subject-' + clientId);
+  const bodyEl = document.getElementById('reengage-body-' + clientId);
+  const statusEl = document.getElementById('reengage-status-' + clientId);
+  if (!subjectEl.value.trim() || !bodyEl.value.trim()) { statusEl.textContent = '⚠ Subject and body are required.'; return; }
+  btn.disabled = true;
+  statusEl.textContent = 'Sending…';
+  try {
+    const res = await fetch(`/admin/crm/inactive-clients/${clientId}/send-reengagement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ subject: subjectEl.value, body: bodyEl.value })
+    });
+    const data = await res.json();
+    statusEl.textContent = data.sent ? '✓ Sent' : ('⚠ ' + (data.error || 'Failed to send'));
+  } catch (e) { statusEl.textContent = '⚠ Request failed: ' + e.message; }
+  btn.disabled = false;
+}
+</script>
+{% endblock %}

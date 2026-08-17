@@ -1,0 +1,81 @@
+{% extends "public_base.html" %}
+{% block title %}Image Compressor — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:48px 20px">
+  <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Image Compressor</h1>
+  <p style="color:var(--c-text-2);margin-bottom:32px">Compress images in your browser. No upload to server, 100% private.</p>
+
+  <div style="background:rgba(255,255,255,0.03);border:2px dashed rgba(255,255,255,0.12);border-radius:16px;padding:40px;text-align:center;cursor:pointer;margin-bottom:20px" onclick="document.getElementById('img-input').click()" id="drop-zone2"
+    ondragover="event.preventDefault();this.style.borderColor='rgba(var(--c-accent-rgb),.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,.12)'"
+    ondrop="event.preventDefault();this.style.borderColor='rgba(255,255,255,.12)';handleFiles(event.dataTransfer.files)">
+    <div style="font-size:48px;margin-bottom:12px">📸</div>
+    <div style="font-size:15px;font-weight:700;color:#e8edf8;margin-bottom:6px">Drop images here or click to browse</div>
+    <div style="font-size:12px;color:var(--c-text-2)">PNG, JPG, WebP — multiple files supported</div>
+    <input type="file" id="img-input" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)"/>
+  </div>
+
+  <!-- Quality slider -->
+  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:20px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <label style="font-size:12px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em">Quality</label>
+      <span id="q-val" style="font-size:12px;color:var(--c-accent);font-family:JetBrains Mono,monospace">80%</span>
+    </div>
+    <input type="range" id="quality" min="10" max="100" value="80" style="width:100%;accent-color:var(--c-accent)" oninput="document.getElementById('q-val').textContent=this.value+'%'"/>
+  </div>
+
+  <div id="results" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="font-size:15px;font-weight:700;color:#e8edf8">Results</h3>
+      <button onclick="downloadAll()" style="padding:8px 16px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));border:none;border-radius:8px;font-weight:700;color:#000;cursor:pointer;font-size:12px;font-family:inherit">⬇ Download All</button>
+    </div>
+    <div id="results-list" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+</div>
+<canvas id="compress-canvas" style="display:none"></canvas>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let compressedFiles = [];
+function handleFiles(files) {
+  compressedFiles = [];
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results-list').innerHTML = '';
+  [...files].forEach(file => compressFile(file));
+}
+function compressFile(file) {
+  const quality = parseInt(document.getElementById('quality').value) / 100;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.getElementById('compress-canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      const origKB = Math.round(file.size / 1024);
+      const compKB = Math.round((compressed.length * 3/4) / 1024);
+      const saved = Math.round((1 - compKB/origKB) * 100);
+      compressedFiles.push({ name: file.name.replace(/\.[^.]+$/, '.jpg'), data: compressed });
+      const div = document.createElement('div');
+      div.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px';
+      div.innerHTML = `
+        <img src="${compressed}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0"/>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#e8edf8;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${file.name}</div>
+          <div style="font-size:12px;color:var(--c-text-2);margin-top:3px">${origKB} KB → <span style="color:#00e87a;font-weight:700">${compKB} KB</span> (saved ${saved > 0 ? saved+'%' : '~0%'})</div>
+          <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:6px"><div style="height:100%;width:${100-Math.max(0,saved)}%;background:linear-gradient(90deg,var(--c-accent),#00e87a);border-radius:2px"></div></div>
+        </div>
+        <a href="${compressed}" download="${file.name.replace(/\.[^.]+$/, '.jpg')}" style="padding:7px 14px;background:rgba(var(--c-accent-rgb),0.1);border:1px solid rgba(var(--c-accent-rgb),0.25);border-radius:8px;color:var(--c-accent);font-size:11px;font-weight:700;text-decoration:none;flex-shrink:0">⬇ Save</a>`;
+      document.getElementById('results-list').appendChild(div);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function downloadAll() {
+  compressedFiles.forEach(f => { const a=document.createElement('a');a.href=f.data;a.download=f.name;a.click(); });
+}
+</script>
+{% endblock %}

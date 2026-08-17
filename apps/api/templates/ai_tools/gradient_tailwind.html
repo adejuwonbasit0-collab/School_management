@@ -1,0 +1,66 @@
+{% extends "public_base.html" %}
+{% block title %}Gradient & Tailwind Generator — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:820px;margin:0 auto;padding:48px 20px }
+#preview-box { height:160px;border-radius:16px;margin-bottom:20px;border:1px solid rgba(255,255,255,0.1) }
+.opt-row { display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:16px }
+pre.code-out { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;font-size:12px;color:#cfe6ff;overflow-x:auto;white-space:pre-wrap }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Gradient &amp; Tailwind Generator</h1>
+    <p style="color:var(--c-text-2)">Build a gradient visually, export as plain CSS or a Tailwind arbitrary-value class.</p>
+  </div>
+
+  <div id="preview-box"></div>
+
+  <div class="opt-row">
+    <label style="font-size:12px;color:#9fb3d1">Color 1 <input type="color" id="c1" value="var(--c-accent)"></label>
+    <label style="font-size:12px;color:#9fb3d1">Color 2 <input type="color" id="c2" value="var(--c-accent-2)"></label>
+    <label style="font-size:12px;color:#9fb3d1">Angle <input type="range" id="angle" min="0" max="360" value="135" style="width:140px"> <span id="angle-val">135°</span></label>
+    <label style="font-size:12px;color:#9fb3d1">Type
+      <select id="gtype" class="admin-input" style="width:120px">
+        <option value="linear">Linear</option>
+        <option value="radial">Radial</option>
+      </select>
+    </label>
+  </div>
+
+  <h3 style="font-size:13px;color:#9fb3d1;margin-bottom:6px">CSS</h3>
+  <pre class="code-out" id="css-out"></pre>
+  <h3 style="font-size:13px;color:#9fb3d1;margin:16px 0 6px">Tailwind (arbitrary value)</h3>
+  <pre class="code-out" id="tw-out"></pre>
+  <div style="text-align:right;margin-top:10px"><button class="btn-ghost-neon" id="copy-btn">Copy CSS</button></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function update() {
+  const c1 = document.getElementById('c1').value;
+  const c2 = document.getElementById('c2').value;
+  const angle = document.getElementById('angle').value;
+  const type = document.getElementById('gtype').value;
+  document.getElementById('angle-val').textContent = angle + '°';
+
+  const gradient = type === 'linear'
+    ? `linear-gradient(${angle}deg, ${c1}, ${c2})`
+    : `radial-gradient(circle, ${c1}, ${c2})`;
+
+  document.getElementById('preview-box').style.background = gradient;
+  document.getElementById('css-out').textContent = `background: ${gradient};`;
+  document.getElementById('tw-out').textContent =
+    type === 'linear'
+      ? `bg-[linear-gradient(${angle}deg,${c1},${c2})]`
+      : `bg-[radial-gradient(circle,${c1},${c2})]`;
+}
+['c1','c2','angle','gtype'].forEach(id => document.getElementById(id).addEventListener('input', update));
+document.getElementById('copy-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('css-out').textContent);
+});
+update();
+</script>
+{% endblock %}

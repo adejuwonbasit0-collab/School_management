@@ -1,0 +1,228 @@
+{% extends "public_base.html" %}
+{% block title %}Markdown Preview — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+#md-shell { height: calc(100vh - 64px); display: grid; grid-template-rows: auto 1fr; }
+#editor-row { display: grid; grid-template-columns: 1fr 1fr; height: 100%; overflow: hidden; }
+.md-pane { display: flex; flex-direction: column; overflow: hidden; }
+.md-editor { flex:1; background: rgba(255,255,255,0.03); color:#e2e8f0; font-family:"JetBrains Mono",monospace; font-size:13px; border:none; outline:none; padding:1.5rem; resize:none; line-height:1.7; }
+.md-preview { flex:1; overflow-y:auto; padding:2rem; background: rgba(255,255,255,0.02); }
+</style>
+{% endblock %}
+{% block content %}
+<div id="md-shell">
+  <div class="flex items-center gap-3 px-4 py-2 border-b border-white/8 glass-dark">
+    <span class="font-bold font-display gradient-text text-sm">Markdown Preview</span>
+    <div class="ml-auto flex gap-2">
+      <button onclick="copyMarkdown()" class="admin-btn-ghost text-xs">Copy MD</button>
+      <button onclick="copyHTML()" class="admin-btn-ghost text-xs">Copy HTML</button>
+      <button onclick="downloadMD()" class="admin-btn-ghost text-xs">Download .md</button>
+      <select onchange="loadTemplate(this.value)" class="admin-input text-xs py-1">
+        <option value="">Templates…</option>
+        <option value="readme">README.md</option>
+        <option value="blog">Blog Post</option>
+        <option value="docs">API Docs</option>
+        <option value="changelog">Changelog</option>
+      </select>
+      <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+        <input type="checkbox" id="sync-scroll" checked class="accent-cyan-500"/> Sync Scroll
+      </label>
+    </div>
+  </div>
+  <div id="editor-row">
+    <div class="md-pane border-r border-white/8">
+      <div class="px-4 py-2 border-b border-white/8 text-xs text-gray-500 flex items-center justify-between">
+        <span>Markdown</span>
+        <span id="md-stats">0 words · 0 chars</span>
+      </div>
+      <textarea id="md-input" class="md-editor" spellcheck="false" placeholder="# Start writing Markdown..."></textarea>
+    </div>
+    <div class="md-pane">
+      <div class="px-4 py-2 border-b border-white/8 text-xs text-gray-500">Preview</div>
+      <div id="md-preview" class="md-preview prose"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const TEMPLATES = {
+  readme: `# Project Name
+
+> One-sentence description of your project.
+
+## Features
+
+- ✅ Feature one
+- ✅ Feature two
+- ✅ Feature three
+
+## Installation
+
+\`\`\`bash
+npm install my-project
+\`\`\`
+
+## Usage
+
+\`\`\`javascript
+const myProject = require('my-project');
+myProject.doSomething();
+\`\`\`
+
+## Contributing
+
+Pull requests are welcome!
+
+## License
+
+MIT`,
+  blog: `# Blog Post Title
+
+*Published on ${new Date().toLocaleDateString()} by Author Name*
+
+---
+
+## Introduction
+
+Start with a hook that grabs the reader's attention.
+
+## Main Content
+
+Dive deep into the topic with clear explanations.
+
+\`\`\`python
+# Code example
+print("Hello, World!")
+\`\`\`
+
+## Conclusion
+
+Summarise key takeaways.
+
+---
+
+*Thanks for reading! Follow me on [Twitter](#).*`,
+  docs: `# API Documentation
+
+## Base URL
+
+\`https://api.example.com/v1\`
+
+## Authentication
+
+Include your API key in the header:
+
+\`\`\`http
+Authorization: Bearer YOUR_API_KEY
+\`\`\`
+
+## Endpoints
+
+### GET /users
+
+Returns a list of users.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| limit | integer | Max results (default: 20) |
+| offset | integer | Pagination offset |
+
+**Response**
+
+\`\`\`json
+{
+  "users": [],
+  "total": 0
+}
+\`\`\``,
+  changelog: `# Changelog
+
+All notable changes to this project will be documented here.
+
+## [Unreleased]
+
+### Added
+- New feature
+
+## [1.0.0] - ${new Date().toISOString().split('T')[0]}
+
+### Added
+- Initial release
+- Core functionality
+
+### Fixed
+- Bug fixes
+
+### Changed
+- Improvements`
+};
+
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  highlight: function(code, lang) { return code; }
+});
+
+const input = document.getElementById('md-input');
+const preview = document.getElementById('md-preview');
+
+function render() {
+  const md = input.value;
+  preview.innerHTML = marked.parse(md);
+  const words = md.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('md-stats').textContent = `${words} words · ${md.length} chars`;
+}
+
+input.addEventListener('input', render);
+
+// sync scroll
+input.addEventListener('scroll', () => {
+  if (!document.getElementById('sync-scroll').checked) return;
+  const pct = input.scrollTop / (input.scrollHeight - input.clientHeight);
+  preview.scrollTop = pct * (preview.scrollHeight - preview.clientHeight);
+});
+
+function loadTemplate(key) { if (key && TEMPLATES[key]) { input.value = TEMPLATES[key]; render(); } }
+function copyMarkdown() { navigator.clipboard.writeText(input.value); showToast('Markdown copied!', 'success'); }
+function copyHTML() { navigator.clipboard.writeText(preview.innerHTML); showToast('HTML copied!', 'success'); }
+function downloadMD() {
+  const blob = new Blob([input.value], {type:'text/markdown'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'document.md'; a.click();
+}
+
+// default content
+input.value = `# Welcome to Markdown Preview
+
+Type your **Markdown** here and see the *live preview* on the right.
+
+## Features
+
+- Live rendering
+- Sync scroll
+- Templates
+- Copy as MD or HTML
+
+## Code Example
+
+\`\`\`python
+def hello():
+    print("Hello from Bazillin Studio!")
+\`\`\`
+
+## Table
+
+| Feature | Status |
+|---------|--------|
+| Live Preview | ✅ |
+| Sync Scroll | ✅ |
+| Export | ✅ |
+
+> Start editing to see your changes instantly.
+`;
+render();
+</script>
+{% endblock %}

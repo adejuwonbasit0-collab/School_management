@@ -1,0 +1,23 @@
+{# Internal Automation Studio navigation — included at the top of
+   automation.html, automation_canvas.html, and automation_connections.html
+   so Workflows / Studio / Connections feel like one product with its own
+   navigation, not three unrelated admin pages. Pass `active_tab` as
+   'workflows' | 'studio' | 'connections'. #}
+<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border-color, #2a2f3a);padding-bottom:0">
+  <a href="{{ url_for('admin.automation') }}"
+     style="padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none;border-bottom:2px solid {{ 'var(--accent-blue,#38bdf8)' if active_tab=='workflows' else 'transparent' }};color:{{ 'var(--text-primary,#fff)' if active_tab=='workflows' else 'var(--text-secondary,#8b949e)' }}">
+    📋 Workflows
+  </a>
+  <a href="{{ url_for('admin.automation_canvas') }}"
+     style="padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none;border-bottom:2px solid {{ 'var(--accent-blue,#38bdf8)' if active_tab=='studio' else 'transparent' }};color:{{ 'var(--text-primary,#fff)' if active_tab=='studio' else 'var(--text-secondary,#8b949e)' }}">
+    🎨 Studio
+  </a>
+  <a href="{{ url_for('admin.automation_connections') }}"
+     style="padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none;border-bottom:2px solid {{ 'var(--accent-blue,#38bdf8)' if active_tab=='connections' else 'transparent' }};color:{{ 'var(--text-primary,#fff)' if active_tab=='connections' else 'var(--text-secondary,#8b949e)' }}">
+    🔌 Connections
+  </a>
+  <a href="{{ url_for('admin.automation_executions') }}"
+     style="padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none;border-bottom:2px solid {{ 'var(--accent-blue,#38bdf8)' if active_tab=='executions' else 'transparent' }};color:{{ 'var(--text-primary,#fff)' if active_tab=='executions' else 'var(--text-secondary,#8b949e)' }}">
+    📊 Executions
+  </a>
+</div>

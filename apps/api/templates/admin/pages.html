@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Pages{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <p class="text-gray-400 text-sm">{{ pages | length }} pages</p>
+</div>
+{% if pages %}
+<div class="space-y-3">
+  {% for p in pages %}
+  <div class="glass border border-white/10 rounded-xl p-4 flex justify-between items-center">
+    <div>
+      <h3 class="font-semibold text-white">{{ p.title }}</h3>
+      <p class="text-xs text-gray-400">{{ p.slug }} · {{ p.template }} · {{ p.updated_at | timeago }}</p>
+    </div>
+    <span class="text-xs px-2 py-0.5 rounded-full {% if p.published %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ 'Published' if p.published else 'Draft' }}</span>
+  </div>{% endfor %}
+</div>{% else %}
+<div class="glass border border-white/10 rounded-2xl p-16 text-center text-gray-500">
+  <p class="text-4xl mb-3">📄</p>
+  <p>No custom pages yet. Pages can be managed here once created via the API or seed.</p>
+</div>{% endif %}
+{% endblock %}

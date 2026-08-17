@@ -1,0 +1,467 @@
+{% extends "admin/base.html" %}
+{% block page_title %}{{ proj.title }}{% endblock %}
+{% block content %}
+<div class="flex items-center gap-3 mb-6 flex-wrap">
+  <a href="{{ url_for('admin.admin_projects') }}" class="text-xs text-gray-400 hover:text-white">← All Projects</a>
+  {% set status_map = {'planning':'gray','in_progress':'blue','review':'yellow','completed':'green','on_hold':'red'} %}
+  <span class="ds-badge ds-badge-{{ status_map.get(proj.status,'gray') }}">{{ proj.status | replace('_',' ') | title }}</span>
+  <span class="text-xs text-gray-500">{{ proj.progress_pct }}% complete</span>
+  <div class="ml-auto flex gap-2">
+    {% if proj.client %}<a href="{{ url_for('comms.thread', thread_id=([proj.client.id, current_user.id]|sort|join('-'))) }}" class="ds-btn ds-btn-ghost ds-btn-sm">💬 Message Client</a>{% endif %}
+    <button onclick="openDsModal('update-proj-modal')" class="ds-btn ds-btn-secondary ds-btn-sm">✏️ Edit</button>
+    <button onclick="openDsModal('complete-modal')" class="ds-btn ds-btn-primary ds-btn-sm">🎉 Mark Complete</button>
+    {% if proj.status != 'completed' %}
+    <form method="POST" action="{{ url_for('admin.mark_project_fully_completed', pid=proj.id) }}" onsubmit="return confirm('Mark this project as FULLY completed? This unlocks the client review prompt — only do this once everything is truly finished.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="ds-btn ds-btn-secondary ds-btn-sm">✅ Mark Fully Completed</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="ds-card mb-5" style="padding:20px">
+  <div class="flex justify-between mb-2 text-sm"><span class="text-gray-300 font-medium">Overall Progress</span><span class="text-accent font-mono font-bold">{{ proj.progress_pct }}%</span></div>
+  <div class="ds-progress"><div class="ds-progress-fill" style="width:{{ proj.progress_pct }}%"></div></div>
+  <p class="text-xs text-gray-500 mt-2">Client: <a href="mailto:{{ proj.client.email if proj.client else '' }}" class="text-cyan-400">{{ proj.client.email if proj.client else '—' }}</a>{% if proj.due_date %} · Due: {{ proj.due_date.strftime('%b %d, %Y') }}{% endif %}</p>
+  {% if proj.review %}
+  <div class="ds-card mb-5" style="padding:16px;margin-top:16px">
+    <p class="text-xs text-gray-500 mb-1">Client Review</p>
+    <p style="color:#F2C94C;font-size:16px">{{ '★' * proj.review.rating }}{{ '☆' * (5 - proj.review.rating) }}</p>
+    {% if proj.review.review_text %}<p class="text-sm text-gray-300 mt-2">"{{ proj.review.review_text }}"</p>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Payment Mode Controls -->
+<div class="ds-card mb-5" style="padding:20px">
+  <div class="flex justify-between items-center mb-3">
+    <h3 class="font-bold text-white text-sm">Payment Options for This Project</h3>
+    {% if proj.payment_mode %}<span class="ds-badge ds-badge-blue text-xs">Client chose: {{ proj.payment_mode | replace('_',' ') | title }}</span>{% endif %}
+  </div>
+  <form method="POST" action="{{ url_for('admin.update_payment_modes', pid=proj.id) }}" class="flex flex-wrap gap-5">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <label class="flex items-center gap-2 text-sm text-gray-300">
+      <input type="checkbox" name="allow_full_payment" value="1" {{ 'checked' if proj.allow_full_payment }} onchange="this.form.requestSubmit()"/> Full payment
+    </label>
+    <label class="flex items-center gap-2 text-sm text-gray-300">
+      <input type="checkbox" name="allow_part_payment" value="1" {{ 'checked' if proj.allow_part_payment }} onchange="this.form.requestSubmit()"/> Split payment
+    </label>
+    <label class="flex items-center gap-2 text-sm text-gray-300">
+      <input type="checkbox" name="allow_after_service" value="1" {{ 'checked' if proj.allow_after_service }} onchange="this.form.requestSubmit()"/> Pay after delivery
+    </label>
+  </form>
+  <p class="text-xs text-gray-500 mt-3">Only checked options are available if the client hasn't chosen a payment mode yet. This has no effect once they've already picked one.</p>
+</div>
+
+<!-- Pull info from the client's own website -->
+<div class="ds-card mb-5" style="padding:20px">
+  <h3 class="font-bold text-white text-sm mb-2">🌐 Pull Info From Client's Website</h3>
+  <p class="text-xs text-gray-500 mb-3">
+    Paste their website/product page URL (their own site — reads only that ONE public page, same as
+    the Custom Product Catalog importer under Social Channels) to quickly see what they publish about
+    themselves without leaving this page.
+  </p>
+  <div class="flex gap-2 mb-2">
+    <input id="site-import-url" class="ds-input" placeholder="https://theirsite.com" style="flex:1"/>
+    <button type="button" class="ds-btn ds-btn-secondary ds-btn-sm" onclick="pullClientSiteInfo()">Pull Info</button>
+  </div>
+  <div id="site-import-result" class="text-xs" style="color:var(--c-text-2)"></div>
+</div>
+<script>
+async function pullClientSiteInfo() {
+  const url = document.getElementById('site-import-url').value.trim();
+  const box = document.getElementById('site-import-result');
+  if (!url) { box.style.color = '#ff5b7e'; box.textContent = 'Enter a URL first.'; return; }
+  box.style.color = 'var(--c-text-2)'; box.textContent = 'Reading that page…';
+  try {
+    const res = await fetch("{{ url_for('admin.import_catalog_from_url') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ url, project_id: {{ proj.id }} }),
+    });
+    const data = await res.json();
+    if (!res.ok) { box.style.color = '#ff5b7e'; box.textContent = data.error || 'Could not read that page.'; return; }
+    box.style.color = 'var(--c-text)';
+    box.innerHTML = data.items.map(it => `
+      <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;margin-bottom:6px;display:flex;gap:10px;align-items:flex-start">
+        ${it.image ? `<img src="${it.image}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'"/>` : ''}
+        <div style="flex:1;min-width:0">
+          <strong>${it.name}</strong>${it.price ? ' — ' + it.price : ''}<br>
+          <span>${it.description || ''}</span><br>
+          ${it.link ? `<a href="${it.link}" target="_blank" rel="noopener" style="color:#38bdf8;font-size:11px">🔗 View source</a>` : ''}
+          ${it.video ? ` · <a href="${it.video}" target="_blank" rel="noopener" style="color:#38bdf8;font-size:11px">🎬 Video</a>` : ''}
+        </div>
+      </div>`
+    ).join('') + '<p style="font-size:11px;color:var(--c-text-3);margin-top:8px">Saved — reusable later for this project\'s content, a social bot catalog, or automation.</p>';
+  } catch (e) {
+    box.style.color = '#ff5b7e'; box.textContent = 'Request failed: ' + e.message;
+  }
+}
+</script>
+
+<!-- Deliverables -->
+<div class="ds-card mb-5" style="padding:20px">
+  <div class="flex justify-between items-center mb-4">
+    <h3 class="font-bold text-white text-sm">Deliverables</h3>
+    <button onclick="openDsModal('deliver-modal')" class="ds-btn ds-btn-primary ds-btn-sm">📦 Deliver Work</button>
+  </div>
+  {% if proj.deliveries %}
+  <div class="space-y-2">
+    {% for d in proj.deliveries %}
+    <div class="ds-card" style="padding:14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.02);flex-wrap:wrap">
+      <span style="font-size:20px">{{ {'file':'📎','url':'🔗','text':'📝','video':'🎬'}.get(d.kind, '📦') }}</span>
+      <div style="flex:1">
+        <p class="text-sm text-white font-medium">{{ d.title }}</p>
+        <p class="text-xs text-gray-500">{{ d.kind|title }} · {{ d.created_at.strftime('%b %d, %Y') }}</p>
+      </div>
+      {% if d.kind == 'file' %}<a href="{{ d.file_url }}" target="_blank" class="ds-btn ds-btn-ghost ds-btn-sm">Download</a>
+      {% elif d.kind in ('url','video') %}<a href="{{ d.external_url }}" target="_blank" class="ds-btn ds-btn-ghost ds-btn-sm">Open</a>
+      {% endif %}
+    </div>{% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center text-gray-500 text-sm py-4">Nothing delivered yet.</div>
+  {% endif %}
+</div>
+
+<!-- Meetings -->
+<div class="ds-card mb-5" style="padding:20px">
+  <div class="flex justify-between items-center mb-4">
+    <h3 class="font-bold text-white text-sm">Meetings</h3>
+    <button onclick="openDsModal('meeting-modal')" class="ds-btn ds-btn-primary ds-btn-sm">📅 Schedule Meeting</button>
+  </div>
+  {% if proj.meetings %}
+  <div class="space-y-2">
+    {% for m in proj.meetings %}
+    <div class="ds-card" style="padding:14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.02);flex-wrap:wrap">
+      <span style="font-size:20px">{{ '✅' if m.status == 'completed' else ('❌' if m.status == 'cancelled' else '📅') }}</span>
+      <div style="flex:1">
+        <p class="text-sm text-white font-medium">{{ m.title }}</p>
+        <p class="text-xs text-gray-500">{{ m.scheduled_at.strftime('%a, %b %d %Y at %I:%M %p') }} · {{ m.duration_minutes }} min{% if m.location %} · {{ m.location }}{% endif %}</p>
+        {% if m.notes %}<p class="text-xs text-gray-500 mt-1">{{ m.notes }}</p>{% endif %}
+      </div>
+      {% if m.status == 'scheduled' %}
+      <form method="POST" action="{{ url_for('admin.update_meeting_status', mid=m.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="status" value="completed"/>
+        <button class="ds-btn ds-btn-ghost ds-btn-sm">Mark Done</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.update_meeting_status', mid=m.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="status" value="cancelled"/>
+        <button class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button>
+      </form>
+      {% endif %}
+      <form method="POST" action="{{ url_for('admin.delete_meeting', mid=m.id) }}" class="inline" onsubmit="return confirm('Delete this meeting?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="ds-btn ds-btn-ghost ds-btn-sm" style="color:#ff5b7e">Delete</button>
+      </form>
+    </div>{% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center text-gray-500 text-sm py-4">No meetings scheduled yet.</div>
+  {% endif %}
+</div>
+
+<div id="meeting-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="max-width:480px">
+    <div class="flex justify-between items-center mb-5"><h3 class="font-bold text-white text-lg">Schedule Meeting</h3><button onclick="closeModal('meeting-modal')" class="text-gray-400 hover:text-white text-xl">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_meeting', pid=proj.id) }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="ds-label">Title</label><input name="title" class="ds-input" placeholder="Kickoff call" required/></div>
+      <div><label class="ds-label">Date & Time</label><input type="datetime-local" name="scheduled_at" class="ds-input" required/></div>
+      <div><label class="ds-label">Duration (minutes)</label><input type="number" name="duration_minutes" value="30" min="5" class="ds-input"/></div>
+      <div><label class="ds-label">Location / Link</label><input name="location" class="ds-input" placeholder="Zoom link, phone number, or address"/></div>
+      <div><label class="ds-label">Notes (optional)</label><textarea name="notes" rows="2" class="ds-input"></textarea></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="closeModal('meeting-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button><button class="ds-btn ds-btn-primary ds-btn-sm">Schedule & Notify Client</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Deliver Work Modal -->
+<div id="deliver-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5"><h3 class="font-bold text-white text-lg">Deliver Work</h3><button onclick="closeModal('deliver-modal')" class="text-gray-400 hover:text-white text-xl">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.deliver_project', pid=proj.id) }}" enctype="multipart/form-data" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div>
+        <label class="ds-label">Delivery Type</label>
+        <select name="kind" id="deliver-kind" class="ds-input" onchange="toggleDeliverKind(this.value)">
+          <option value="file">File (zip, images, docs, any file)</option>
+          <option value="url">URL / Link</option>
+          <option value="video">Video Link</option>
+          <option value="text">Raw Text / Notes</option>
+        </select>
+      </div>
+      <div><label class="ds-label">Title *</label><input name="title" required class="ds-input" placeholder="Final website files"/></div>
+      <div id="deliver-field-file"><label class="ds-label">File *</label><input type="file" name="file" class="ds-input"/></div>
+      <div id="deliver-field-url" class="hidden"><label class="ds-label">URL *</label><input name="external_url" class="ds-input" placeholder="https://..."/></div>
+      <div id="deliver-field-text" class="hidden"><label class="ds-label">Content *</label><textarea name="text_content" rows="5" class="ds-input" placeholder="Credentials, notes, instructions..."></textarea></div>
+      <div><label class="ds-label">Note (optional, shown to client)</label><textarea name="note" rows="2" class="ds-input" placeholder="Any context for the client"></textarea></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="closeModal('deliver-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button><button class="ds-btn ds-btn-primary ds-btn-sm">Deliver</button></div>
+    </form>
+  </div>
+</div>
+<script>
+function toggleDeliverKind(kind) {
+  document.getElementById('deliver-field-file').classList.toggle('hidden', kind !== 'file');
+  document.getElementById('deliver-field-url').classList.toggle('hidden', kind !== 'url' && kind !== 'video');
+  document.getElementById('deliver-field-text').classList.toggle('hidden', kind !== 'text');
+}
+</script>
+
+<!-- Billing / Invoices -->
+<div class="ds-card mb-5" style="padding:20px">
+  <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+    <div class="flex gap-6 flex-wrap">
+      {% if proj.agreed_budget %}
+      <div><p class="text-xs text-gray-500">Agreed Budget</p><p class="text-lg font-bold text-white">{{ proj.agreed_budget | money(proj.currency) }}</p></div>
+      {% endif %}
+      <div><p class="text-xs text-gray-500">Invoiced</p><p class="text-lg font-bold text-white">{{ proj.total_invoiced | money(proj.currency) }}</p></div>
+      <div><p class="text-xs text-gray-500">Paid</p><p class="text-lg font-bold text-green-400">{{ proj.total_paid | money(proj.currency) }}</p></div>
+      <div><p class="text-xs text-gray-500">Outstanding</p><p class="text-lg font-bold text-yellow-400">{{ proj.total_outstanding | money(proj.currency) }}</p></div>
+      {% if proj.agreed_budget and (proj.agreed_budget|float - proj.total_invoiced) > 0 %}
+      <div><p class="text-xs text-gray-500">Not Yet Invoiced</p><p class="text-lg font-bold text-cyan-400">{{ (proj.agreed_budget|float - proj.total_invoiced) | money(proj.currency) }}</p></div>
+      {% endif %}
+    </div>
+    <div class="flex gap-2">
+      {% if proj.agreed_budget and (proj.agreed_budget|float - proj.total_invoiced) > 0 %}
+      {% set remaining_balance = proj.agreed_budget|float - proj.total_invoiced %}
+      <form method="POST" action="{{ url_for('admin.bill_remaining_balance', pid=proj.id) }}" onsubmit="return confirm('Bill the client {{ remaining_balance | money(proj.currency) }} for the remaining balance?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="ds-btn ds-btn-secondary ds-btn-sm">💰 Bill Remaining Balance</button>
+      </form>
+      {% endif %}
+      <button onclick="openDsModal('add-invoice-modal')" class="ds-btn ds-btn-primary ds-btn-sm">+ New Invoice</button>
+    </div>
+  </div>
+  {% if proj.invoices %}
+  <div class="space-y-2">
+    {% for inv in proj.invoices %}
+    <div class="ds-card" style="padding:14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.02);flex-wrap:wrap">
+      <div style="flex:1">
+        <p class="text-sm text-white font-medium">{{ inv.title }}</p>
+        <p class="text-xs text-gray-500">{{ inv.amount | money(inv.currency) }} · {{ inv.created_at | timeago }}{% if inv.due_date %} · Due {{ inv.due_date.strftime('%b %d, %Y') }}{% endif %}</p>
+      </div>
+      <span class="ds-badge {% if inv.status=='paid' %}ds-badge-green{% elif inv.status=='cancelled' %}ds-badge-gray{% else %}ds-badge-yellow{% endif %} text-xs">{{ inv.status }}</span>
+      <a href="{{ url_for('payments.invoice_pdf', invoice_id=inv.id) }}" target="_blank" class="ds-btn ds-btn-ghost ds-btn-sm">📄 PDF</a>
+      {% if inv.status == 'unpaid' %}
+      <form method="POST" action="{{ url_for('admin.resend_invoice_email', invoice_id=inv.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="ds-btn ds-btn-ghost ds-btn-sm">✉️ Resend</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.cancel_invoice', invoice_id=inv.id) }}" onsubmit="return confirm('Cancel this invoice?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button>
+      </form>
+      {% endif %}
+    </div>{% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center text-gray-500 text-sm py-4">No invoices yet — create one to bill this client.</div>
+  {% endif %}
+</div>
+
+<!-- Create Invoice Modal -->
+<div id="add-invoice-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5"><h3 class="font-bold text-white text-lg">New Invoice</h3><button onclick="closeModal('add-invoice-modal')" class="text-gray-400 hover:text-white text-xl">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_invoice', pid=proj.id) }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="ds-label">Title *</label><input name="title" required class="ds-input" placeholder="50% Deposit"/></div>
+      <div><label class="ds-label">Description</label><textarea name="description" rows="2" class="ds-input" placeholder="Optional note the client will see"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="ds-label">Amount *</label><input name="amount" type="number" step="0.01" min="0" required class="ds-input" placeholder="500.00"/></div>
+        <div><label class="ds-label">Currency *</label>
+          <select name="currency" class="ds-input" required>
+            {% for c in ["USD","NGN","GBP","EUR","KES","GHS","ZAR","CAD","AUD"] %}
+            <option value="{{ c }}" {% if c==(proj.currency or 'USD') %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div><label class="ds-label">Due Date</label><input name="due_date" type="date" class="ds-input"/></div>
+      <label class="flex items-center gap-2 text-xs text-gray-400">
+        <input type="checkbox" name="notify_client" value="1" checked/> Notify + email client this invoice is ready
+      </label>
+      <div class="flex justify-end gap-3"><button type="button" onclick="closeModal('add-invoice-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button><button class="ds-btn ds-btn-primary ds-btn-sm">Create Invoice</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Milestones -->
+  <div>
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="font-bold text-white text-sm">Milestones</h3>
+      <button onclick="openDsModal('add-milestone-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">+ Add</button>
+    </div>
+    {% if proj.milestones %}
+    <div class="space-y-2">
+      {% for m in proj.milestones %}
+      <div class="ds-card" style="padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <form method="POST" action="{{ url_for('admin.toggle_milestone', mid=m.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" style="width:22px;height:22px;border-radius:50%;border:2px solid {% if m.status=='done' %}#1DB954{% else %}rgba(255,255,255,0.2){% endif %};background:{% if m.status=='done' %}#1DB954{% else %}transparent{% endif %};color:{% if m.status=='done' %}#000{% else %}transparent{% endif %};font-size:11px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✓</button>
+        </form>
+        <div style="flex:1">
+          <p class="text-sm text-white {% if m.status=='done' %}line-through opacity-50{% endif %}">{{ m.title }}</p>
+          {% if m.description %}<p class="text-xs text-gray-400">{{ m.description }}</p>{% endif %}
+        </div>
+        <span class="ds-badge {% if m.status=='done' %}ds-badge-green{% elif m.status=='in_progress' %}ds-badge-blue{% else %}ds-badge-gray{% endif %} text-xs">{{ m.status }}</span>
+      </div>{% endfor %}
+    </div>{% else %}
+    <div class="ds-card" style="padding:24px;text-align:center;color:var(--c-text-2);font-size:13px">No milestones yet. Add them to track deliverables.</div>
+    {% endif %}
+  </div>
+
+  <!-- Post Update -->
+  <div>
+    <h3 class="font-bold text-white text-sm mb-3">Post Progress Update</h3>
+    <div class="ds-card" style="padding:18px;margin-bottom:16px">
+      <form method="POST" action="{{ url_for('admin.post_project_update', pid=proj.id) }}" class="space-y-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <textarea name="message" rows="4" class="ds-input" placeholder="Describe what you've worked on, any blockers, next steps…" required></textarea>
+        <div class="grid grid-cols-2 gap-3">
+          <input type="url" name="preview_url" class="ds-input" placeholder="Live preview URL (optional)"/>
+          <input type="url" name="image_url" class="ds-input" placeholder="Screenshot URL (optional)"/>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="text-xs text-gray-400" style="white-space:nowrap">Progress %</label>
+          <input type="number" name="progress_percent" min="0" max="100" class="ds-input" style="max-width:100px" placeholder="e.g. 60"/>
+          <label class="flex items-center gap-2 text-xs text-gray-400" style="white-space:nowrap">
+            <input type="checkbox" name="send_review_email" value="1" checked/> Email client a review link
+          </label>
+        </div>
+        <button class="ds-btn ds-btn-primary ds-btn-sm w-full justify-center">Post Update & Notify Client</button>
+      </form>
+    </div>
+
+    <!-- Updates timeline -->
+    {% if proj.updates %}
+    <div class="ds-timeline">
+      {% for u in proj.updates %}
+      <div class="ds-timeline-item">
+        <div class="ds-card" style="padding:14px">
+          <div class="flex justify-between mb-1">
+            <span class="text-xs font-semibold text-accent">{{ u.author.name if u.author else 'Admin' }}</span>
+            <span class="text-xs text-gray-500">{{ u.created_at | timeago }}</span>
+          </div>
+          <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ u.message }}</p>
+          {% if u.progress_percent is not none %}<p class="text-xs text-cyan-400 mt-1">Progress: {{ u.progress_percent }}%</p>{% endif %}
+          {% if u.review_token %}
+          <div class="flex items-center gap-3 mt-2 pt-2 border-t border-white/5">
+            <a href="{{ url_for('cms.project_update_review', token=u.review_token) }}" target="_blank" class="text-xs text-cyan-400 hover:underline">View review page →</a>
+            <span class="text-xs text-gray-500">{{ u.comments|length }} comment{{ 's' if u.comments|length != 1 }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>{% endfor %}
+    </div>{% endif %}
+  </div>
+</div>
+
+<!-- Automations & Bots running for this client — health, not just billing -->
+{% if client_bots or client_workflows %}
+<div class="ds-card" style="padding:20px;margin-top:24px">
+  <h3 class="font-bold text-white text-sm mb-3">🤖 Automations & Bots Running For This Client</h3>
+  {% if client_bots %}
+  <p class="text-xs text-gray-500 mb-2">Social bots</p>
+  <div class="space-y-2 mb-4">
+    {% for c in client_bots %}
+    <div class="flex items-center justify-between rounded-lg bg-white/3 px-3 py-2">
+      <div>
+        <span class="text-sm text-white">{{ c.label }}</span>
+        <span class="text-xs text-gray-500 ml-2">{{ c.platform }}</span>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded-full {% if c.active %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ 'active' if c.active else 'paused' }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if client_workflows %}
+  <p class="text-xs text-gray-500 mb-2">Automation workflows</p>
+  <div class="space-y-2">
+    {% for wf in client_workflows %}
+    {% set h = workflow_health.get(wf.id, {}) %}
+    <div class="flex items-center justify-between rounded-lg bg-white/3 px-3 py-2">
+      <div>
+        <a href="{{ url_for('admin.automation_canvas', wid=wf.id) }}" class="text-sm text-cyan-400 hover:underline">{{ wf.name }}</a>
+        <span class="text-xs text-gray-500 ml-2">
+          {{ wf.run_count }} run{{ 's' if wf.run_count != 1 }}{% if wf.last_run_at %} · last {{ wf.last_run_at | timeago }}{% endif %}
+        </span>
+      </div>
+      {% if h.status == 'failing' %}
+      <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">⚠ failing</span>
+      {% elif h.status == 'warning' %}
+      <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">⚠ {{ h.recent_fail_count }} recent fail(s)</span>
+      {% elif h.status == 'never_run' %}
+      <span class="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-500">never run</span>
+      {% else %}
+      <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">✓ healthy</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <p class="text-xs text-gray-600 mt-3">Assign bots/workflows to this client from Social Channels and Automation Center (the "💵 Billing" button on each).</p>
+</div>
+{% endif %}
+
+<!-- Edit Project Modal -->
+<div id="update-proj-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5"><h3 class="font-bold text-white text-lg">Edit Project</h3><button onclick="closeModal('update-proj-modal')" class="text-gray-400 hover:text-white text-xl">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.update_project', pid=proj.id) }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="ds-label">Title</label><input name="title" value="{{ proj.title }}" class="ds-input"/></div>
+      <div><label class="ds-label">Description</label><textarea name="description" rows="3" class="ds-input">{{ proj.description }}</textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="ds-label">Status</label>
+          <select name="status" class="ds-input">
+            {% for s in ['planning','in_progress','review','completed','on_hold'] %}
+            <option value="{{ s }}" {% if proj.status==s %}selected{% endif %}>{{ s | replace('_',' ') | title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div><label class="ds-label">Progress %</label><input name="progress_pct" type="number" min="0" max="100" value="{{ proj.progress_pct }}" class="ds-input"/></div>
+      </div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="closeModal('update-proj-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button><button class="ds-btn ds-btn-primary ds-btn-sm">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Milestone Modal -->
+<div id="add-milestone-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5"><h3 class="font-bold text-white text-lg">Add Milestone</h3><button onclick="closeModal('add-milestone-modal')" class="text-gray-400 hover:text-white text-xl">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.add_milestone', pid=proj.id) }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="ds-label">Title *</label><input name="title" required class="ds-input" placeholder="Design mockups approved"/></div>
+      <div><label class="ds-label">Description</label><textarea name="description" rows="2" class="ds-input"></textarea></div>
+      <div><label class="ds-label">Order</label><input name="order" type="number" class="ds-input" value="{{ proj.milestones|length }}"/></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="closeModal('add-milestone-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button><button class="ds-btn ds-btn-primary ds-btn-sm">Add</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Mark Complete Modal -->
+<div id="complete-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5"><h3 class="font-bold text-white text-lg">🎉 Mark Project Complete</h3><button onclick="closeModal('complete-modal')" class="text-gray-400 hover:text-white text-xl">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.mark_project_complete', pid=proj.id) }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <p class="text-gray-400 text-sm">This will notify the client, set progress to 100%, and send them the demo link to review before final payment.</p>
+      <div><label class="ds-label">Demo / Preview URL *</label><input name="demo_url" required class="ds-input" placeholder="https://demo.yoursite.com or staging link"/></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="closeModal('complete-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button><button class="ds-btn ds-btn-primary ds-btn-sm">Notify Client</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function openDsModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.ds-modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target===o) o.classList.remove('open'); }));
+</script>
+{% endblock %}

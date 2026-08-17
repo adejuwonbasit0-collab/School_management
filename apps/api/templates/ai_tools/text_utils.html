@@ -1,0 +1,106 @@
+{% extends "public_base.html" %}
+{% block title %}Text Utilities — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:48px 20px">
+  <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Text Utilities</h1>
+  <p style="color:var(--c-text-2);margin-bottom:28px">Word count, case conversion, slug, hash, and more — all instant, no server.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div>
+      <label style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:8px">Input Text</label>
+      <textarea id="text-input" oninput="analyze()" rows="12"
+        style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;color:#e8edf8;font-size:13px;outline:none;resize:none;line-height:1.7;font-family:inherit;transition:border-color .2s"
+        onfocus="this.style.borderColor='rgba(var(--c-accent-rgb),.4)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'"
+        placeholder="Type or paste text here…"></textarea>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <!-- Stats -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Statistics</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          {% for id, label in [('stat-words','Words'),('stat-chars','Chars'),('stat-chars-no-space','Chars (no spaces)'),('stat-sentences','Sentences'),('stat-paragraphs','Paragraphs'),('stat-read-time','Read Time')] %}
+          <div style="background:rgba(255,255,255,0.02);border-radius:8px;padding:8px 10px">
+            <div id="{{ id }}" style="font-size:18px;font-weight:800;color:var(--c-accent);font-family:Space Grotesk,sans-serif">0</div>
+            <div style="font-size:10px;color:var(--c-text-3);margin-top:2px">{{ label }}</div>
+          </div>{% endfor %}
+        </div>
+      </div>
+      <!-- Conversions -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Convert To</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          {% for label, fn in [('UPPERCASE','upper'),('lowercase','lower'),('Title Case','title'),('camelCase','camel'),('snake_case','snake'),('kebab-case','kebab'),('Slug','slug'),('Reverse','reverse')] %}
+          <button onclick="convert('{{ fn }}')" style="padding:7px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#8899b0;font-size:11px;font-family:JetBrains Mono,monospace;cursor:pointer;transition:all .2s"
+            onmouseover="this.style.borderColor='rgba(var(--c-accent-rgb),.3)';this.style.color='var(--c-accent)'"
+            onmouseout="this.style.borderColor='rgba(255,255,255,.1)';this.style.color='#8899b0'">{{ label }}</button>{% endfor %}
+        </div>
+      </div>
+      <!-- Hash -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Hash (Web Crypto API)</div>
+        <div id="hash-output" style="font-size:10px;color:#3a4a62;font-family:JetBrains Mono,monospace;word-break:break-all">Type text above to generate hash</div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          {% for alg in ['SHA-1','SHA-256','SHA-512'] %}
+          <button onclick="hashText('{{ alg }}')" style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--c-text-2);font-size:10px;cursor:pointer;font-family:inherit">{{ alg }}</button>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Output -->
+  <div style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <label style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em">Output</label>
+      <button onclick="copyOutput()" style="font-size:11px;padding:5px 12px;background:rgba(var(--c-accent-rgb),0.08);border:1px solid rgba(var(--c-accent-rgb),0.2);border-radius:6px;color:var(--c-accent);cursor:pointer;font-family:inherit">Copy</button>
+    </div>
+    <textarea id="text-output" readonly rows="4"
+      style="width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;color:#8899b0;font-size:13px;outline:none;resize:none;line-height:1.7;font-family:inherit"></textarea>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function analyze() {
+  const text = document.getElementById('text-input').value;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const chars = text.length;
+  const charsNoSpace = text.replace(/\s/g,'').length;
+  const sentences = text.split(/[.!?]+/).filter(s=>s.trim()).length;
+  const paragraphs = text.split(/
+\s*
+/).filter(p=>p.trim()).length || (text.trim()?1:0);
+  const readTime = Math.max(1,Math.ceil(words/200));
+  document.getElementById('stat-words').textContent = words.toLocaleString();
+  document.getElementById('stat-chars').textContent = chars.toLocaleString();
+  document.getElementById('stat-chars-no-space').textContent = charsNoSpace.toLocaleString();
+  document.getElementById('stat-sentences').textContent = sentences.toLocaleString();
+  document.getElementById('stat-paragraphs').textContent = paragraphs;
+  document.getElementById('stat-read-time').textContent = readTime+'m';
+}
+function convert(type) {
+  const t = document.getElementById('text-input').value;
+  const transforms = {
+    upper: s=>s.toUpperCase(),
+    lower: s=>s.toLowerCase(),
+    title: s=>s.replace(/\w\S*/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase()),
+    camel: s=>s.replace(/[-_\s]+(.)/g,(_,c)=>c.toUpperCase()).replace(/^./,c=>c.toLowerCase()),
+    snake: s=>s.replace(/\s+/g,'_').replace(/([a-z])([A-Z])/g,'$1_$2').toLowerCase(),
+    kebab: s=>s.replace(/\s+/g,'-').replace(/([a-z])([A-Z])/g,'$1-$2').toLowerCase(),
+    slug:  s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''),
+    reverse: s=>s.split('').reverse().join(''),
+  };
+  if (transforms[type]) document.getElementById('text-output').value = transforms[type](t);
+}
+async function hashText(alg) {
+  const text = document.getElementById('text-input').value;
+  if (!text) return;
+  const buf = await crypto.subtle.digest(alg, new TextEncoder().encode(text));
+  const hash = [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  document.getElementById('hash-output').textContent = `${alg}: ${hash}`;
+  document.getElementById('hash-output').style.color = 'var(--c-accent)';
+}
+function copyOutput() {
+  navigator.clipboard.writeText(document.getElementById('text-output').value);
+  if(window.showToast) showToast('Copied!','success');
+}
+</script>
+{% endblock %}

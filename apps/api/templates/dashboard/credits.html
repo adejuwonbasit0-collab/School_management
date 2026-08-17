@@ -1,0 +1,185 @@
+{% extends 'dashboard/base_dashboard.html' %}
+{% set page_title = "AI Credits" %}
+{% set page_subtitle = "Your AI credit balance, purchase history, and available packages" %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <div class="bg-gradient-to-br from-[#25D366]/15 to-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+      <div>
+        <h3 class="text-sm text-gray-400 mb-2">Available Credits</h3>
+        <p id="cs-total" class="text-4xl font-display font-bold text-white">{{ "{:,}".format(balance) }}</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="#packages" class="px-5 py-2.5 bg-[#25D366] text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center gap-2">
+          <i data-lucide="zap" class="w-4 h-4"></i> Buy Credits
+        </a>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/10">
+      <div>
+        <p class="text-xs text-gray-500 mb-1">Free Credits</p>
+        <p id="cs-free" class="text-xl font-semibold text-white">{{ credit_status.free }} <span class="text-xs text-gray-500 font-normal">/ {{ credit_status.free_cap }}</span></p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 mb-1">Purchased Credits</p>
+        <p id="cs-purchased" class="text-xl font-semibold text-white">{{ "{:,}".format(credit_status.purchased) }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 mb-1">Next Free Refill</p>
+        <p id="cs-countdown" class="text-xl font-semibold text-white" data-seconds="{{ credit_status.seconds_until_refill }}">
+          {{ "Full" if credit_status.free_full else "—" }}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6" x-data="{ units: 1, unitSize: {{ unit_pricing.unit_size }}, unitPrice: {{ unit_pricing.unit_price }}, maxUnits: {{ unit_pricing.max_units }} }">
+    <h2 class="text-lg font-display font-semibold text-white mb-1">Quick Buy</h2>
+    <p class="text-sm text-gray-400 mb-5">{{ unit_pricing.unit_size }} credits = {{ currency_symbol }}{{ "%.2f"|format(unit_pricing.unit_price) }} — add more any time.</p>
+    <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+      <div class="flex items-center gap-3">
+        <button type="button" @click="units = Math.max(1, units - 1)" class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-bold hover:bg-white/10 transition-colors">−</button>
+        <div class="text-center w-16">
+          <p class="text-xl font-bold text-white" x-text="units"></p>
+          <p class="text-[10px] text-gray-500 uppercase tracking-wider">units</p>
+        </div>
+        <button type="button" @click="units = Math.min(maxUnits, units + 1)" class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 text-white text-lg font-bold hover:bg-white/10 transition-colors">+</button>
+      </div>
+      <div class="flex-1 flex items-center justify-between gap-4 bg-white/5 border border-white/10 rounded-xl px-5 py-3">
+        <div>
+          <p class="text-xs text-gray-500">You'll get</p>
+          <p class="text-lg font-bold text-white" x-text="(units * unitSize).toLocaleString() + ' credits'"></p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-gray-500">Total</p>
+          <p class="text-lg font-bold text-[#25D366]" x-text="'{{ currency_symbol }}' + (units * unitPrice).toFixed(2)"></p>
+        </div>
+      </div>
+      <a :href="'{{ url_for('dashboard.credits_choose_gateway_custom', units=1) }}'.replace(/\/1$/, '/' + units)"
+         class="px-6 py-3 bg-[#25D366] text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-center whitespace-nowrap">
+        Buy Credits
+      </a>
+    </div>
+  </div>
+
+  <div id="packages" class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden">
+    <div class="p-6 border-b border-white/10">
+      <h2 class="text-xl font-display font-semibold text-white">Credit Packages</h2>
+    </div>
+    {% if not packages %}
+    <div class="p-16 text-center">
+      <i data-lucide="package-x" class="w-12 h-12 text-gray-600 mx-auto mb-4"></i>
+      <p class="text-gray-400">No credit packages are available yet — check back soon.</p>
+    </div>
+    {% else %}
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {% for p in packages %}
+      <div class="relative bg-white/5 border {{ 'border-[#25D366]' if p.is_popular else 'border-white/10' }} rounded-xl p-5 flex flex-col">
+        {% if p.is_popular %}
+        <span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-wider bg-[#25D366] text-black px-3 py-1 rounded-full">Popular</span>
+        {% endif %}
+        <h3 class="text-white font-display font-bold text-lg mt-2">{{ p.name }}</h3>
+        <p class="text-2xl font-display font-bold text-[#25D366] mt-2">{{ "{:,}".format(p.credits) }} <span class="text-sm text-gray-400 font-normal">credits</span></p>
+        <p class="text-xl font-semibold text-white mt-1">{{ currency_symbol }}{{ "{:,.2f}".format(p.price) }}</p>
+        {% if p.description %}<p class="text-xs text-gray-400 mt-2 flex-1">{{ p.description }}</p>{% endif %}
+        <a href="{{ url_for('dashboard.credits_choose_gateway', package_id=p.id) }}" class="mt-4 w-full text-center px-4 py-2.5 bg-[#25D366] text-white rounded-lg font-medium hover:opacity-90 transition-opacity">Buy Credits</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden">
+      <div class="p-6 border-b border-white/10">
+        <h2 class="text-lg font-display font-semibold text-white">Credit History</h2>
+      </div>
+      {% if not transactions %}
+      <div class="p-10 text-center text-gray-500 text-sm">No credit activity yet.</div>
+      {% else %}
+      <div class="divide-y divide-white/5 max-h-96 overflow-y-auto">
+        {% for t in transactions %}
+        <div class="p-4 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-sm text-white">{{ t.reason or t.type|replace('_',' ')|title }}</p>
+            <p class="text-xs text-gray-500">{{ t.created_at }}</p>
+          </div>
+          <p class="text-sm font-semibold {{ 'text-[#25D366]' if t.amount > 0 else 'text-red-400' }}">{{ '+' if t.amount > 0 }}{{ "{:,}".format(t.amount) }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden">
+      <div class="p-6 border-b border-white/10">
+        <h2 class="text-lg font-display font-semibold text-white">Purchase History</h2>
+      </div>
+      {% if not purchases %}
+      <div class="p-10 text-center text-gray-500 text-sm">No purchases yet.</div>
+      {% else %}
+      <div class="divide-y divide-white/5 max-h-96 overflow-y-auto">
+        {% for pu in purchases %}
+        <div class="p-4 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-sm text-white">{{ "{:,}".format(pu.credits) }} credits — {{ pu.label }}</p>
+            <p class="text-xs text-gray-500">{{ pu.created_at.strftime('%b %d, %Y %H:%M') if pu.created_at else '' }} · {{ currency_symbol }}{{ "{:,.2f}".format(pu.amount) }}</p>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full
+            {{ 'bg-[#25D366]/15 text-[#25D366]' if pu.status == 'paid' else ('bg-red-500/15 text-red-400' if pu.status == 'failed' else 'bg-yellow-500/15 text-yellow-400') }}">
+            {{ pu.status|title }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+  const countdownEl = document.getElementById('cs-countdown');
+  if (!countdownEl) return;
+  let seconds = parseInt(countdownEl.dataset.seconds || '0', 10);
+
+  function render() {
+    if (seconds <= 0) {
+      countdownEl.textContent = countdownEl.dataset.full === '1' ? 'Full' : 'Refilling…';
+      return;
+    }
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    countdownEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  countdownEl.dataset.full = {{ "1" if credit_status.free_full else "0" }};
+  render();
+
+  setInterval(() => {
+    if (seconds > 0) { seconds -= 1; render(); return; }
+    // Countdown hit zero — ask the backend for the real, authoritative
+    // balance rather than assuming the refill landed (the backend is
+    // the source of truth, this timer is just a display convenience).
+    fetch('{{ url_for("dashboard.credits_status") }}')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return;
+        document.getElementById('cs-total').textContent = data.total.toLocaleString();
+        document.getElementById('cs-free').innerHTML = `${data.free} <span class="text-xs text-gray-500 font-normal">/ ${data.free_cap}</span>`;
+        document.getElementById('cs-purchased').textContent = data.purchased.toLocaleString();
+        seconds = data.seconds_until_refill;
+        countdownEl.dataset.full = data.free_full ? '1' : '0';
+        render();
+      })
+      .catch(() => {});
+  }, 1000);
+})();
+</script>
+{% endblock %}

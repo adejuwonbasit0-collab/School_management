@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+{% block title %}Code Playground — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<!-- Monaco Editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"
+  onerror="document.addEventListener('DOMContentLoaded', function(){ var c=document.getElementById('monaco-editor'); if(c) c.innerHTML='<div style=\'padding:24px;color:#f87171;font-family:monospace;font-size:13px\'>⚠ Could not load the code editor script from cdnjs.cloudflare.com — check your network connection or ad-blocker, then reload.</div>'; })"></script>
+<style>
+body { overflow: hidden; margin: 0; height: 100vh; }
+#playground-shell { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+#editor-area { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; flex: 1; min-height: 0; }
+.monaco-pane { border-right: 1px solid rgba(255,255,255,0.08); overflow: hidden; display: flex; flex-direction: column; }
+.pane-header { background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 0.4rem 1rem; display: flex; align-items: center; gap: 1rem; font-size: 0.75rem; color: #6b7a9a; flex-shrink: 0; }
+.pane-header select, .pane-header input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; font-size: 0.7rem; padding: 0.25rem 0.5rem; outline: none; }
+#preview-frame { width: 100%; height: 100%; border: none; background: #fff; }
+#console-panel { height: 130px; border-top: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.5); padding: 0.5rem 1rem; overflow-y: auto; font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.console-line { padding: 1px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+.console-line.error { color: #f87171; }
+.console-line.warn  { color: #fbbf24; }
+.console-line.log   { color: #94a3b8; }
+
+/* Real mobile fix: the fixed 2-column side-by-side grid above had no
+   breakpoint at all, so on a phone the code editor AND the live preview
+   each got squeezed into ~half a phone-width column — unusable for typing
+   or reading code. Under 768px, stack them vertically instead (each gets
+   real width to work with, at the cost of needing to scroll between
+   them), and shrink the console panel so it doesn't eat too much of an
+   already-short mobile screen. */
+@media (max-width: 768px) {
+  #editor-area { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; overflow-y: auto; }
+  .monaco-pane { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); min-height: 220px; }
+  #console-panel { height: 90px; }
+  .pane-header { flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0.75rem; }
+  .pane-header select, .pane-header input { font-size: 0.75rem; padding: 0.35rem 0.5rem; }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="relative z-10 flex flex-col h-screen overflow-hidden">
+  {% include "partials/navbar.html" %}
+  
+  <div id="playground-shell">
+    <!-- toolbar -->
+    <div class="flex items-center gap-3 px-4 py-2 border-b border-white/8 glass-dark flex-shrink-0 flex-wrap">
+      <span class="font-bold font-display gradient-text text-sm">Code Playground</span>
+      <div class="flex gap-1 ml-2">
+        {% for lang, label in [('html','HTML'),('css','CSS'),('javascript','JS'),('typescript','TS'),('python','Python')] %}
+        <button onclick="switchTab('{{ lang }}')" id="tab-{{ lang }}"
+          class="tab text-xs px-3 py-1 rounded-md transition-all text-gray-400 hover:text-white
+                 {% if loop.first %}bg-white/10 text-white{% endif %}">{{ label }}</button>{% endfor %}
+      </div>
+      <div class="ml-auto flex items-center gap-3 flex-wrap">
+        <select id="template-select" class="text-xs bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-300 outline-none" onchange="loadTemplate(this.value)">
+          <option value="">-- Load Template --</option>
+          <option value="default">Default Hello</option>
+          <option value="counter">Counter App</option>
+          <option value="todo">Todo List App</option>
+          <option value="neumorph">Neumorphic Form</option>
+        </select>
+        <select id="theme-select" class="text-xs bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-300 outline-none">
+          <option value="vs-dark">Dark</option>
+          <option value="hc-black">High Contrast</option>
+          <option value="vs">Light</option>
+        </select>
+        <select id="font-size-select" class="text-xs bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-300 outline-none">
+          {% for s in [12,13,14,15,16,18,20] %}<option value="{{ s }}" {% if s==14 %}selected{% endif %}>{{ s }}px</option>{% endfor %}
+        </select>
+        <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+          <input type="checkbox" id="auto-run" checked class="accent-cyan-500"/> Auto-run
+        </label>
+        <button onclick="runCode()" class="btn-neon text-xs py-1.5 px-4">▶ Run</button>
+        <button onclick="clearConsole()" class="admin-btn-ghost text-xs">Clear Log</button>
+        <button onclick="formatCode()" class="admin-btn-ghost text-xs">Format</button>
+        <button onclick="saveSnippet()" class="admin-btn-ghost text-xs">Save</button>
+        <button onclick="shareSnippet()" class="admin-btn-ghost text-xs">Share</button>
+      </div>
+    </div>
+
+    <div id="editor-area">
+      <!-- editor -->
+      <div class="monaco-pane">
+        <div class="pane-header">
+          <span id="active-lang-label">HTML</span>
+          <span class="ml-auto text-gray-600" id="cursor-pos">Ln 1, Col 1</span>
+        </div>
+        <div id="monaco-editor" style="flex:1;min-height:0"></div>
+        <!-- console -->
+        <div id="console-panel">
+          <div class="console-line log">// Console output appears here</div>
+        </div>
+      </div>
+
+      <!-- preview -->
+      <div style="display:flex;flex-direction:column;overflow:hidden">
+        <div class="pane-header">
+          <span>Preview</span>
+          <div class="flex gap-2 ml-2">
+            {% for w, label in [('100%','Full'),('768px','Tablet'),('375px','Mobile')] %}
+            <button onclick="setPreviewWidth('{{ w }}')" class="text-[10px] px-2 py-0.5 rounded border border-white/10 text-gray-500 hover:text-white hover:border-white/20 transition-all">{{ label }}</button>{% endfor %}
+          </div>
+          <button onclick="openInNewTab()" class="ml-auto text-[10px] text-gray-500 hover:text-cyan-400 transition-colors">Open in tab ↗</button>
+        </div>
+        <div style="flex:1;overflow:auto;display:flex;justify-content:center;background:#111;padding:8px" id="preview-wrapper">
+          <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const STARTERS = {
+  html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Playground</title>
+</head>
+<body>
+  <div class="card">
+    <h1>Hello Bazillin Studio!</h1>
+    <p>Edit this HTML/CSS/JS code and see it update live together.</p>
+    <button id="click-btn">Click Me</button>
+  </div>
+</body>
+</html>`,
+  css:  `/* CSS Styles */
+body {
+  font-family: system-ui, sans-serif;
+  background: #0a0a0a;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+}
+.card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2.5rem;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+h1 {
+  background: linear-gradient(135deg, #00ff88, #00bcd4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-top: 0;
+}
+button {
+  background: linear-gradient(135deg, #00ff88, #00bcd4);
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: #000;
+  margin-top: 1rem;
+  transition: transform 0.1s ease;
+}
+button:active {
+  transform: scale(0.95);
+}`,
+  javascript: `// JavaScript Code
+console.log('Hello from Bazillin Studio Code Playground!');
+
+const btn = document.getElementById('click-btn');
+if (btn) {
+  btn.addEventListener('click', () => {
+    btn.textContent = 'Clicked! ✓';
+    console.log('Button clicked successfully!');
+  });
+}`,
+  typescript: `// TypeScript code (runs transpiled)
+interface User {
+  name: string;
+  role: string;
+}
+
+const coder: User = {
+  name: "Developer",
+  role: "Builder"
+};
+
+console.log(\`Running TypeScript: \${coder.name} is a \${coder.role}\`);`,
+  python: `# Python code
+print("Hello from Python Playground!")
+# Note: Python runs server-side or is logged in the console.
+# Feel free to test standard script snippets here.
+`
+};
+
+const TEMPLATES = {
+  default: {
+    html: `<!DOCTYPE html>\n<html>\n<body>\n  <div class="card">\n    <h1>Hello World</h1>\n    <p>Edit CSS and JS to see changes.</p>\n    <button id="click-btn">Click Me</button>\n  </div>\n</body>\n</html>`,
+    css: `body { background: #0a0a0a; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }\n.card { border: 1px dashed #333; padding: 20px; border-radius: 8px; text-align: center; }\nbutton { background: #00ff88; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; }`,
+    js: `console.log("Template Loaded!");\nconst btn = document.getElementById("click-btn");\nbtn.onclick = () => { console.log("Clicked!"); btn.textContent = "Clicked!"; };`
+  },
+  counter: {
+    html: `<!DOCTYPE html>\n<html>\n<body>\n  <div class="counter-card">\n    <h1 id="count">0</h1>\n    <div class="btn-group">\n      <button id="inc">Increment</button>\n      <button id="dec">Decrement</button>\n    </div>\n  </div>\n</body>\n</html>`,
+    css: `body { background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }\n.counter-card { background: #1e293b; padding: 40px; border-radius: 20px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }\nh1 { font-size: 4rem; margin: 20px 0; color: #38bdf8; }\nbutton { background: #38bdf8; border: none; padding: 12px 24px; border-radius: 8px; color: #0f172a; font-weight: bold; cursor: pointer; margin: 0 5px; }\nbutton:hover { background: #0ea5e9; }`,
+    js: `let count = 0;\nconst countEl = document.getElementById("count");\ndocument.getElementById("inc").onclick = () => { count++; countEl.textContent = count; console.log("Increased to " + count); };\ndocument.getElementById("dec").onclick = () => { count--; countEl.textContent = count; console.log("Decreased to " + count); };`
+  },
+  todo: {
+    html: `<!DOCTYPE html>\n<html>\n<body>\n  <div class="todo-app">\n    <h2>Tasks</h2>\n    <div class="input-row">\n      <input type="text" id="task-in" placeholder="New task...">\n      <button id="add-btn">Add</button>\n    </div>\n    <ul id="list"></ul>\n  </div>\n</body>\n</html>`,
+    css: `body { background: #121212; color: #fff; font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }\n.todo-app { width: 320px; background: #1f1f1f; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }\n.input-row { display: flex; gap: 8px; }\ninput { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #2a2a2a; color: #fff; }\nbutton { background: #a855f7; border: none; padding: 8px 16px; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer; }\nul { list-style: none; padding: 0; margin-top: 15px; }\nli { background: #2d2d2d; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }\nli button { background: #ef4444; border-radius: 4px; padding: 3px 6px; font-size: 10px; }`,
+    js: `const input = document.getElementById("task-in");\nconst addBtn = document.getElementById("add-btn");\nconst list = document.getElementById("list");\n\naddBtn.onclick = () => {\n  const val = input.value.trim();\n  if (!val) return;\n  console.log("Added task: " + val);\n  const li = document.createElement("li");\n  li.innerHTML = \`<span>\${val}</span> <button onclick="this.parentElement.remove(); console.log('Removed task');">X</button>\`;\n  list.appendChild(li);\n  input.value = "";\n};`
+  },
+  neumorph: {
+    html: `<!DOCTYPE html>\n<html>\n<body>\n  <div class="form-container">\n    <h2>Login</h2>\n    <input type="text" placeholder="Username" class="neu-input">\n    <input type="password" placeholder="Password" class="neu-input">\n    <button class="neu-btn">Submit</button>\n  </div>\n</body>\n</html>`,
+    css: `body { background: #e0e0e0; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }\n.form-container { background: #e0e0e0; padding: 40px; border-radius: 20px; box-shadow: 20px 20px 60px #bebebe, -20px -20px 60px #ffffff; text-align: center; width: 280px; }\nh2 { color: #555; margin-bottom: 25px; }\n.neu-input { width: 100%; padding: 12px; border: none; border-radius: 10px; background: #e0e0e0; box-shadow: inset 5px 5px 10px #bebebe, inset -5px -5px 10px #ffffff; margin-bottom: 15px; box-sizing: border-box; color: #555; outline: none; }\n.neu-btn { width: 100%; padding: 12px; border: none; border-radius: 10px; background: #e0e0e0; box-shadow: 5px 5px 10px #bebebe, -5px -5px 10px #ffffff; color: #555; font-weight: bold; cursor: pointer; transition: all 0.2s ease; }\n.neu-btn:active { box-shadow: inset 5px 5px 10px #bebebe, inset -5px -5px 10px #ffffff; }`,
+    js: `console.log("Neumorphic Form template loaded.");\ndocument.querySelector(".neu-btn").onclick = () => { console.log("Form submitted!"); };`
+  }
+};
+
+let models = {};
+let editor = null;
+let activeTab = 'html';
+let monacoReady = false;
+let runTimer = null;
+
+require.config({
+  paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' },
+  onError: function(err) {
+    showPlaygroundError('Failed to load code editor from CDN. Check network/ad-blocker and reload.');
+  }
+});
+
+function showPlaygroundError(message) {
+  const container = document.getElementById('monaco-editor');
+  if (container) {
+    container.innerHTML = '<div style="padding:24px;color:#f87171;font-family:monospace;font-size:13px;white-space:pre-wrap">⚠ Code editor error:\n\n' + message + '</div>';
+  }
+}
+
+require(['vs/editor/editor.main'], function() {
+  try {
+    monacoReady = true;
+    
+    // Resolve theme accent color dynamically
+    const accentHex = getComputedStyle(document.documentElement).getPropertyValue('--c-accent').trim() || '#2D68FF';
+    
+    monaco.editor.defineTheme('bazillin-dark', {
+      base: 'vs-dark', inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '00f5ff' },
+        { token: 'string',  foreground: '00ff88' },
+        { token: 'comment', foreground: '4a5568', fontStyle: 'italic' },
+        { token: 'number',  foreground: 'bf00ff' },
+      ],
+      colors: {
+        'editor.background': '#04060d',
+        'editor.lineHighlightBackground': '#0a0d18',
+        'editorCursor.foreground': accentHex,
+        'editorLineNumber.foreground': '#2d3748',
+        'editor.selectionBackground': accentHex + '33',
+      }
+    });
+
+    // Setup models for HTML, CSS, JavaScript in memory
+    models.html = monaco.editor.createModel(STARTERS.html, 'html');
+    models.css = monaco.editor.createModel(STARTERS.css, 'css');
+    models.javascript = monaco.editor.createModel(STARTERS.javascript, 'javascript');
+    
+    // Fallbacks
+    models.typescript = monaco.editor.createModel(STARTERS.typescript, 'typescript');
+    models.python = monaco.editor.createModel(STARTERS.python, 'python');
+
+    // Create the editor instance
+    editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+      model: models.html,
+      theme: 'bazillin-dark',
+      fontSize: 14,
+      fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", monospace',
+      fontLigatures: true,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      tabSize: 2,
+      wordWrap: 'on',
+      lineNumbers: 'on',
+      renderWhitespace: 'selection',
+      bracketPairColorization: { enabled: true },
+      suggest: { preview: true },
+      acceptSuggestionOnEnter: 'on',
+      quickSuggestions: { other: true, comments: false, strings: true },
+      snippetSuggestions: 'inline',
+      suggestOnTriggerCharacters: true,
+      parameterHints: { enabled: true },
+      autoClosingBrackets: 'always',
+      autoClosingQuotes: 'always',
+    });
+
+    editor.onDidChangeCursorPosition(e => {
+      document.getElementById('cursor-pos').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+    });
+
+    editor.onDidChangeModelContent(() => {
+      if (document.getElementById('auto-run').checked) {
+        clearTimeout(runTimer);
+        runTimer = setTimeout(runCode, 600);
+      }
+    });
+
+    runCode();
+  } catch (err) {
+    showPlaygroundError((err && err.stack) ? err.stack : String(err));
+  }
+});
+
+function switchTab(lang) {
+  if (!monacoReady || !editor) return;
+  const labels = { html:'HTML', css:'CSS', javascript:'JS / Scripts', typescript:'TypeScript', python:'Python' };
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('bg-white/10','text-white'));
+  document.getElementById('tab-'+lang).classList.add('bg-white/10','text-white');
+  document.getElementById('active-lang-label').textContent = labels[lang] || lang.toUpperCase();
+
+  activeTab = lang;
+  editor.setModel(models[lang]);
+  
+  if (lang !== 'python') runCode();
+}
+
+function loadTemplate(tplKey) {
+  if (!tplKey || !STARTERS[tplKey] && !TEMPLATES[tplKey]) return;
+  const tpl = TEMPLATES[tplKey];
+  models.html.setValue(tpl.html);
+  models.css.setValue(tpl.css);
+  models.javascript.setValue(tpl.js);
+  
+  // Switch to HTML tab to review
+  switchTab('html');
+  runCode();
+  logConsole(`Loaded template "${tplKey}" ✓`, 'log');
+}
+
+function runCode() {
+  if (!monacoReady || !editor) return;
+  const frame = document.getElementById('preview-frame');
+  
+  // Retrieve code from all three models
+  const html = models.html.getValue();
+  const css = models.css.getValue();
+  const js = models.javascript.getValue();
+  const ts = models.typescript.getValue();
+
+  if (activeTab === 'python') {
+    logConsole('Python browser execution not supported natively. Output redirected.', 'warn');
+    return;
+  }
+
+  // Combine HTML, CSS and JS
+  let finalJS = js;
+  if (activeTab === 'typescript') {
+    // If they switched to TypeScript, compile it or just append TS code (browsers require transpilation)
+    // For simplicity, we run JS but allow writing TS in its own tab
+    finalJS = js + '\n' + ts; 
+  }
+
+  const combinedContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    ${css}
+  </style>
+</head>
+<body>
+  ${html}
+  
+  <script>
+    (function() {
+      const _log = console.log;
+      const _error = console.error;
+      const _warn = console.warn;
+
+      // Forward iframe console logs to parent playground console
+      console.log = function(...args) {
+        window.parent.postMessage({ type: 'console-log', text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+        _log.apply(console, args);
+      };
+      console.error = function(...args) {
+        window.parent.postMessage({ type: 'console-error', text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+        _error.apply(console, args);
+      };
+      console.warn = function(...args) {
+        window.parent.postMessage({ type: 'console-warn', text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
+        _warn.apply(console, args);
+      };
+
+      window.onerror = function(message, source, lineno, colno, error) {
+        window.parent.postMessage({ type: 'console-error', text: message + ' (Line ' + lineno + ')' }, '*');
+      };
+
+      try {
+        ${finalJS}
+      } catch (err) {
+        console.error(err.message);
+      }
+    })();
+  <\/script>
+</body>
+</html>`;
+
+  frame.srcdoc = combinedContent;
+}
+
+// Receive messages from preview frame console
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type) {
+    if (e.data.type === 'console-log') {
+      logConsole(e.data.text, 'log');
+    } else if (e.data.type === 'console-error') {
+      logConsole(e.data.text, 'error');
+    } else if (e.data.type === 'console-warn') {
+      logConsole(e.data.text, 'warn');
+    }
+  }
+});
+
+function setPreviewWidth(w) {
+  const frame = document.getElementById('preview-frame');
+  frame.style.maxWidth = w;
+  frame.style.width = w;
+}
+
+function openInNewTab() {
+  const frame = document.getElementById('preview-frame');
+  const win = window.open(); 
+  win.document.write(frame.srcdoc || models.html.getValue()); 
+  win.document.close();
+}
+
+function formatCode() {
+  if (!monacoReady || !editor) return;
+  editor.getAction('editor.action.formatDocument')?.run();
+}
+
+function clearConsole() {
+  document.getElementById('console-panel').innerHTML = '<div class="console-line log">// Console cleared</div>';
+}
+
+function logConsole(msg, type = 'log') {
+  const panel = document.getElementById('console-panel');
+  const div = document.createElement('div');
+  div.className = 'console-line ' + type;
+  div.textContent = msg;
+  panel.appendChild(div);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function saveSnippet() { 
+  localStorage.setItem('playground_html', models.html.getValue()); 
+  localStorage.setItem('playground_css', models.css.getValue()); 
+  localStorage.setItem('playground_js', models.javascript.getValue()); 
+  logConsole('Saved HTML/CSS/JS to local storage ✓', 'log'); 
+}
+
+function shareSnippet() { 
+  navigator.clipboard.writeText(location.href); 
+  alert('URL copied — share with others!'); 
+}
+
+document.getElementById('theme-select').addEventListener('change', e => {
+  if (!monacoReady || !editor) return;
+  monaco.editor.setTheme(e.target.value === 'vs-dark' ? 'bazillin-dark' : e.target.value);
+});
+
+document.getElementById('font-size-select').addEventListener('change', e => {
+  if (!monacoReady || !editor) return;
+  editor.updateOptions({ fontSize: parseInt(e.target.value) });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Executions{% endblock %}
+{% block page_subtitle %}Every real workflow run — canvas test runs, single-node tests, and live triggers{% endblock %}
+{% block content %}
+<style>
+.exec-row { border-bottom: 1px solid rgba(255,255,255,0.06); padding: 14px 20px; }
+.exec-row:last-child { border-bottom: none; }
+.exec-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; }
+.exec-badge.success { background: rgba(34,197,94,0.15); color: #4ade80; }
+.exec-badge.partial { background: rgba(250,204,21,0.15); color: #facc15; }
+.exec-badge.failed { background: rgba(244,63,94,0.15); color: #fb7185; }
+.exec-metrics { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); margin: 6px 0 8px; }
+.exec-metrics span strong { color: var(--text); font-weight: 600; }
+.exec-log-toggle { font-size: 11px; color: var(--accent-blue, #38bdf8); cursor: pointer; user-select: none; background: none; border: none; padding: 0; }
+.exec-log-body { display: none; white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8899b0; margin-top: 8px; padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: 6px; max-height: 300px; overflow-y: auto; }
+.exec-log-body.open { display: block; }
+.exec-log-body .line-success { color: #4ade80; }
+.exec-log-body .line-failed { color: #fb7185; }
+.exec-log-body .line-skipped { color: #94a3b8; }
+</style>
+
+{% set active_tab = 'executions' %}
+{% include "admin/partials/automation_tabs.html" with context %}
+
+<div class="a-panel" style="margin-bottom:16px">
+  <div class="a-panel-body" style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select name="workflow_id" onchange="this.form.submit()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text);padding:6px 10px;font-size:12px">
+        <option value="">All workflows</option>
+        {% for wf in workflows %}
+        <option value="{{ wf.id }}" {{ 'selected' if selected_workflow_id == wf.id }}>{{ wf.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" onchange="this.form.submit()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text);padding:6px 10px;font-size:12px">
+        <option value="">Any status</option>
+        <option value="success" {{ 'selected' if selected_status == 'success' }}>Success</option>
+        <option value="partial" {{ 'selected' if selected_status == 'partial' }}>Partial</option>
+        <option value="failed" {{ 'selected' if selected_status == 'failed' }}>Failed</option>
+      </select>
+    </form>
+    <div style="font-size:11.5px;color:var(--text-muted)">
+      {{ total }} run{{ '' if total == 1 else 's' }}
+      {% if queued_jobs %} · <span style="color:#facc15">{{ queued_jobs }} queued right now</span>{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="a-panel">
+  {% if not runs %}
+  <div class="a-panel-body" style="padding:40px 20px;text-align:center;color:var(--text-muted)">
+    <p>No runs match this filter yet.</p>
+  </div>
+  {% else %}
+  <div class="a-panel-body" style="padding:0">
+    {% for run in runs %}
+    <div class="exec-row">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0">
+          <span style="font-weight:600;font-size:13px;color:var(--text)">{{ run.workflow.name if run.workflow else 'Deleted workflow' }}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:8px">{{ run.created_at.strftime('%b %d, %Y %H:%M:%S') }}</span>
+        </div>
+        <span class="exec-badge {{ run.status }}">{{ run.status }}</span>
+      </div>
+      {% set m = run.metrics or {} %}
+      <div class="exec-metrics">
+        {% if m.get('execution_time_ms') is not none %}<span><strong>{{ m.get('execution_time_ms') }}ms</strong> duration</span>{% endif %}
+        {% if m.get('nodes_run_count') is not none %}<span><strong>{{ m.get('nodes_run_count') }}</strong> nodes run</span>{% endif %}
+        {% if m.get('api_calls_count') %}<span><strong>{{ m.get('api_calls_count') }}</strong> API calls</span>{% endif %}
+        {% if m.get('webhook_requests_count') %}<span><strong>{{ m.get('webhook_requests_count') }}</strong> webhooks</span>{% endif %}
+        {% if m.get('ai_tokens_used') %}<span><strong>{{ m.get('ai_tokens_used') }}</strong> AI tokens</span>{% endif %}
+      </div>
+      {% if run.log %}
+      <button type="button" class="exec-log-toggle" onclick="const el=this.nextElementSibling; el.classList.toggle('open'); this.textContent = el.classList.contains('open') ? '▲ Hide log' : '▼ Show log';">▼ Show log</button>
+      <div class="exec-log-body">{% for line in run.log.split('\n') %}<div class="{{ 'line-success' if 'SUCCESS' in line else ('line-failed' if 'FAILED' in line else ('line-skipped' if 'SKIPPED' in line else '')) }}">{{ line }}</div>{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;justify-content:center;gap:6px;margin-top:16px">
+  {% for p in range(1, total_pages + 1) %}
+  <a href="{{ url_for('admin.automation_executions', page=p, workflow_id=selected_workflow_id, status=selected_status) }}"
+     class="a-btn a-btn-xs {{ 'a-btn-primary' if p == page else 'a-btn-ghost' }}">{{ p }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

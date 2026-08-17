@@ -1,0 +1,263 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Welcome back, {{ current_user.name or current_user.email }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Welcome Banner -->
+    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-green-500/20 to-[#8B5CF6]/20 border border-white/10 p-8 backdrop-blur-md">
+        <div class="absolute -right-12 -top-12 w-64 h-64 bg-green-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+        <div class="absolute -left-12 -bottom-12 w-64 h-64 bg-[#8B5CF6]/20 blur-[100px] rounded-full pointer-events-none"></div>
+        
+        <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+                <h2 class="text-3xl font-display font-bold text-white mb-2">Ready to create something amazing?</h2>
+                <p class="text-gray-400 max-w-xl">Explore our suite of tools or browse the marketplace to unlock new digital products and supercharge your workflow.</p>
+            </div>
+            <a href="{{ url_for('dashboard.my_products') }}" class="inline-flex items-center justify-center px-6 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-semibold rounded-lg transition-all duration-300 transform hover:scale-105 shadow-[0_0_20px_rgba(29,185,84,0.3)] whitespace-nowrap group">
+                Explore Products
+                <i data-lucide="arrow-right" class="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards Row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- AI Credits -->
+        <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-xl p-6 hover:border-green-500/30 transition-colors group relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="flex items-start justify-between relative z-10">
+                <div>
+                    <p class="text-sm font-medium text-gray-400 mb-1">AI Credits</p>
+                    <h3 class="text-3xl font-bold text-white tracking-tight">{{ credits|default('0') }}</h3>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20 text-green-500">
+                    <i data-lucide="zap" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Unlocked -->
+        <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-xl p-6 hover:border-purple-500/30 transition-colors group relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-[#8B5CF6]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="flex items-start justify-between relative z-10">
+                <div>
+                    <p class="text-sm font-medium text-gray-400 mb-1">Products Unlocked</p>
+                    <div class="flex items-baseline gap-2">
+                        <h3 class="text-3xl font-bold text-white tracking-tight">{{ unlocked_count|default('0') }}</h3>
+                        <span class="text-sm text-gray-500">/ {{ total_products|default('0') }}</span>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-[#8B5CF6]/10 flex items-center justify-center border border-[#8B5CF6]/20 text-[#8B5CF6]">
+                    <i data-lucide="package" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Downloads -->
+        <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-xl p-6 hover:border-blue-500/30 transition-colors group relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="flex items-start justify-between relative z-10">
+                <div>
+                    <p class="text-sm font-medium text-gray-400 mb-1">Total Downloads</p>
+                    <h3 class="text-3xl font-bold text-white tracking-tight">{{ download_count|default('0') }}</h3>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20 text-blue-500">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Spent -->
+        <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-xl p-6 hover:border-yellow-500/30 transition-colors group relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-[#F59E0B]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="flex items-start justify-between relative z-10">
+                <div>
+                    <p class="text-sm font-medium text-gray-400 mb-1">Total Spent</p>
+                    <h3 class="text-3xl font-bold text-white tracking-tight">${{ '%.2f'|format(total_spent|default(0)) }}</h3>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center border border-[#F59E0B]/20 text-[#F59E0B]">
+                    <i data-lucide="dollar-sign" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Grid -->
+    <div class="mb-8">
+        <h3 class="text-xl font-semibold text-white mb-4">Quick Actions</h3>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <a href="/dashboard/chatbot-builder" class="flex flex-col items-center justify-center p-4 rounded-xl bg-[#121212]/60 border border-white/5 hover:bg-[#1a1a1a] hover:border-white/10 transition-all group text-center h-full">
+                <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:bg-[#25D366]/20 group-hover:text-[#25D366] transition-colors text-gray-400">
+                    <i data-lucide="message-circle" class="w-6 h-6"></i>
+                </div>
+                <span class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">WhatsApp Bot</span>
+            </a>
+            <a href="/dashboard/invoice-generator" class="flex flex-col items-center justify-center p-4 rounded-xl bg-[#121212]/60 border border-white/5 hover:bg-[#1a1a1a] hover:border-white/10 transition-all group text-center h-full">
+                <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:bg-[#8B5CF6]/20 group-hover:text-[#8B5CF6] transition-colors text-gray-400">
+                    <i data-lucide="file-text" class="w-6 h-6"></i>
+                </div>
+                <span class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Generate Invoice</span>
+            </a>
+            <a href="{{ url_for('tools.voice_studio') }}" class="flex flex-col items-center justify-center p-4 rounded-xl bg-[#121212]/60 border border-white/5 hover:bg-[#1a1a1a] hover:border-white/10 transition-all group text-center h-full">
+                <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:bg-blue-500/20 group-hover:text-blue-500 transition-colors text-gray-400">
+                    <i data-lucide="mic" class="w-6 h-6"></i>
+                </div>
+                <span class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Voice Tool <span class="text-[9px] text-green-400 block">Free</span></span>
+            </a>
+            <a href="/dashboard/funnel-builder" class="flex flex-col items-center justify-center p-4 rounded-xl bg-[#121212]/60 border border-white/5 hover:bg-[#1a1a1a] hover:border-white/10 transition-all group text-center h-full">
+                <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:bg-pink-500/20 group-hover:text-pink-500 transition-colors text-gray-400">
+                    <i data-lucide="filter" class="w-6 h-6"></i>
+                </div>
+                <span class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Build Funnel</span>
+            </a>
+            <a href="/dashboard/payment-links" class="flex flex-col items-center justify-center p-4 rounded-xl bg-[#121212]/60 border border-white/5 hover:bg-[#1a1a1a] hover:border-white/10 transition-all group text-center h-full">
+                <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:bg-[#F59E0B]/20 group-hover:text-[#F59E0B] transition-colors text-gray-400">
+                    <i data-lucide="link" class="w-6 h-6"></i>
+                </div>
+                <span class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Payment Link</span>
+            </a>
+            <a href="{{ url_for('marketplace.index') }}" class="flex flex-col items-center justify-center p-4 rounded-xl bg-[#121212]/60 border border-white/5 hover:bg-[#1a1a1a] hover:border-white/10 transition-all group text-center h-full">
+                <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 group-hover:bg-teal-500/20 group-hover:text-teal-500 transition-colors text-gray-400">
+                    <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+                </div>
+                <span class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Marketplace</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Recent Activity -->
+        <div class="lg:col-span-2 space-y-4">
+            <h3 class="text-xl font-semibold text-white">Recent Activity</h3>
+            <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
+                {% if notifications %}
+                <div class="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-white/10 before:to-transparent">
+                    {% for notification in notifications %}
+                    <div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                        <!-- Icon -->
+                        <div class="flex items-center justify-center w-10 h-10 rounded-full border-4 border-[#121212] bg-[#1a1a1a] text-gray-400 group-hover:text-green-500 group-hover:border-green-500/20 transition-colors shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-[0_0_0_4px_#121212] z-10">
+                            <i data-lucide="{{ notification.icon|default('activity') }}" class="w-4 h-4"></i>
+                        </div>
+                        <!-- Card -->
+                        <div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl bg-white/5 border border-white/5 group-hover:border-white/10 transition-colors">
+                            <div class="flex items-center justify-between mb-1">
+                                <h4 class="font-medium text-white text-sm">{{ notification.title|default('Update') }}</h4>
+                                <time class="text-xs text-gray-500">{{ notification.time|default('Just now') }}</time>
+                            </div>
+                            <p class="text-sm text-gray-400">{{ notification.message }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="flex flex-col items-center justify-center py-12 text-center">
+                    <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 text-gray-500">
+                        <i data-lucide="clock" class="w-8 h-8"></i>
+                    </div>
+                    <p class="text-gray-400 mb-4">No recent activity</p>
+                    <a href="{{ url_for('dashboard.my_products') }}" class="text-sm text-[#1DB954] hover:text-[#1ed760] font-medium inline-flex items-center">
+                        Explore Marketplace <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: My Creations -->
+        <div class="space-y-4">
+            <h3 class="text-xl font-semibold text-white">My Creations</h3>
+            <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-2xl p-6 space-y-4">
+                
+                <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
+                            <i data-lucide="globe" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-medium text-gray-300">Websites</span>
+                    </div>
+                    <span class="text-2xl font-bold text-white">{{ website_count|default('0') }}</span>
+                </div>
+
+                <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-500">
+                            <i data-lucide="filter" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-medium text-gray-300">Funnels</span>
+                    </div>
+                    <span class="text-2xl font-bold text-white">{{ funnel_count|default('0') }}</span>
+                </div>
+
+                <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-[#8B5CF6]/10 flex items-center justify-center text-[#8B5CF6]">
+                            <i data-lucide="file-text" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-medium text-gray-300">Invoices</span>
+                    </div>
+                    <span class="text-2xl font-bold text-white">{{ invoice_count|default('0') }}</span>
+                </div>
+
+                <a href="{{ url_for('dashboard.my_products') }}" class="block w-full text-center py-3 text-sm text-gray-400 hover:text-white transition-colors mt-2">
+                    View All Creations &rarr;
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Purchases -->
+    <div class="mt-8">
+        <h3 class="text-xl font-semibold text-white mb-4">Recent Purchases</h3>
+        <div class="bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden">
+            {% if recent_orders %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-white/5 text-gray-400 border-b border-white/5">
+                        <tr>
+                            <th class="px-6 py-4 font-medium">Product</th>
+                            <th class="px-6 py-4 font-medium">Date</th>
+                            <th class="px-6 py-4 font-medium">Amount</th>
+                            <th class="px-6 py-4 font-medium">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for order in recent_orders %}
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded bg-[#1a1a1a] border border-white/5 flex items-center justify-center">
+                                        <i data-lucide="package" class="w-4 h-4 text-gray-400"></i>
+                                    </div>
+                                    <span class="font-medium text-gray-300">{{ order.product_name|default('Product Name') }}</span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 text-gray-400">{{ order.date|default('Today') }}</td>
+                            <td class="px-6 py-4 font-medium text-white">${{ '%.2f'|format(order.amount|default(0)) }}</td>
+                            <td class="px-6 py-4">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
+                                    Completed
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="flex flex-col items-center justify-center py-12 text-center p-6">
+                <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 text-gray-500">
+                    <i data-lucide="shopping-bag" class="w-8 h-8"></i>
+                </div>
+                <p class="text-gray-400 mb-4">No purchases yet</p>
+                <a href="{{ url_for('dashboard.my_products') }}" class="inline-flex items-center justify-center px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white font-medium rounded-lg transition-colors border border-white/10">
+                    Visit the Marketplace <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

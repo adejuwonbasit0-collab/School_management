@@ -1,0 +1,306 @@
+{% extends "admin/base.html" %}
+{% block page_title %}AI Developer Console{% endblock %}
+{% block page_subtitle %}Instant codebase action console — execute development tasks and customize site assets.{% endblock %}
+{% block content %}
+
+<!-- Custom Styles for Developer Dashboard -->
+<style>
+  .dev-console-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+  }
+  @media(max-width: 992px) {
+    .dev-console-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .task-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+  }
+  .task-card:hover {
+    border-color: #58a6ff;
+  }
+
+  .status-tag {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+  }
+  .status-ready { background: rgba(56, 139, 253, 0.15); color: #58a6ff; }
+  .status-success { background: rgba(63, 185, 80, 0.15); color: #56d364; }
+</style>
+
+<div class="dev-console-grid">
+  <!-- Left Column: Tasks -->
+  <div>
+    <!-- Task 1: Hero Video BG -->
+    <div class="task-card" id="task-card-hero">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">🎥 1. Enable Hero Video Background</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Configures the homepage hero section to show an uploaded video background instead of particles or static image.
+          </p>
+        </div>
+        <span class="status-tag status-ready" id="status-hero">Ready</span>
+      </div>
+      
+      <div style="margin-top:14px; background:#0d1117; padding:12px; border-radius:8px; border:1px solid #21262d">
+        <label class="a-label">Target Video Asset</label>
+        <select id="hero-video-select" class="a-input" style="margin-top:6px">
+          <option value="/static/uploads/intro_video.mp4">Default Promo Video (/static/uploads/intro_video.mp4)</option>
+        </select>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('hero_video', 'hero')">✨ Implement Instantly</button>
+      </div>
+    </div>
+
+    <!-- Task 2: Clickable Projects -->
+    <div class="task-card" id="task-card-projects">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">🔗 2. Make Frontpage Projects Clickable</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Ensures featured project grid cards link directly to their respect details rather than opening Hire Me.
+          </p>
+        </div>
+        <span class="status-tag status-success" id="status-projects">Active</span>
+      </div>
+      
+      <div style="margin-top:14px; background:#0d1117; padding:12px; border-radius:8px; border:1px solid #21262d">
+        <label class="a-label">Select Project to Verify Linkage</label>
+        <select id="project-link-select" class="a-input" style="margin-top:6px">
+          {% for p in projects %}
+          <option value="{{ p.slug or p.id }}">{{ p.title }} (/projects/{{ p.slug }})</option>
+          {% else %}
+          <option value="">No projects added yet</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('clickable_projects', 'projects')">✨ Verify & Build</button>
+      </div>
+    </div>
+
+    <!-- Task 3: Confirm Payment proofs -->
+    <div class="task-card" id="task-card-payments">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">💳 3. Verify Confirm Payments Receipts</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Fixes currency rendering and unlocks checking upload screenshots/receipt proofs in the manual payment dashboard.
+          </p>
+        </div>
+        <span class="status-tag status-ready" id="status-payments">Pending review</span>
+      </div>
+      
+      <div style="margin-top:14px; background:#0d1117; padding:12px; border-radius:8px; border:1px solid #21262d">
+        <label class="a-label">Pending Payments Queue</label>
+        <select id="payments-select" class="a-input" style="margin-top:6px">
+          {% for pay in payments %}
+          <option value="{{ pay.id }}">{{ pay.user.name or 'User' }} — {{ pay.amount }} {{ pay.currency }}</option>
+          {% else %}
+          <option value="">No pending payments to verify</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('confirm_payments', 'payments')">✨ Run Integrity Check</button>
+      </div>
+    </div>
+
+    <!-- Task 4: Form Spacing -->
+    <div class="task-card" id="task-card-spacing">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">📱 4. Optimize Form Spacing & Mobile Inputs</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Sets font sizes and heights to prevent standard browser auto-zooming on focus in mobile views.
+          </p>
+        </div>
+        <span class="status-tag status-success" id="status-spacing">Optimized</span>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('form_spacing', 'spacing')">✨ Recalculate Styles</button>
+      </div>
+    </div>
+
+    <!-- Task 5: Layout Balance -->
+    <div class="task-card" id="task-card-layout">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">📐 5. Balance Bento Heights & Columns</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Applies flex layouts to bento grids to prevent card misalignment when description lengths vary.
+          </p>
+        </div>
+        <span class="status-tag status-success" id="status-layout">Balanced</span>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('layout_balance', 'layout')">✨ Balance Layouts</button>
+      </div>
+    </div>
+
+    <!-- Task 6: Partners Setup -->
+    <div class="task-card" id="task-card-partners">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">🤝 6. Configure Partners Directory</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Initializes the settings key-value store for displaying corporate logos on the frontend homepage.
+          </p>
+        </div>
+        <span class="status-tag status-ready" id="status-partners">Ready</span>
+      </div>
+      
+      <div style="margin-top:14px; background:#0d1117; padding:12px; border-radius:8px; border:1px solid #21262d">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <span style="font-size:13px; color:var(--text-primary)">Current Uploaded Partners:</span>
+          <strong style="font-size:14px; color:#58a6ff">{{ partners_count }} partners</strong>
+        </div>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('partners_setup', 'partners')">✨ Initialize Defaults</button>
+      </div>
+    </div>
+
+    <!-- Task 7: Skills Icons -->
+    <div class="task-card" id="task-card-skills">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff">🛠️ 7. Enable Custom Skill Images</h3>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px">
+            Verifies and binds skills display models to support either image URLs or emojis in the Expert Area.
+          </p>
+        </div>
+        <span class="status-tag status-ready" id="status-skills">Ready</span>
+      </div>
+      
+      <div style="margin-top:14px; background:#0d1117; padding:12px; border-radius:8px; border:1px solid #21262d">
+        <label class="a-label">Current Skills</label>
+        <select id="skills-select" class="a-input" style="margin-top:6px">
+          {% for s in skills %}
+          <option value="{{ s.id }}">{{ s.name }} (Icon: {{ s.icon or 'none' }})</option>
+          {% else %}
+          <option value="">No skills configured yet</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div style="margin-top:14px; display:flex; justify-content:flex-end">
+        <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="runDevTask('skills_icon', 'skills')">✨ Apply & Bind</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Sidebar Stats -->
+  <div>
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header"><div class="a-panel-title">📡 System Parameters</div></div>
+      <div class="a-panel-body">
+        <div class="space-y-3" style="font-size:12.5px">
+          <div style="display:flex; justify-content:space-between"><span style="color:var(--text-secondary)">Site Currency:</span><strong style="color:#fff">{{ site_currency }}</strong></div>
+          <div style="display:flex; justify-content:space-between"><span style="color:var(--text-secondary)">Dev Mode:</span><strong style="color:var(--accent-green)">Active</strong></div>
+          <div style="display:flex; justify-content:space-between"><span style="color:var(--text-secondary)">Workspace Engine:</span><strong style="color:#fff">Vite/Flask</strong></div>
+        </div>
+        <div style="margin-top:12px;border-top:1px solid #30363d;padding-top:12px;display:flex;flex-direction:column;gap:6px">
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="inspectDatabase()">🗄️ Inspect DB Tables</button>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="viewSystemLogs()">📜 View System Logs</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header"><div class="a-panel-title">💡 Developer Prompt Library</div></div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Reusable prompt templates for development tasks, database queries, and content generation:</p>
+        <div class="space-y-2">
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="copyPromptSnippet('Audit database tables for unindexed foreign keys and optimize query performance.')">🔍 DB Index & Query Audit</button>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="copyPromptSnippet('Generate OpenAPI 3.0 specification for all live REST endpoints.')">🌐 OpenAPI / Swagger Spec Generator</button>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="copyPromptSnippet('Audit security headers, CORS settings, and CSRF token enforcement.')">🔒 Security & CORS Audit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function runDevTask(taskId, label) {
+  const statusEl = document.getElementById('status-' + label);
+  const cardEl = document.getElementById('task-card-' + label);
+  
+  statusEl.className = 'status-tag';
+  statusEl.style.background = 'rgba(255,255,255,0.06)';
+  statusEl.style.color = 'var(--text-secondary)';
+  statusEl.textContent = 'Executing...';
+  
+  try {
+    const res = await fetch("{{ url_for('admin.execute_dev_tool_task') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ task_id: taskId })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      statusEl.className = 'status-tag';
+      statusEl.style.background = 'rgba(248,81,73,0.15)';
+      statusEl.style.color = '#f85149';
+      statusEl.textContent = data.success === false ? 'Not Done Yet' : 'Failed';
+      alert(data.message || data.error || 'Execution failed.');
+      return;
+    }
+    
+    statusEl.className = 'status-tag status-success';
+    statusEl.textContent = 'Active';
+    cardEl.style.borderColor = '#56d364';
+    alert(data.message || 'Task executed successfully!');
+  } catch(e) {
+    statusEl.className = 'status-tag';
+    statusEl.style.background = 'rgba(248,81,73,0.15)';
+    statusEl.style.color = '#f85149';
+    statusEl.textContent = 'Error';
+    alert('Request failed: ' + e.message);
+  }
+}
+function copyPromptSnippet(text) {
+  navigator.clipboard.writeText(text);
+  alert("Prompt copied to clipboard:\n\n" + text);
+}
+async function inspectDatabase() {
+  try {
+    const res = await fetch("{{ url_for('admin.dev_tool_inspect_db') }}");
+    const data = await res.json();
+    if(data.success) {
+      let msg = `Database Inspector (${data.total_tables} tables):\n\n`;
+      data.tables.forEach(t => { msg += `• ${t.table}: ${t.rows} row(s)\n`; });
+      alert(msg);
+    }
+  } catch(e) { alert("DB inspection failed: " + e.message); }
+}
+async function viewSystemLogs() {
+  try {
+    const res = await fetch("{{ url_for('admin.dev_tool_view_logs') }}");
+    const data = await res.json();
+    if(data.success) {
+      alert("Recent Log Entries:\n\n" + data.logs.join("\n"));
+    }
+  } catch(e) { alert("Log fetch failed: " + e.message); }
+}
+</script>
+{% endblock %}

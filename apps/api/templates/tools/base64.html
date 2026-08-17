@@ -1,0 +1,164 @@
+{% extends "public_base.html" %}
+{% block title %}Base64 Tool — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-12">
+  <div class="flex justify-between items-center mb-8">
+    <h1 class="text-3xl font-bold font-display gradient-text">Base64 Encoder / Decoder</h1>
+    <a href="{{ url_for('tools.index') }}" class="admin-btn-ghost text-sm">← Tools</a>
+  </div>
+  <div class="glass-card rounded-2xl p-6 mb-5">
+    <div class="flex gap-2 mb-5">
+      {% for mode in ['Text','URL','Image','File'] %}
+      <button onclick="setMode('{{ mode }}')" data-mode="{{ mode }}"
+        class="mode-btn text-sm px-4 py-2 rounded-lg border border-white/10 text-gray-400 hover:text-white transition-all
+               {% if loop.first %}border-cyan-500 text-cyan-400{% endif %}">{{ mode }}</button>{% endfor %}
+    </div>
+    <div id="mode-text">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <label class="admin-label mb-2 block">Input</label>
+          <textarea id="b64-input" rows="8" class="input-field font-mono resize-none" placeholder="Enter text to encode or Base64 to decode…" oninput="handleInput()"></textarea>
+        </div>
+        <div>
+          <label class="admin-label mb-2 block">Output</label>
+          <textarea id="b64-output" rows="8" class="input-field font-mono resize-none" readonly placeholder="Output will appear here…"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-4">
+        <button onclick="encode()" class="btn-neon text-sm py-2 px-5">Encode →</button>
+        <button onclick="decode()" class="btn-ghost-neon text-sm py-2 px-5">← Decode</button>
+        <button onclick="swapIO()" class="admin-btn-ghost text-sm">⇄ Swap</button>
+        <button onclick="copyOutput()" class="admin-btn-ghost text-sm ml-auto">Copy Output</button>
+        <button onclick="clearAll()" class="admin-btn-ghost text-sm">Clear</button>
+      </div>
+    </div>
+    <div id="mode-url" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <label class="admin-label mb-2 block">URL to Encode</label>
+          <input id="url-input" class="input-field font-mono" placeholder="https://example.com/path?q=hello world" oninput="encodeURL()"/>
+        </div>
+        <div>
+          <label class="admin-label mb-2 block">Encoded URL</label>
+          <input id="url-output" class="input-field font-mono" readonly/>
+        </div>
+      </div>
+      <div class="mt-4"><button onclick="decodeURL()" class="btn-ghost-neon text-sm py-2 px-5">← Decode URL</button></div>
+    </div>
+    <div id="mode-image" class="hidden">
+      <div class="border-2 border-dashed border-white/20 rounded-xl p-10 text-center" id="img-drop-zone">
+        <p class="text-gray-400 mb-3">Drop an image here or</p>
+        <label class="btn-neon text-sm cursor-pointer py-2 px-5 inline-block">
+          Browse Image <input type="file" accept="image/*" class="hidden" onchange="imageToBase64(event)"/>
+        </label>
+      </div>
+      <div id="img-result" class="hidden mt-5">
+        <img id="img-preview" class="max-h-40 rounded-xl mb-3 mx-auto"/>
+        <textarea id="img-b64" rows="4" class="input-field font-mono resize-none text-xs" readonly></textarea>
+        <div class="flex gap-3 mt-3">
+          <button onclick="copyOutput('img-b64')" class="btn-neon text-sm py-2 px-4">Copy Base64</button>
+          <span id="img-size" class="text-xs text-gray-400 self-center"></span>
+        </div>
+      </div>
+    </div>
+    <div id="mode-file" class="hidden">
+      <div class="border-2 border-dashed border-white/20 rounded-xl p-10 text-center">
+        <p class="text-gray-400 mb-3">Drop any file here or</p>
+        <label class="btn-neon text-sm cursor-pointer py-2 px-5 inline-block">
+          Browse File <input type="file" class="hidden" onchange="fileToBase64(event)"/>
+        </label>
+      </div>
+      <div id="file-result" class="hidden mt-5">
+        <div class="flex items-center gap-3 glass border border-white/10 rounded-xl p-4 mb-3">
+          <span class="text-3xl" id="file-icon">📄</span>
+          <div><p class="font-medium text-white" id="file-name"></p><p class="text-xs text-gray-400" id="file-meta"></p></div>
+        </div>
+        <textarea id="file-b64" rows="4" class="input-field font-mono resize-none text-xs" readonly></textarea>
+        <button onclick="copyOutput('file-b64')" class="btn-neon text-sm py-2 px-4 mt-3">Copy Base64</button>
+      </div>
+    </div>
+  </div>
+  <!-- cheat sheet -->
+  <div class="glass-card rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Base64 Quick Reference</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+      {% for title, code in [
+        ("Encode in JS", "btoa('Hello World')"),
+        ("Decode in JS", "atob('SGVsbG8gV29ybGQ=')"),
+        ("Encode in Python", "import base64
+base64.b64encode(b'Hello')"),
+        ("Decode in Python", "base64.b64decode('SGVsbG8=')"),
+        ("Encode in Bash", "echo -n 'Hello' | base64"),
+        ("Decode in Bash", "echo 'SGVsbG8=' | base64 -d"),
+      ] %}
+      <div class="glass border border-white/8 rounded-xl p-4">
+        <p class="text-xs text-gray-500 mb-2">{{ title }}</p>
+        <code class="text-xs text-cyan-400 font-mono whitespace-pre">{{ code }}</code>
+      </div>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let currentMode = 'Text';
+function setMode(m) {
+  currentMode = m;
+  ['Text','URL','Image','File'].forEach(mode => {
+    document.getElementById('mode-'+mode.toLowerCase()).classList.toggle('hidden', mode !== m);
+  });
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('border-cyan-500', b.dataset.mode === m);
+    b.classList.toggle('text-cyan-400', b.dataset.mode === m);
+    b.classList.toggle('border-white/10', b.dataset.mode !== m);
+    b.classList.toggle('text-gray-400', b.dataset.mode !== m);
+  });
+}
+function encode() {
+  try { document.getElementById('b64-output').value = btoa(unescape(encodeURIComponent(document.getElementById('b64-input').value))); }
+  catch(e) { showToast('Encode error: ' + e.message, 'error'); }
+}
+function decode() {
+  try { document.getElementById('b64-output').value = decodeURIComponent(escape(atob(document.getElementById('b64-input').value.trim()))); }
+  catch(e) { showToast('Invalid Base64: ' + e.message, 'error'); }
+}
+function handleInput() {
+  const v = document.getElementById('b64-input').value.trim();
+  if (/^[A-Za-z0-9+/]+=*$/.test(v) && v.length % 4 === 0) decode();
+  else encode();
+}
+function swapIO() {
+  const a = document.getElementById('b64-input'), b = document.getElementById('b64-output');
+  [a.value, b.value] = [b.value, a.value];
+}
+function copyOutput(id = 'b64-output') { navigator.clipboard.writeText(document.getElementById(id).value); showToast('Copied!', 'success'); }
+function clearAll() { document.getElementById('b64-input').value=''; document.getElementById('b64-output').value=''; }
+function encodeURL() { document.getElementById('url-output').value = encodeURIComponent(document.getElementById('url-input').value); }
+function decodeURL() { document.getElementById('url-input').value = decodeURIComponent(document.getElementById('url-output').value); }
+function imageToBase64(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = r => {
+    document.getElementById('img-preview').src = r.result;
+    document.getElementById('img-b64').value = r.result;
+    document.getElementById('img-size').textContent = (file.size/1024).toFixed(2)+' KB → '+(r.result.length/1024).toFixed(2)+' KB Base64';
+    document.getElementById('img-result').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+function fileToBase64(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const icons = {pdf:'📄',zip:'📦',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',mp3:'🎵',mp4:'🎬',jpg:'🖼️',png:'🖼️'};
+  document.getElementById('file-icon').textContent = icons[ext] || '📁';
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('file-meta').textContent = `${file.type || 'unknown'} · ${(file.size/1024).toFixed(2)} KB`;
+  const reader = new FileReader();
+  reader.onload = r => {
+    document.getElementById('file-b64').value = r.result;
+    document.getElementById('file-result').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+</script>
+{% endblock %}

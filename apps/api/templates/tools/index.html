@@ -1,0 +1,135 @@
+{% extends "public_base.html" %}
+{% block title %}Dev Tools Hub — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:1300px;margin:0 auto;padding:56px 20px 80px">
+  <div style="text-align:center;margin-bottom:48px">
+    <div class="section-badge">Developer Tools</div>
+    <h1 style="font-size:clamp(36px,6vw,64px);font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2),#00ff88);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:14px;line-height:1.1">Dev Tools Hub</h1>
+    <p style="font-size:16px;color:var(--c-text-2);max-width:560px;margin:0 auto">Everything a developer needs — formatters, generators, network diagnostics, converters. All free, no API key required.</p>
+  </div>
+
+  <div style="max-width:420px;margin:0 auto 28px">
+    <input id="tool-search" type="text" placeholder="Search dev tools…" class="input-field" style="width:100%" oninput="filterSearch(this.value)">
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:36px" id="tool-filters">
+    {% for cat in ['All','Code Playground','Formatters','Generators','Converters','Network','Text','Image','File Tools','Components'] %}
+    <button onclick="filterTools('{{ cat }}',this)" data-cat="{{ cat }}"
+      style="font-size:12px;padding:7px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--c-text-2);cursor:pointer;transition:all .2s;font-family:inherit{% if loop.first %};border-color:rgba(var(--c-accent-rgb),0.5);color:var(--c-accent);background:rgba(var(--c-accent-rgb),0.08){% endif %}">{{ cat }}</button>
+    {% endfor %}
+  </div>
+
+  <div id="tools-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const TOOLS = [
+  // ── Component Playground / Editor ──────────────────────────────────────
+  { name:'Code Playground',   cats:['Code Playground'],icon:'💻', desc:'Monaco editor — HTML/CSS/JS/TS, live preview, custom IDE-style snippets',   badge:'🔥', url:'{{ url_for("tools.playground") }}' },
+  { name:'Animation Studio',  cats:['Components'],      icon:'✨', desc:'60+ CSS animations — preview, customise, copy instantly',                   badge:'',   url:'{{ url_for("tools.animations") }}' },
+  { name:'Icon Library',      cats:['Components'],      icon:'🎨', desc:'433 real Lucide icons — search, click to copy SVG/HTML/React',              badge:'',   url:'{{ url_for("tools.icons") }}' },
+  { name:'Component Gallery', cats:['Components'],      icon:'🧩', desc:'Ready-made hero, nav, footer, CTA & dashboard blocks — copy real code',     badge:'New',url:'{{ url_for("tools.components") }}' },
+
+  // ── Formatters ────────────────────────────────────────────────────────
+  { name:'JSON Formatter',    cats:['Formatters','Code'], icon:'{}', desc:'Format, validate, and minify JSON with error highlighting',              badge:'', url:'{{ url_for("tools.json_formatter") }}' },
+  { name:'SQL Formatter',     cats:['Formatters','Code'], icon:'🗄️', desc:'Pretty-print existing SQL — keyword casing, clause line breaks',          badge:'', url:'{{ url_for("ai_browser.sql_formatter_page") }}' },
+  { name:'HTML/CSS/JS Minifier', cats:['Formatters','Code'], icon:'⚙️', desc:'Minify HTML, CSS and JavaScript to reduce bundle size',                badge:'', url:'{{ url_for("ai_browser.minifier") }}' },
+  { name:'JSON Diff',         cats:['Formatters','Code'], icon:'🔀', desc:'Structural JSON comparison — added, removed, changed keys at any depth',  badge:'', url:'{{ url_for("ai_browser.json_diff_page") }}' },
+  { name:'Text Diff Checker', cats:['Formatters','Text'], icon:'🔍', desc:'Compare two texts side by side — highlights additions and deletions',      badge:'', url:'{{ url_for("ai.diff_checker") }}' },
+
+  // ── Generators ────────────────────────────────────────────────────────
+  { name:'UUID Generator',    cats:['Generators'], icon:'🆔', desc:'Generate v4 UUIDs in bulk, with or without hyphens',                              badge:'', url:'{{ url_for("ai_browser.uuid_generator") }}' },
+  { name:'Hash Generator',    cats:['Generators'], icon:'#',  desc:'SHA-1, SHA-256, SHA-384, SHA-512 — computed locally via Web Crypto',              badge:'', url:'{{ url_for("ai_browser.hash_generator") }}' },
+  { name:'Password Generator',cats:['Generators'], icon:'🔑', desc:'Generate strong passwords with custom rules and strength meter',                  badge:'', url:'{{ url_for("ai.password_gen") }}' },
+  { name:'QR Code Generator', cats:['Generators'], icon:'▦',  desc:'Generate QR codes for URLs or text — download as PNG',                           badge:'', url:'{{ url_for("ai_browser.qr_generator") }}' },
+  { name:'Lorem Ipsum Generator', cats:['Generators','Text'], icon:'📃', desc:'Generate placeholder text — paragraphs, sentences, or words',          badge:'', url:'{{ url_for("ai_browser.lorem_ipsum") }}' },
+  { name:'Gradient & Tailwind Generator', cats:['Generators'], icon:'🎛️', desc:'Build a gradient visually, export as CSS or Tailwind arbitrary value', badge:'', url:'{{ url_for("ai_browser.gradient_generator_page") }}' },
+  { name:'CSS Generator',     cats:['Generators'], icon:'🎨', desc:'Visually generate shadows, glass effects, transforms',                           badge:'', url:'{{ url_for("tools.css_generator") }}' },
+  { name:'Meta Tag Generator',cats:['Generators'], icon:'🏷️', desc:'Real SEO + Open Graph + Twitter Card tags, ready to paste',                      badge:'', url:'{{ url_for("ai_browser.meta_tags_page") }}' },
+
+  // ── Converters ────────────────────────────────────────────────────────
+  { name:'Base64 Encoder',    cats:['Converters'], icon:'🔐', desc:'Encode/decode text, URLs and images to Base64',                                  badge:'', url:'{{ url_for("tools.base64_tool") }}' },
+  { name:'URL Encoder / Decoder', cats:['Converters'], icon:'🌐', desc:'Encode and decode URL components and query strings',                         badge:'', url:'{{ url_for("tools.base64_tool") }}' },
+  { name:'Unix Timestamp Converter', cats:['Converters'], icon:'⏱️', desc:'Convert Unix timestamps to human dates and back, any timezone',           badge:'', url:'{{ url_for("ai.timestamp") }}' },
+  { name:'Markdown Preview',  cats:['Converters','Text'], icon:'📝', desc:'Live split-pane Markdown editor with GitHub-flavored rendering',           badge:'', url:'{{ url_for("tools.markdown_preview") }}' },
+  { name:'JWT Decoder',       cats:['Converters','Code'], icon:'🔓', desc:'Decode JWT header & payload locally — never leaves your browser',         badge:'', url:'{{ url_for("ai_browser.jwt_decoder_page") }}' },
+  { name:'URL Shortener',     cats:['Converters'], icon:'🔗', desc:'Real database-backed short links with click tracking',                            badge:'', url:'{{ url_for("ai_browser.url_shortener_page") }}' },
+
+  // ── Network / Diagnostics (real protocol clients) ───────────────────────
+  { name:'API Tester',        cats:['Network','Code'], icon:'📡', desc:'Send real HTTP requests from your browser, inspect the response',           badge:'', url:'{{ url_for("ai_browser.api_tester_page") }}' },
+  { name:'DNS Lookup',        cats:['Network'], icon:'🌍', desc:'Real A-record resolution + reverse DNS, run from the server',                       badge:'', url:'{{ url_for("ai_browser.dns_lookup_page") }}' },
+  { name:'SSL Checker',       cats:['Network'], icon:'🔒', desc:'Connects to the real server on port 443 and reads its actual certificate',          badge:'', url:'{{ url_for("ai_browser.ssl_checker_page") }}' },
+  { name:'WHOIS Lookup',      cats:['Network'], icon:'📋', desc:'Real WHOIS protocol query with registrar referral-following',                       badge:'', url:'{{ url_for("ai_browser.whois_lookup_page") }}' },
+
+  // ── Text ──────────────────────────────────────────────────────────────
+  { name:'Word & Char Counter',cats:['Text'], icon:'📊', desc:'Count words, characters, sentences and reading time live',                            badge:'', url:'{{ url_for("ai_browser.word_counter") }}' },
+  { name:'Color Picker & Palettes', cats:['Text'], icon:'🌈', desc:'Pick colors, convert HEX/RGB/HSL, generate harmonies',                            badge:'', url:'{{ url_for("tools.color_picker") }}' },
+
+  // ── Image / File Tools ───────────────────────────────────────────────
+  { name:'Background Remover',cats:['Image','File Tools'], icon:'🎭', desc:'Remove image backgrounds in-browser — no server needed',                 badge:'', url:'{{ url_for("ai.bg_remove") }}' },
+  { name:'Image Compressor',  cats:['Image','File Tools'], icon:'📦', desc:'Compress JPG/PNG/WebP with quality control',                              badge:'', url:'{{ url_for("ai.img_compress") }}' },
+  { name:'Image Resizer & Crop', cats:['Image','File Tools'], icon:'✂️', desc:'Resize, crop, rotate and flip images — export any format',             badge:'', url:'{{ url_for("ai_browser.image_resize") }}' },
+  { name:'PDF Merger',        cats:['File Tools'], icon:'📑', desc:'Merge multiple PDFs in the browser — drag, reorder, combine',                     badge:'', url:'{{ url_for("ai_browser.pdf_merge") }}' },
+  { name:'PDF Editor',        cats:['File Tools'], icon:'✏️', desc:'Reorder, rotate, delete, or add pages to a PDF and export it',                    badge:'', url:'{{ url_for("ai_browser.pdf_editor") }}' },
+  { name:'PDF Converter',     cats:['File Tools'], icon:'🔄', desc:'Images → PDF, or PDF → Images (PNG), all in your browser',                        badge:'', url:'{{ url_for("ai_browser.pdf_converter") }}' },
+  { name:'PDF → Text Extractor', cats:['File Tools'], icon:'📄', desc:'Extract text from PDFs client-side, no upload needed',                         badge:'', url:'{{ url_for("ai_browser.pdf_to_text") }}' },
+  { name:'AI Voice Studio',   cats:['Generators','File Tools'], icon:'🎙️', desc:'Generate ultra-realistic human voices with AI text-to-speech',     badge:'Free', url:'{{ url_for("tools.voice_studio") }}' },
+  { name:'File → Data URL',   cats:['File Tools','Converters'], icon:'🔗', desc:'Convert any file to a data URL instantly',                          badge:'', url:'{{ url_for("ai.file_to_url") }}' },
+  { name:'File → Shareable URL', cats:['File Tools'], icon:'📤', desc:'Upload a real file, get back a real working public HTTP link',                 badge:'Sign in', url:'{{ url_for("ai_browser.upload_to_url_page") }}' },
+  { name:'URL Downloader',    cats:['File Tools'], icon:'⬇️', desc:'Download a direct file link (image, video, audio, document)',                    badge:'', url:'{{ url_for("ai_browser.url_downloader") }}' },
+  { name:'Image to Text (OCR)', cats:['Image','Converters'], icon:'📷', desc:'Extract text from images or scanned photos with OCR', badge:'New', url:'{{ url_for("ai_browser.image_to_text_page") }}' },
+  { name:'Image to Word (.docx)', cats:['Image','Converters'], icon:'🖼️', desc:'Convert scanned images or screenshots to editable Word docs', badge:'New', url:'{{ url_for("ai_browser.image_to_word_page") }}' },
+  { name:'Real PDF Content Editor', cats:['File Tools'], icon:'📝', desc:'Interactive PDF editor: Edit text content, reorder & annotate pages', badge:'New', url:'{{ url_for("ai_browser.pdf_editor") }}' },
+  { name:'PDF to Word Converter', cats:['File Tools','Converters'], icon:'📄', desc:'Convert PDF documents into editable Word (.docx) files', badge:'New', url:'{{ url_for("ai_browser.pdf_to_word_page") }}' },
+  { name:'Word to PDF Converter', cats:['File Tools','Converters'], icon:'📕', desc:'Convert Word (.docx, .doc) files to standard PDF documents', badge:'New', url:'{{ url_for("ai_browser.word_to_pdf_page") }}' },
+  { name:'Social Media Downloader', cats:['File Tools'], icon:'📥', desc:'Download MP4 video, audio or images from YouTube, IG, TikTok, X, FB', badge:'New', url:'{{ url_for("ai_browser.social_downloader_page") }}' },
+  { name:'Webpage URL to File', cats:['File Tools','Converters'], icon:'🌐', desc:'Convert any public webpage URL to PDF or HTML file download', badge:'New', url:'{{ url_for("ai_browser.url_to_file_page") }}' },
+  { name:'MOV to MP4 Converter', cats:['Video Tools','Converters'], icon:'🎬', desc:'Convert Apple QuickTime (.mov) videos to universally-playable .mp4', badge:'New', url:'{{ url_for("ai_browser.mov_to_mp4_page") }}' },
+  { name:'Video Compressor', cats:['Video Tools'], icon:'🗜️', desc:'Shrink a video file size for sharing or uploading, with a quality tradeoff you control', badge:'New', url:'{{ url_for("ai_browser.video_compressor_page") }}' },
+];
+
+let filtered = [...TOOLS];
+let activeSearch = '';
+let activeCat = 'All';
+
+function render() {
+  document.getElementById("tools-grid").innerHTML = filtered.map(t => `
+    <a href="${t.url}" class="glass-card-premium card-hover" style="display:block;text-decoration:none;border-radius:var(--radius-lg,20px);overflow:hidden;position:relative">
+      ${t.badge ? `<div style="position:absolute;top:10px;right:10px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));color:#000;font-size:9px;font-weight:800;padding:2px 8px;border-radius:8px">${t.badge}</div>` : ''}
+      <div style="padding:20px">
+        <div style="font-size:28px;margin-bottom:10px">${t.icon}</div>
+        <div style="font-size:14px;font-weight:700;color:#e8edf8;margin-bottom:6px">${t.name}</div>
+        <div style="font-size:12px;color:var(--c-text-2);line-height:1.6">${t.desc}</div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;gap:4px">${t.cats.slice(0,2).map(c=>`<span style="font-size:9px;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,0.06);color:var(--c-text-3)">${c}</span>`).join("")}</div>
+        <span style="font-size:11px;color:var(--c-accent)">Open →</span>
+      </div>
+    </a>`).join("");
+  if (!filtered.length) {
+    document.getElementById("tools-grid").innerHTML = '<p style="color:var(--c-text-2);grid-column:1/-1;text-align:center;padding:40px">No tools match your search.</p>';
+  }
+}
+
+function applyFilters() {
+  filtered = TOOLS.filter(t => {
+    const matchesCat = activeCat === 'All' || t.cats.includes(activeCat);
+    const matchesSearch = !activeSearch || t.name.toLowerCase().includes(activeSearch) || t.desc.toLowerCase().includes(activeSearch);
+    return matchesCat && matchesSearch;
+  });
+  render();
+}
+
+function filterTools(cat, btn) {
+  document.querySelectorAll("#tool-filters button").forEach(b=>{
+    b.style.borderColor="rgba(255,255,255,0.1)";b.style.color="var(--c-text-2)";b.style.background="transparent";
+  });
+  btn.style.borderColor="rgba(var(--c-accent-rgb),0.5)";btn.style.color="var(--c-accent)";btn.style.background="rgba(var(--c-accent-rgb),0.08)";
+  activeCat = cat;
+  applyFilters();
+}
+function filterSearch(q) { activeSearch = q.toLowerCase(); applyFilters(); }
+render();
+</script>
+{% endblock %}

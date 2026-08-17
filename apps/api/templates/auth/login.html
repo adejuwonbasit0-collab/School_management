@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Sign In — {{ site_name }}{% endblock %}
+{% block body %}
+<div class="auth-shell">
+  <div class="auth-orb" style="width:320px;height:320px;top:-80px;left:-100px;background:radial-gradient(circle,var(--c-accent),transparent 70%)"></div>
+  <div class="auth-orb" style="width:280px;height:280px;bottom:-100px;right:-80px;background:radial-gradient(circle,var(--c-accent-2),transparent 70%)"></div>
+  <div class="auth-card reveal">
+    <div class="text-center mb-8">
+      <a href="{{ url_for('cms.home') }}" class="text-2xl font-bold font-display gradient-text">{{ site_name }}</a>
+      <p class="mt-2 text-gray-400 text-sm">Sign in to your account</p>
+    </div>
+    <div class="glass-card-premium p-8">
+      <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-5">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="next" value="{{ request.args.get('next', '') }}"/>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Email</label>
+          <input name="email" type="email" required autocomplete="email"
+            class="input-premium" placeholder="you@example.com"/>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
+          <input name="password" type="password" required autocomplete="current-password"
+            class="input-premium" placeholder="••••••••"/>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <label class="flex items-center gap-2 text-gray-400 cursor-pointer">
+            <input type="checkbox" name="remember" class="rounded accent-cyan-500"/> Remember me
+          </label>
+          <a href="{{ url_for('auth.forgot_password') }}" class="text-cyan-400 hover:text-cyan-300 transition-colors">Forgot password?</a>
+        </div>
+        <button type="submit" class="w-full btn-neon justify-center py-3 text-sm font-semibold">Sign In</button>
+      </form>
+      <p class="mt-6 text-center text-sm text-gray-400">
+        No account? <a href="{{ url_for('auth.register') }}" class="text-cyan-400 hover:text-cyan-300 font-medium">Create one free</a>
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

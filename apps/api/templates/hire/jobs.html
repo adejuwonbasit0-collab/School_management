@@ -1,0 +1,22 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block title %}Jobs — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-12">
+  <div class="flex justify-between items-center mb-8">
+    <h1 class="text-3xl font-bold font-display gradient-text">Open Jobs</h1>
+    {% if current_user.is_authenticated and current_user.is_client() %}
+    <a href="{{ url_for('freelance.post_job') }}" class="btn-neon text-sm">+ Post a Job</a>{% endif %}
+  </div>
+  <div class="space-y-4">
+    {% for j in jobs %}
+    <a href="{{ url_for('freelance.job_detail', job_id=j.id) }}" class="glass border border-white/10 rounded-xl p-5 flex justify-between items-start hover:border-cyan-500/30 transition-all group block">
+      <div>
+        <h3 class="font-semibold text-white group-hover:text-cyan-300 transition-colors">{{ j.title }}</h3>
+        <p class="text-sm text-gray-400 mt-1">{{ j.category }} · {{ j.proposals.count() }} proposals · {{ j.created_at | timeago }}</p>
+        {% if j.skills %}<div class="flex gap-1.5 mt-2">{% for s in j.skills[:3] %}<span class="text-xs px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">{{ s }}</span>{% endfor %}</div>{% endif %}
+      </div>
+      {% if j.budget_max %}<p class="font-mono text-white flex-shrink-0 ml-4">{{ j.budget_max | int | money }}</p>{% endif %}
+    </a>{% else %}<p class="text-gray-500 text-center py-16">No open jobs right now.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

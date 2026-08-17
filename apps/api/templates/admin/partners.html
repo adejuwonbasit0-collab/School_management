@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Partners{% endblock %}
+{% block page_subtitle %}Manage the "Trusted by" logo strip shown on your homepage{% endblock %}
+{% block content %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Add a Partner</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.partner_create') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-3" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Name</label>
+          <input type="text" name="name" required class="a-input" style="margin-top:6px" placeholder="e.g. Acme Corp"/>
+        </div>
+        <div>
+          <label class="a-label">Website (optional)</label>
+          <input type="url" name="website" class="a-input" style="margin-top:6px" placeholder="https://acme.com"/>
+        </div>
+        <div>
+          <label class="a-label">Upload Logo</label>
+          <input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.svg,.webp" class="a-input" style="margin-top:6px;padding:8px"/>
+        </div>
+      </div>
+      <label class="a-label">— or paste a logo image URL instead of uploading —</label>
+      <input type="text" name="logo_url" class="a-input" style="margin-top:6px" placeholder="https://example.com/logo.svg"/>
+      <div style="margin-top:14px">
+        <button type="submit" class="a-btn a-btn-primary">Add Partner</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Partners ({{ partners|length }})</div></div>
+  <div class="a-panel-body">
+    {% if not partners %}
+    <p style="color:var(--text-3);font-size:13px">No partners yet — add your first one above.</p>
+    {% endif %}
+    <div class="a-grid a-grid-4" style="gap:14px">
+      {% for p in partners %}
+      <div style="border:1px solid var(--border-1,rgba(255,255,255,0.08));border-radius:10px;padding:14px;text-align:center;{{ '' if p.active else 'opacity:0.4' }}">
+        <div style="height:48px;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:8px;padding:8px;margin-bottom:10px">
+          <img src="{{ p.logo_url }}" alt="{{ p.name }}" style="max-height:100%;max-width:100%;object-fit:contain"/>
+        </div>
+        <p style="font-size:12px;font-weight:600">{{ p.name }}</p>
+        {% if p.website %}<p style="font-size:10px;color:var(--text-3)">{{ p.website }}</p>{% endif %}
+        <div style="display:flex;gap:6px;justify-content:center;margin-top:10px">
+          <form method="POST" action="{{ url_for('admin.partner_toggle', pid=p.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-xs">{{ 'Hide' if p.active else 'Show' }}</button>
+          </form>
+          <form method="POST" action="{{ url_for('admin.partner_delete', pid=p.id) }}" onsubmit="return confirm('Remove {{ p.name }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-xs" style="color:#f87171">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

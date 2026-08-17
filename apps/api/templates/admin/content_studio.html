@@ -1,0 +1,1166 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Content Intelligence Studio{% endblock %}
+{% block page_subtitle %}Discover content opportunities, optimize brand voice, generate video scripts, create AI images, and schedule across platforms.{% endblock %}
+{% block content %}
+
+<!-- Custom Styles for Premium UI -->
+<style>
+  .studio-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+  }
+  @media(max-width: 992px) {
+    .studio-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .card-deck {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  
+  .idea-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .idea-card:hover {
+    transform: translateY(-2px);
+    border-color: #58a6ff;
+  }
+  
+  .badge {
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge-linkedin { background: #0a66c2; color: #fff; }
+  .badge-twitter { background: #1da1f2; color: #fff; }
+  .badge-instagram { background: #e1306c; color: #fff; }
+  .badge-facebook { background: #1877f2; color: #fff; }
+  .badge-blog { background: #3fb950; color: #fff; }
+  
+  .badge-high { background: rgba(63, 185, 80, 0.15); color: #56d364; border: 1px solid rgba(63, 185, 80, 0.3); }
+  .badge-medium { background: rgba(210, 153, 34, 0.15); color: #e3b341; border: 1px solid rgba(210, 153, 34, 0.3); }
+  .badge-low { background: rgba(248, 81, 73, 0.15); color: #f85149; border: 1px solid rgba(248, 81, 73, 0.3); }
+
+  /* Calendar styling */
+  .calendar-container {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .calendar-day-header {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #8b949e;
+    text-transform: uppercase;
+  }
+  .calendar-cell {
+    aspect-ratio: 1.1;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 6px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 50px;
+  }
+  .calendar-cell.today {
+    border-color: #58a6ff;
+  }
+  .calendar-cell .day-num {
+    font-size: 10px;
+    font-weight: 600;
+    color: #8b949e;
+  }
+  .calendar-icons {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+  .calendar-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  /* Video Script Output styles */
+  .script-section {
+    background: #0d1117;
+    border-left: 3px solid #58a6ff;
+    padding: 10px 14px;
+    margin-top: 10px;
+    border-radius: 0 8px 8px 0;
+  }
+</style>
+
+<div class="studio-grid">
+  <!-- Left Column: Builders & Generators -->
+  <div>
+    <!-- Fetch Content Opportunities (Scanners) -->
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header">
+        <div class="a-panel-title">📡 Website Intelligence Scanner</div>
+        <button type="button" class="a-btn a-btn-primary" onclick="fetchIdeas()" id="scan-btn">Scan Website Context</button>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary)">
+          Continuously scans local portfolio projects, blogs, services, products, and testimonials to identify high-probability audience growth angles automatically.
+        </p>
+        <div id="ideas-status" style="font-size:12px; margin-top:8px;"></div>
+        <div id="ideas-container" class="card-deck">
+          <!-- Ideas loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Composer & Writers -->
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header">
+        <div class="a-panel-title">✍️ Social Post & Blog Composer</div>
+      </div>
+      <div class="a-panel-body">
+        <div class="a-grid a-grid-2" style="gap:14px; margin-bottom:12px">
+          <div>
+            <label class="a-label">Content Format</label>
+            <select id="cs-type" class="a-input" style="margin-top:6px">
+              <option value="social_caption">Social Media Caption</option>
+              <option value="blog_post">Blog Post (+ Excerpt / SEO Meta)</option>
+              <option value="seo_meta">SEO Title & Meta only</option>
+              <option value="email">Marketing Email Newsletter</option>
+            </select>
+          </div>
+          <div>
+            <label class="a-label">Target Channel (Optional)</label>
+            <select id="cs-target-channel" class="a-input" style="margin-top:6px">
+              <option value="">— Just draft, I'll copy manually —</option>
+              {% for c in channels %}
+              <option value="{{ c.id }}">{{ c.label }} ({{ c.platform }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <label class="a-label">Describe your post topic or paste outline</label>
+        <textarea id="cs-prompt" rows="3" class="a-input" style="margin-top:6px" placeholder="e.g. Discuss our newest design project, highlight how we solved the customer's navigation problems."></textarea>
+        <button type="button" class="a-btn a-btn-primary" style="margin-top:10px" onclick="generateContent()" id="cs-generate-btn">✨ Generate Copy</button>
+        <p id="cs-status" style="font-size:12px;color:var(--text-secondary);margin-top:8px"></p>
+
+        <!-- Generation Output Block (5 Variations Deck) -->
+        <div id="cs-result" style="display:none; margin-top:16px; border-top:1px solid #30363d; padding-top:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+            <span style="font-size:13px; font-weight:700; color:#38bdf8">✨ 5 AI Generated Post Variations</span>
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="copyAllResultText()">📋 Copy All 5 Variations</button>
+          </div>
+          <div id="variations-deck" class="card-deck" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video Script Breakdown Generator -->
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header">
+        <div class="a-panel-title">🎬 Short Video Script Outliner</div>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Automatically structures script breakdowns (Hooks, Visual cues, Outro hooks) for TikTok, Reels, or YouTube Shorts.
+        </p>
+        <div style="display:flex; gap:10px;">
+          <input id="vs-topic" class="a-input" placeholder="e.g. 3 web design mistakes you must avoid in 2026"/>
+          <button type="button" class="a-btn a-btn-primary" onclick="generateVideoScript()" id="vs-btn">Generate Script</button>
+        </div>
+        <p id="vs-status" style="font-size:12px; margin-top:6px;"></p>
+        <div id="vs-result" style="display:none; margin-top:16px;">
+          <!-- Script output populated dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 🔊 AI Voiceover (Text-to-Speech) Studio -->
+    <div class="a-panel" style="margin-bottom:20px; border-color:#0ea5e9">
+      <div class="a-panel-header">
+        <div class="a-panel-title" style="color:#38bdf8">🔊 AI Voiceover (Text-to-Speech) Studio</div>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Convert your video scripts or marketing posts into realistic AI spoken voiceovers with real-time speech synthesis & audio controls.
+        </p>
+        <label class="a-label">Voiceover Script Text</label>
+        <textarea id="tts-script" rows="4" class="a-input" style="margin-top:4px" placeholder="Welcome to Bazillin Studio. Here is how we build high-converting web applications for your brand."></textarea>
+        
+        <div class="a-grid a-grid-3" style="gap:10px; margin-top:10px">
+          <div>
+            <label class="a-label">Voice Persona</label>
+            <select id="tts-voice" class="a-input" style="margin-top:4px">
+              <option value="default">🎙️ Professional Natural Voice</option>
+              <option value="male">💼 Male Business Presenter</option>
+              <option value="female">✨ Female Energetic Presenter</option>
+            </select>
+          </div>
+          <div>
+            <label class="a-label">Speaking Pitch</label>
+            <input type="range" id="tts-pitch" min="0.5" max="1.5" step="0.1" value="1.0" class="a-input" style="margin-top:4px"/>
+          </div>
+          <div>
+            <label class="a-label">Speaking Speed</label>
+            <input type="range" id="tts-rate" min="0.7" max="1.4" step="0.1" value="1.0" class="a-input" style="margin-top:4px"/>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap">
+          <button type="button" class="a-btn a-btn-primary" onclick="playVoiceover()">🔊 Play Audio Voiceover</button>
+          <button type="button" class="a-btn a-btn-danger" onclick="stopVoiceover()">⏹️ Stop Audio</button>
+        </div>
+        <p id="tts-status" style="font-size:12px; color:#38bdf8; margin-top:8px; display:none"></p>
+      </div>
+    </div>
+
+    <!-- DALL-E AI Image Generator -->
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header">
+        <div class="a-panel-title">🖼️ DALL-E Image Creator</div>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Generate ready-to-attach creative graphics for posts using OpenAI DALL-E.
+        </p>
+        <div style="display:flex; gap:10px; margin-bottom:12px">
+          <input id="img-prompt" class="a-input" placeholder="e.g. Modern workspace with neon lighting, futuristic 3D render graphic style"/>
+          <button type="button" class="a-btn a-btn-primary" onclick="generateImage()" id="img-btn">Generate Image</button>
+        </div>
+        <p id="img-status" style="font-size:12px;"></p>
+        <div id="img-result" style="display:none; margin-top:16px; text-align:center;">
+          <img id="img-output" src="" style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid #30363d; margin-bottom:10px;"/>
+          <div>
+            <input id="img-url-out" class="a-input" readonly style="max-width:400px; display:inline-block; margin-right:8px;"/>
+            <button type="button" class="a-btn a-btn-ghost a-btn-sm" onclick="copyImageUrl()">📋 Copy URL</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloom Media Generator (real API: on-brand image generation only) -->
+    <div class="a-panel" style="margin-bottom:20px; border-color:#ec4899">
+      <div class="a-panel-header">
+        <div class="a-panel-title" style="color:#f472b6">🌸 Bloom Image Generator</div>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Generates an on-brand image from a prompt via Bloom (trybloom.ai) — their API is
+          image-only, so this panel no longer offers text/video. Configure your API key and
+          onboard a brand once in <a href="{{ url_for('admin.settings') }}#bloom" style="color:#f472b6">Admin → Settings</a>
+          before generating here.
+        </p>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <textarea id="bloom-media-prompt" rows="2" class="a-input" style="flex:1" placeholder="Describe the image you want Bloom to generate..."></textarea>
+          <button type="button" class="a-btn a-btn-primary" style="white-space:nowrap;align-self:flex-start" onclick="generateBloomMedia()" id="bloom-media-btn">Generate</button>
+        </div>
+        <p id="bloom-media-status" style="font-size:12px;margin-top:8px"></p>
+        <div id="bloom-media-result" style="display:none;margin-top:12px">
+          <img id="bloom-media-img-out" style="display:none;max-width:100%;max-height:400px;border-radius:8px;border:1px solid #30363d"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Free image alternatives: no-key AI generation + real stock photos -->
+    <div class="a-panel" style="margin-bottom:20px; border-color:#22c55e">
+      <div class="a-panel-header">
+        <div class="a-panel-title" style="color:#4ade80">🌱 Free Image Finder (no Bloom/DALL-E needed)</div>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Two free ways to get an image when Bloom or DALL-E aren't available: generate one
+          with Pollinations (AI, completely free, <strong>no API key required</strong>), or pull a
+          real matching stock photo from Pexels (free key at
+          <a href="https://www.pexels.com/api/" target="_blank" style="color:#4ade80">pexels.com/api</a>,
+          set it in <a href="{{ url_for('admin.settings') }}#bloom" style="color:#4ade80">Admin → Settings</a>).
+        </p>
+        <div style="display:flex;gap:10px;margin-bottom:10px">
+          <input id="free-img-query" class="a-input" style="flex:1" placeholder="e.g. team collaborating around a laptop, modern office"/>
+          <button type="button" class="a-btn a-btn-primary" onclick="pollinationsGenerate()" id="free-img-ai-btn">✨ Generate (free AI)</button>
+          <button type="button" class="a-btn a-btn-ghost" onclick="fetchStockPhotos()" id="free-img-photo-btn">📷 Find Real Photos</button>
+        </div>
+        <p id="free-img-status" style="font-size:12px;margin-top:4px"></p>
+        <div id="free-img-single-result" style="display:none;margin-top:12px;text-align:center">
+          <img id="free-img-single-output" src="" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #30363d;margin-bottom:10px"/>
+          <div>
+            <input id="free-img-single-url" class="a-input" readonly style="max-width:400px;display:inline-block;margin-right:8px"/>
+            <button type="button" class="a-btn a-btn-ghost a-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('free-img-single-url').value)">📋 Copy URL</button>
+          </div>
+        </div>
+        <div id="free-img-grid" style="display:none;margin-top:12px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px"></div>
+      </div>
+    </div>
+
+    <div class="a-panel" style="margin-bottom:20px; border-color:#a855f7">
+      <div class="a-panel-header">
+        <div class="a-panel-title" style="color:#c084fc">🎨 Instant AI Marketing Graphic Banner Generator</div>
+      </div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Generate custom promotional graphic banners with custom prompts, dynamic color themes, and logo badges.
+        </p>
+
+        <div class="a-grid a-grid-2" style="gap:10px; margin-bottom:12px">
+          <div>
+            <label class="a-label">Graphic Theme Preset</label>
+            <select id="banner-theme" class="a-input" style="margin-top:4px" onchange="renderMarketingBanner()">
+              <option value="cyberpunk">🔮 Cyberpunk Neon (Dark Purple & Cyan)</option>
+              <option value="corporate">💼 Corporate Dark (Deep Blue & Gold)</option>
+              <option value="minimal">🌿 Minimal Slate (Slate & Emerald)</option>
+              <option value="gradient">🔥 Vibrant Gradient (Indigo & Violet)</option>
+            </select>
+          </div>
+          <div>
+            <label class="a-label">AI Auto-Prompt Generator</label>
+            <button type="button" class="a-btn a-btn-ghost" style="width:100%; margin-top:4px" onclick="autoGenerateGraphicPrompt()">✨ Auto-Generate Prompt</button>
+          </div>
+        </div>
+
+        <div class="a-grid a-grid-2" style="gap:10px; margin-bottom:12px">
+          <div>
+            <label class="a-label">Banner Headline</label>
+            <input id="banner-headline" class="a-input" value="Build & Automate Next-Gen Web Apps" style="margin-top:4px" oninput="renderMarketingBanner()"/>
+          </div>
+          <div>
+            <label class="a-label">Sub-headline / Tagline</label>
+            <input id="banner-sub" class="a-input" value="Full-Stack Dev, AI Automation & B2B Solutions" style="margin-top:4px" oninput="renderMarketingBanner()"/>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px">
+          <button type="button" class="a-btn a-btn-primary" onclick="renderMarketingBanner()">✨ Render Graphic Banner</button>
+          <button type="button" class="a-btn a-btn-ghost" onclick="downloadMarketingBanner()">💾 Download Image PNG</button>
+        </div>
+
+        <div style="margin-top:16px; text-align:center; overflow-x:auto">
+          <canvas id="bannerCanvas" width="800" height="420" style="max-width:100%; border-radius:10px; border:1px solid #30363d; background:#0d1117"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Publishing / Scheduled Broadcast Form -->
+    <div class="a-panel" id="broadcast-panel" style="margin-bottom:20px">
+      <div class="a-panel-header"><div class="a-panel-title">🚀 Direct / Scheduled Publishing</div></div>
+      <div class="a-panel-body">
+        <form method="POST" action="{{ url_for('admin.content_studio_schedule') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="a-grid a-grid-2" style="gap:14px; margin-bottom:12px">
+            <div>
+              <label class="a-label">Target Channel</label>
+              <select name="channel_id" class="a-input" style="margin-top:6px" required>
+                {% for c in channels %}
+                <option value="{{ c.id }}">{{ c.label }} ({{ c.platform }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="a-label">Schedule Time (UTC)</label>
+              <input type="datetime-local" name="scheduled_at" class="a-input" style="margin-top:6px" required/>
+            </div>
+          </div>
+          
+          <label class="a-label">Post Content Title</label>
+          <input name="title" class="a-input" style="margin-top:6px" placeholder="Internal Campaign Name" required/>
+          
+          <label class="a-label" style="margin-top:10px; display:block">Post Body Text</label>
+          <textarea id="broadcast-body" name="body" rows="4" class="a-input" style="margin-top:6px" required></textarea>
+          
+          <div style="display:flex; gap:10px; margin-top:14px">
+            <button type="submit" class="a-btn a-btn-primary">🗓️ Schedule Broadcast</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Settings & Calendar -->
+  <div>
+    <!-- Brand Voice Configurator -->
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header"><div class="a-panel-title">📣 Brand Voice Config</div></div>
+      <div class="a-panel-body">
+        <form method="POST" action="{{ url_for('admin.content_studio_brand_voice') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="a-label">Voice Tone</label>
+              <input name="tone" class="a-input" style="margin-top:4px" placeholder="e.g. Bold, professional, technical but simple" value="{{ get_setting('brand_voice_tone') or '' }}"/>
+            </div>
+            <div>
+              <label class="a-label">Target Audience</label>
+              <input name="audience" class="a-input" style="margin-top:4px" placeholder="e.g. Startup founders, developers" value="{{ get_setting('brand_voice_audience') or '' }}"/>
+            </div>
+            <div>
+              <label class="a-label">Exclude Words / Phrases</label>
+              <input name="exclude" class="a-input" style="margin-top:4px" placeholder="e.g. revolutionize, disrupt" value="{{ get_setting('brand_voice_exclude') or '' }}"/>
+            </div>
+            <div>
+              <label class="a-label">Extra Writing Guidelines</label>
+              <textarea name="guidelines" rows="3" class="a-input" style="margin-top:4px" placeholder="e.g. Keep headings short. Never use more than 3 bullet points.">{{ get_setting('brand_voice_guidelines') or '' }}</textarea>
+            </div>
+            <button type="submit" class="a-btn a-btn-ghost a-btn-xs" style="width:100%">💾 Save Brand Voice</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Editorial Visual Calendar -->
+    <div class="calendar-container" style="margin-bottom:20px">
+      <h3 style="font-size:14px; font-weight:700; color:var(--text-primary);">🗓️ Editorial Calendar</h3>
+      <p style="font-size:11px; color:var(--text-secondary);">Visual pipeline of scheduled organic posts.</p>
+      
+      <div class="calendar-grid">
+        <div class="calendar-day-header">S</div>
+        <div class="calendar-day-header">M</div>
+        <div class="calendar-day-header">T</div>
+        <div class="calendar-day-header">W</div>
+        <div class="calendar-day-header">T</div>
+        <div class="calendar-day-header">F</div>
+        <div class="calendar-day-header">S</div>
+        
+        <!-- Render 35 days (5 weeks) of calendar grid -->
+        {% for day in range(1, 29) %}
+        <div class="calendar-cell {% if day == 24 %}today{% endif %}">
+          <span class="day-num">{{ day }}</span>
+          <div class="calendar-icons">
+            {% if day == 25 or day == 28 %}
+            <div class="calendar-dot badge-linkedin" title="LinkedIn Scheduled Post"></div>
+            {% endif %}
+            {% if day == 26 %}
+            <div class="calendar-dot badge-facebook" title="Facebook Scheduled Post"></div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Scheduled Posts Queue -->
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header"><div class="a-panel-title">📋 Scheduled Queue</div></div>
+      <div class="a-panel-body">
+        {% if scheduled %}
+        <div class="space-y-4">
+          {% for s in scheduled %}
+          <div style="background:#161b22; padding:10px; border-radius:8px; border:1px solid #30363d; font-size:11.5px">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px">
+              <span class="badge {% if s.channel.platform == 'linkedin' %}badge-linkedin{% else %}badge-facebook{% endif %}">{{ s.channel.platform }}</span>
+              <span style="color:var(--text-secondary); font-size:10px">{{ s.scheduled_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+            </div>
+            <strong style="color:var(--text-primary)">{{ s.title }}</strong>
+            <p style="color:var(--text-secondary); margin:4px 0 8px; line-height:1.4;">{{ s.body[:100] }}...</p>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:10px; font-weight:700; color:var(--accent-yellow)">{{ s.status }}</span>
+              <form method="POST" action="{{ url_for('admin.content_studio_cancel', sid=s.id) }}" onsubmit="return confirm('Cancel this scheduled post?')" style="margin:0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" style="background:none;border:none;color:var(--accent-red);text-decoration:none;font-size:10.5px;cursor:pointer;padding:0">Cancel</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p style="font-size:12px;color:var(--text-secondary)">No scheduled broadcasts in queue.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function getCsrf() {
+  return document.querySelector('input[name="csrf_token"]')?.value || '';
+}
+
+// Fetch Content Ideas
+async function fetchIdeas() {
+  const btn = document.getElementById('scan-btn');
+  const status = document.getElementById('ideas-status');
+  const container = document.getElementById('ideas-container');
+  
+  btn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'Analyzing website context database...';
+  
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_fetch_ideas') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      status.style.color = '#f87171';
+      status.textContent = data.error || 'Failed to scan website.';
+      return;
+    }
+    
+    status.style.color = '#3fb950';
+    status.textContent = 'Scan completed successfully. Proposing 5 optimized growth ideas:';
+    
+    let html = '';
+    data.ideas.forEach(idea => {
+      const platformClass = 'badge-' + idea.platform.toLowerCase();
+      html += `
+        <div class="idea-card">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+              <span class="badge ${platformClass}">${idea.platform}</span>
+              <span class="badge badge-${idea.confidence.toLowerCase()}">${idea.confidence} Match</span>
+            </div>
+            <strong style="color:var(--text-primary); font-size:13px; display:block; margin-bottom:6px">${idea.title}</strong>
+            <p style="color:var(--text-secondary); font-size:11.5px; line-height:1.4">${idea.caption}</p>
+            <p style="font-size:10px; color:#c084fc; margin-top:8px;">🎯 <b>Reasoning:</b> ${idea.reasoning}</p>
+          </div>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%; margin-top:12px" onclick="useIdea('${escapeHtml(idea.title)}', '${escapeHtml(idea.caption)}')">+ Compose Post</button>
+        </div>`;
+    });
+    container.innerHTML = html;
+  } catch (e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Scan failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(text) {
+  return text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function useIdea(title, caption) {
+  document.getElementById('cs-prompt').value = `Write a post based on this title: "${title}". Description: ${caption}`;
+  document.getElementById('cs-prompt').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Generate Composer Content (5 Variations)
+let lastGeneratedItems = [];
+
+async function generateContent() {
+  const btn = document.getElementById('cs-generate-btn');
+  const status = document.getElementById('cs-status');
+  const prompt = document.getElementById('cs-prompt').value.trim();
+  const contentType = document.getElementById('cs-type').value;
+
+  if (!prompt) { status.style.color = '#f87171'; status.textContent = 'Write a prompt or select an idea first.'; return; }
+
+  btn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = contentType === 'social_caption'
+    ? 'AI is generating 5 distinct post variations...'
+    : (contentType === 'blog_post' ? 'Writing your blog post (and a featured image, if Bloom is set up)...' : 'Generating...');
+
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_generate') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ content_type: contentType, prompt })
+    });
+    const data = await res.json();
+    if (!res.ok) { status.style.color = '#f87171'; status.textContent = data.error || 'Generation failed.'; return; }
+
+    if (data.mode === 'single') {
+      renderSingleContent(data);
+      status.style.color = '#3fb950';
+      status.textContent = 'Generated! Review below.';
+    } else {
+      lastGeneratedItems = data.items || [];
+      renderVariationsDeck(lastGeneratedItems);
+      status.style.color = '#3fb950';
+      status.textContent = `Successfully generated ${data.items ? data.items.length : 1} post variations! Review below.`;
+    }
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Long-form single result (blog post / email / SEO meta) — a real body,
+// not a card deck of short blurbs.
+let lastSingleResult = null;
+
+function renderSingleContent(data) {
+  lastSingleResult = data;
+  document.getElementById('cs-result').style.display = 'block';
+  const deck = document.getElementById('variations-deck');
+  deck.style.display = 'block';
+  deck.style.gridTemplateColumns = '1fr';
+
+  const isBlog = data.content_type === 'blog_post';
+  const imageBlock = isBlog
+    ? (data.image_url
+        ? `<img src="${data.image_url}" style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:12px"/>`
+        : `<p style="font-size:11px;color:var(--text-muted);margin-bottom:10px">${data.image_error ? 'Featured image not generated: ' + escapeHtml(data.image_error) : 'No featured image — set up Bloom in Settings to auto-generate one next time.'}</p>`)
+    : '';
+
+  const saveBar = isBlog ? `
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="saveGeneratedBlog(false)">💾 Save as Draft</button>
+      <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="saveGeneratedBlog(true)">🚀 Save & Publish</button>
+    </div>` : '';
+
+  deck.innerHTML = `
+    <div class="idea-card" style="border-color:#30363d;background:#0d1117">
+      ${imageBlock}
+      ${data.title ? `<strong style="color:var(--text-primary);font-size:15px;display:block;margin-bottom:8px">${escapeHtml(data.title)}</strong>` : ''}
+      ${data.excerpt ? `<p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${escapeHtml(data.excerpt)}</p>` : ''}
+      <div style="background:#161b22;border-radius:8px;padding:12px;font-size:13px;color:#e6edf3;max-height:420px;overflow-y:auto;line-height:1.6">${isBlog ? data.content : `<div style="white-space:pre-wrap">${escapeHtml(data.content)}</div>`}</div>
+      ${data.seo_title ? `<p style="font-size:11px;color:#8b949e;margin-top:8px">SEO Title: ${escapeHtml(data.seo_title)}</p>` : ''}
+      ${data.seo_desc ? `<p style="font-size:11px;color:#8b949e">SEO Desc: ${escapeHtml(data.seo_desc)}</p>` : ''}
+      <div style="display:flex;gap:4px;margin-top:10px">
+        <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="copyText('${escapeHtml(data.content)}')">📋 Copy</button>
+      </div>
+      ${saveBar}
+    </div>`;
+}
+
+async function saveGeneratedBlog(publish) {
+  if (!lastSingleResult) return;
+  const status = document.getElementById('cs-status');
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = publish ? 'Publishing...' : 'Saving draft...';
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_save_blog') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({
+        title: lastSingleResult.title,
+        content: lastSingleResult.content,
+        excerpt: lastSingleResult.excerpt,
+        seo_title: lastSingleResult.seo_title,
+        seo_desc: lastSingleResult.seo_desc,
+        image_url: lastSingleResult.image_url,
+        publish
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) { status.style.color = '#f87171'; status.textContent = data.error || 'Save failed.'; return; }
+    status.style.color = '#3fb950';
+    status.textContent = publish ? '✓ Published! Opening Blog...' : '✓ Saved as draft! Opening Blog...';
+    setTimeout(() => { window.location.href = data.redirect; }, 900);
+  } catch (e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed: ' + e.message;
+  }
+}
+
+function renderVariationsDeck(items) {
+  const deck = document.getElementById('variations-deck');
+  document.getElementById('cs-result').style.display = 'block';
+  deck.style.display = 'grid';
+  deck.style.gridTemplateColumns = '';
+  if(!items || !items.length) {
+    deck.innerHTML = '<p style="color:#f87171">No items generated.</p>';
+    return;
+  }
+
+  let html = '';
+  items.forEach((item, idx) => {
+    const encContent = encodeURIComponent(item.content || '');
+    const pageUrl = encodeURIComponent(window.location.origin);
+    const tags = (item.hashtags || []).join(' ');
+
+    html += `
+      <div class="idea-card" style="border-color:#30363d; background:#0d1117">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <span class="badge badge-linkedin">${item.platform || 'Social Post'}</span>
+            <span style="font-size:11px; font-weight:700; color:#38bdf8">Variation #${idx+1}</span>
+          </div>
+          <strong style="color:var(--text-primary); font-size:13px; display:block; margin-bottom:6px">${item.title || 'Untitled Post'}</strong>
+          <div style="background:#161b22; border-radius:8px; padding:10px; font-size:12px; color:#e6edf3; max-height:160px; overflow-y:auto; white-space:pre-wrap; line-height:1.5">${item.content || ''}</div>
+          <p style="font-size:11px; color:#a855f7; margin-top:8px;">${tags}</p>
+        </div>
+        
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px">
+          <div style="display:flex; gap:4px">
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="flex:1" onclick="copyText('${escapeHtml(item.content)}')">📋 Copy</button>
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="flex:1" onclick="sendToVoiceover('${escapeHtml(item.content)}')">🔊 Voiceover</button>
+            <button type="button" class="a-btn a-btn-primary a-btn-xs" style="flex:1" onclick="useInDirectPublishingText('${escapeHtml(item.content)}')">🚀 Broadcast</button>
+          </div>
+          
+          <div style="display:flex; gap:4px; font-size:10px; align-items:center; justify-content:center; background:#161b22; padding:4px; border-radius:6px">
+            <span style="color:#8b949e">1-Click Share:</span>
+            <a href="https://twitter.com/intent/tweet?text=${encContent}" target="_blank" style="color:#38bdf8; text-decoration:none; margin:0 4px">X/Twitter</a> · 
+            <a href="https://www.facebook.com/sharer/sharer.php?u=${pageUrl}&quote=${encContent}" target="_blank" style="color:#60a5fa; text-decoration:none; margin:0 4px">Facebook</a> · 
+            <a href="https://www.linkedin.com/sharing/share-offsite/?url=${pageUrl}" target="_blank" style="color:#0a66c2; text-decoration:none; margin:0 4px">LinkedIn</a> · 
+            <a href="https://api.whatsapp.com/send?text=${encContent}" target="_blank" style="color:#4ade80; text-decoration:none; margin:0 4px">WhatsApp</a>
+          </div>
+        </div>
+      </div>`;
+  });
+  deck.innerHTML = html;
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => alert('Copied post copy to clipboard!'));
+}
+
+function copyAllResultText() {
+  if(!lastGeneratedItems || !lastGeneratedItems.length) return;
+  const combined = lastGeneratedItems.map((item, i) => `--- Variation #${i+1} (${item.platform}) ---\n${item.title}\n\n${item.content}\n${(item.hashtags||[]).join(' ')}`).join('\n\n\n');
+  navigator.clipboard.writeText(combined).then(() => alert('Copied all 5 post variations to clipboard!'));
+}
+
+function useInDirectPublishingText(content) {
+  document.getElementById('broadcast-body').value = content;
+  document.getElementById('broadcast-panel').scrollIntoView({ behavior: 'smooth' });
+}
+
+function sendToVoiceover(text) {
+  document.getElementById('tts-script').value = text;
+  document.getElementById('tts-script').scrollIntoView({ behavior: 'smooth' });
+}
+
+// 🔊 AI Voiceover Text-to-Speech Engine
+let currentSpeechUtterance = null;
+
+function playVoiceover() {
+  const text = (document.getElementById('tts-script').value || '').trim();
+  const status = document.getElementById('tts-status');
+  if(!text) { alert('Please enter script text first.'); return; }
+  
+  if(!('speechSynthesis' in window)) {
+    alert('Web Speech Synthesis is not supported in this browser.');
+    return;
+  }
+  
+  window.speechSynthesis.cancel();
+  currentSpeechUtterance = new SpeechSynthesisUtterance(text);
+  currentSpeechUtterance.pitch = parseFloat(document.getElementById('tts-pitch').value || 1.0);
+  currentSpeechUtterance.rate = parseFloat(document.getElementById('tts-rate').value || 1.0);
+  
+  status.style.display = 'block';
+  status.textContent = '🔊 Playing AI spoken voiceover live...';
+  
+  currentSpeechUtterance.onend = function() {
+    status.textContent = '✓ Voiceover playback complete.';
+  };
+  
+  window.speechSynthesis.speak(currentSpeechUtterance);
+}
+
+function stopVoiceover() {
+  if('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const status = document.getElementById('tts-status');
+    status.style.display = 'block';
+    status.textContent = '⏹️ Audio voiceover stopped.';
+  }
+}
+
+// Multi-Theme Banner Engine
+function autoGenerateGraphicPrompt() {
+  const headlines = [
+    "Build & Scale Enterprise Web Applications",
+    "Turnkey AI Automation & B2B Lead Prospecting",
+    "Custom Full-Stack Development & Microservices",
+    "Automate Customer Pipelines with n8n & Social Bots"
+  ];
+  const subs = [
+    "High-Performance Flask, React, Postgres & Cloud Infrastructure",
+    "Boost Lead Conversion & Direct Outreach Today",
+    "24/7 Automated Bot Replies & CRM Integration",
+    "Transform Your Business Workflow into Pure Speed"
+  ];
+  const idx = Math.floor(Math.random() * headlines.length);
+  document.getElementById('banner-headline').value = headlines[idx];
+  document.getElementById('banner-sub').value = subs[idx];
+  renderMarketingBanner();
+}
+
+function parseAndFill(raw, contentType) {
+  // Backwards compatibility fallback
+  document.getElementById('cs-result').style.display = 'block';
+}
+
+function useInDirectPublishing() {
+  const content = document.getElementById('cs-out-content') ? document.getElementById('cs-out-content').value : '';
+  document.getElementById('broadcast-body').value = content;
+  document.getElementById('broadcast-panel').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveAsBlogDraft() {
+  const payload = {
+    title: (document.getElementById('cs-out-title') ? document.getElementById('cs-out-title').value : '') || 'Untitled Draft',
+    content: document.getElementById('cs-out-content') ? document.getElementById('cs-out-content').value : '',
+    seo_title: document.getElementById('cs-out-seo-title') ? document.getElementById('cs-out-seo-title').value : '',
+    seo_desc: document.getElementById('cs-out-seo-desc') ? document.getElementById('cs-out-seo-desc').value : '',
+    excerpt: '',
+  };
+  const res = await fetch("{{ url_for('admin.content_studio_save_blog') }}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (data.success) window.location.href = data.redirect;
+  else alert(data.error || 'Could not save draft.');
+}
+
+function copyResultText() {
+  copyAllResultText();
+}
+
+// Video Script Generator
+async function generateVideoScript() {
+  const btn = document.getElementById('vs-btn');
+  const status = document.getElementById('vs-status');
+  const resultPanel = document.getElementById('vs-result');
+  const topic = document.getElementById('vs-topic').value.trim();
+  
+  if (!topic) { status.style.color = '#f87171'; status.textContent = 'Enter a video topic first.'; return; }
+  
+  btn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'Outlining video script structure...';
+  
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_video_script') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ topic })
+    });
+    const data = await res.json();
+    if (!res.ok) { status.style.color = '#f87171'; status.textContent = data.error || 'Failed to generate script.'; return; }
+    
+    status.style.color = '#3fb950';
+    status.textContent = 'Script breakdown complete!';
+    resultPanel.style.display = 'block';
+    
+    let bodyHtml = '';
+    if (data.body) {
+      data.body.forEach((scene, i) => {
+        bodyHtml += `
+          <div class="script-section">
+            <strong style="color:var(--text-primary);">Point ${i+1}: ${scene.point}</strong>
+            <p style="color:var(--accent-yellow); font-size:11px; margin-top:2px;">🎬 B-ROLL CUE: ${scene.b_roll}</p>
+          </div>`;
+      });
+    }
+    
+    resultPanel.innerHTML = `
+      <div style="background:#161b22; padding:16px; border-radius:12px; border:1px solid #30363d;">
+        <div style="margin-bottom:12px;">
+          <span style="font-size:10px; font-weight:700; color:var(--accent-green); text-transform:uppercase;">🔥 HOOK (0-5s)</span>
+          <p style="font-size:13px; font-style:italic; margin-top:4px; color:var(--text-primary);">${data.hook || ""}</p>
+        </div>
+        <div style="margin-bottom:12px;">
+          <span style="font-size:10px; font-weight:700; color:var(--accent-blue); text-transform:uppercase;">🗣️ INTRO / OUTLINE</span>
+          <p style="font-size:12.5px; margin-top:4px; color:var(--text-primary);">${data.intro || ""}</p>
+        </div>
+        <div style="margin-bottom:12px;">
+          <span style="font-size:10px; font-weight:700; color:var(--accent-blue); text-transform:uppercase;">📝 SCENE-BY-SCENE BREAKDOWN</span>
+          ${bodyHtml}
+        </div>
+        <div style="margin-bottom:10px;">
+          <span style="font-size:10px; font-weight:700; color:var(--accent-green); text-transform:uppercase;">📈 OUTRO CTA</span>
+          <p style="font-size:13px; margin-top:4px; color:var(--text-primary);">${data.outro || ""}</p>
+        </div>
+        <button type="button" class="a-btn a-btn-primary a-btn-xs" style="width:100%" onclick="sendToVoiceover('${escapeHtml((data.hook||'') + ' ' + (data.intro||'') + ' ' + (data.outro||''))}')">🔊 Send Full Script to Voiceover Studio</button>
+      </div>`;
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed to load script: ' + e.message;
+  } finally {
+     btn.disabled = false;
+  }
+}
+
+// AI DALL-E Image Creator
+async function generateBloomMedia() {
+  const btn = document.getElementById('bloom-media-btn');
+  const status = document.getElementById('bloom-media-status');
+  const resultBox = document.getElementById('bloom-media-result');
+  const imgOut = document.getElementById('bloom-media-img-out');
+  const prompt = document.getElementById('bloom-media-prompt').value.trim();
+
+  if (!prompt) { status.style.color = '#f87171'; status.textContent = 'Enter a prompt first.'; return; }
+
+  btn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'Asking Bloom to generate this (can take up to a minute)...';
+  resultBox.style.display = 'none';
+  imgOut.style.display = 'none';
+
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_generate_bloom') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      status.style.color = '#f87171';
+      status.textContent = data.error || 'Bloom generation failed.';
+      return;
+    }
+    status.style.color = '#3fb950';
+    status.textContent = 'Generated successfully!';
+    resultBox.style.display = 'block';
+    imgOut.style.display = 'block';
+    imgOut.src = data.result;
+  } catch (e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed to reach Bloom: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function pollinationsGenerate() {
+  const aiBtn = document.getElementById('free-img-ai-btn');
+  const photoBtn = document.getElementById('free-img-photo-btn');
+  const status = document.getElementById('free-img-status');
+  const singleBox = document.getElementById('free-img-single-result');
+  const grid = document.getElementById('free-img-grid');
+  const prompt = document.getElementById('free-img-query').value.trim();
+  if (!prompt) { status.style.color = '#f87171'; status.textContent = 'Enter a topic or description first.'; return; }
+
+  aiBtn.disabled = true; photoBtn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'Generating (a few seconds)...';
+  singleBox.style.display = 'none';
+  grid.style.display = 'none';
+
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_generate_pollinations') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      status.style.color = '#f87171';
+      status.textContent = data.error || 'Generation failed.';
+      return;
+    }
+    status.style.color = '#3fb950';
+    status.textContent = 'Generated!';
+    singleBox.style.display = 'block';
+    document.getElementById('free-img-single-output').src = data.result;
+    document.getElementById('free-img-single-url').value = data.result;
+  } catch (e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed: ' + e.message;
+  } finally {
+    aiBtn.disabled = false; photoBtn.disabled = false;
+  }
+}
+
+async function fetchStockPhotos() {
+  const aiBtn = document.getElementById('free-img-ai-btn');
+  const photoBtn = document.getElementById('free-img-photo-btn');
+  const status = document.getElementById('free-img-status');
+  const singleBox = document.getElementById('free-img-single-result');
+  const grid = document.getElementById('free-img-grid');
+  const query = document.getElementById('free-img-query').value.trim();
+  if (!query) { status.style.color = '#f87171'; status.textContent = 'Enter a topic or keyword first.'; return; }
+
+  aiBtn.disabled = true; photoBtn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'Searching Pexels...';
+  singleBox.style.display = 'none';
+  grid.style.display = 'none';
+  grid.innerHTML = '';
+
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_fetch_photos') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ query })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      status.style.color = '#f87171';
+      status.textContent = data.error || 'Photo search failed.';
+      return;
+    }
+    if (!data.photos || data.photos.length === 0) {
+      status.style.color = '#f87171';
+      status.textContent = 'No photos found for that search — try a different keyword.';
+      return;
+    }
+    status.style.color = '#3fb950';
+    status.textContent = `Found ${data.photos.length} photos — click one to use its URL.`;
+    grid.style.display = 'grid';
+    data.photos.forEach(p => {
+      const cell = document.createElement('div');
+      cell.style.cssText = 'cursor:pointer;border-radius:8px;overflow:hidden;border:1px solid #30363d;position:relative';
+      cell.innerHTML = `<img src="${p.thumb}" style="width:100%;height:100px;object-fit:cover;display:block" title="Photo by ${p.photographer || 'Pexels'}"/>`;
+      cell.onclick = () => {
+        singleBox.style.display = 'block';
+        document.getElementById('free-img-single-output').src = p.url;
+        document.getElementById('free-img-single-url').value = p.url;
+        singleBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+      grid.appendChild(cell);
+    });
+  } catch (e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed: ' + e.message;
+  } finally {
+    aiBtn.disabled = false; photoBtn.disabled = false;
+  }
+}
+
+async function generateImage() {
+  const btn = document.getElementById('img-btn');
+  const status = document.getElementById('img-status');
+  const resultPanel = document.getElementById('img-result');
+  const prompt = document.getElementById('img-prompt').value.trim();
+  
+  if (!prompt) { status.style.color = '#f87171'; status.textContent = 'Enter an image prompt first.'; return; }
+  
+  btn.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'DALL-E is generating your creative graphic...';
+  
+  try {
+    const res = await fetch("{{ url_for('admin.content_studio_generate_image') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!res.ok) { status.style.color = '#f87171'; status.textContent = data.error || 'Failed to generate image.'; return; }
+    
+    status.style.color = '#3fb950';
+    status.textContent = 'Image generated successfully!';
+    resultPanel.style.display = 'block';
+    document.getElementById('img-output').src = data.image_url;
+    document.getElementById('img-url-out').value = window.location.origin + data.image_url;
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Failed to generate image: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function copyImageUrl() {
+  const val = document.getElementById('img-url-out');
+  val.select();
+  document.execCommand('copy');
+  alert('Copied local image URL to clipboard!');
+}
+
+function renderMarketingBanner() {
+  const canvas = document.getElementById('bannerCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const headline = document.getElementById('banner-headline').value || "Build & Automate Web Apps";
+  const tagline = document.getElementById('banner-sub').value || "Full-Stack Dev & AI Solutions";
+  const theme = document.getElementById('banner-theme') ? document.getElementById('banner-theme').value : 'cyberpunk';
+
+  let bgGrad1 = '#0f172a', bgGrad2 = '#1e1b4b', bgGrad3 = '#0f172a';
+  let cGlow1 = 'rgba(56, 189, 248, 0.15)', cGlow2 = 'rgba(168, 85, 247, 0.15)';
+  let accentColor = '#38bdf8', buttonColor = '#a855f7';
+
+  if(theme === 'corporate') {
+    bgGrad1 = '#091e3e'; bgGrad2 = '#11294d'; bgGrad3 = '#061329';
+    cGlow1 = 'rgba(234, 179, 8, 0.15)'; cGlow2 = 'rgba(59, 130, 246, 0.15)';
+    accentColor = '#facc15'; buttonColor = '#2563eb';
+  } else if(theme === 'minimal') {
+    bgGrad1 = '#0f172a'; bgGrad2 = '#1e293b'; bgGrad3 = '#0f172a';
+    cGlow1 = 'rgba(52, 211, 153, 0.15)'; cGlow2 = 'rgba(14, 165, 233, 0.15)';
+    accentColor = '#34d399'; buttonColor = '#059669';
+  } else if(theme === 'gradient') {
+    bgGrad1 = '#312e81'; bgGrad2 = '#4c1d95'; bgGrad3 = '#1e1b4b';
+    cGlow1 = 'rgba(244, 63, 94, 0.2)'; cGlow2 = 'rgba(168, 85, 247, 0.2)';
+    accentColor = '#fb7185'; buttonColor = '#e11d48';
+  }
+
+  // Gradient background
+  const grad = ctx.createLinearGradient(0, 0, 800, 420);
+  grad.addColorStop(0, bgGrad1);
+  grad.addColorStop(0.5, bgGrad2);
+  grad.addColorStop(1, bgGrad3);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 800, 420);
+
+  // Decorative glow circles
+  ctx.fillStyle = cGlow1;
+  ctx.beginPath(); ctx.arc(100, 80, 160, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = cGlow2;
+  ctx.beginPath(); ctx.arc(700, 340, 200, 0, Math.PI*2); ctx.fill();
+
+  // Border frame
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(20, 20, 760, 380);
+
+  // Site Badge
+  ctx.fillStyle = accentColor;
+  ctx.font = 'bold 16px Inter, sans-serif';
+  ctx.fillText("🚀 BAZILLIN PLATFORM", 50, 70);
+
+  // Headline
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 30px Inter, sans-serif';
+  ctx.fillText(headline.substring(0, 40), 50, 140);
+  if(headline.length > 40) {
+    ctx.fillText(headline.substring(40, 80), 50, 180);
+  }
+
+  // Tagline
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '18px Inter, sans-serif';
+  ctx.fillText(tagline, 50, 230);
+
+  // Feature pills
+  const features = ["⚡ n8n Workflows", "🤖 AI Personas", "🎯 Lead Finder", "📄 PDF Editor"];
+  features.forEach((feat, i) => {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.fillRect(50 + (i * 170), 280, 155, 36);
+    ctx.fillStyle = accentColor;
+    ctx.font = 'bold 12px Inter, sans-serif';
+    ctx.fillText(feat, 65 + (i * 170), 302);
+  });
+
+  // Call to action button
+  ctx.fillStyle = buttonColor;
+  ctx.fillRect(50, 345, 200, 40);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px Inter, sans-serif';
+  ctx.fillText("EXPLORE PLATFORM →", 75, 370);
+}
+
+function downloadMarketingBanner() {
+  const canvas = document.getElementById('bannerCanvas');
+  const link = document.createElement('a');
+  link.download = 'marketing_banner.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+window.addEventListener('load', () => {
+  if (document.getElementById('bannerCanvas')) renderMarketingBanner();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Support Tickets{% endblock %}
+{% block content %}
+<div class="flex gap-3 mb-6">
+  {% for s in ['open','in_progress','resolved','closed'] %}
+  <a href="{{ url_for('admin.support', status=s) }}" class="text-xs px-4 py-2 rounded-lg border {% if current_status==s %}border-cyan-500 text-cyan-400{% else %}border-white/10 text-gray-400 hover:border-white/20{% endif %} transition-all">{{ s | replace('_',' ') | title }}</a>{% endfor %}
+</div>
+<div class="space-y-4">
+  {% for t in tickets %}
+  <div class="glass border border-white/10 rounded-2xl p-5">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 class="font-semibold text-white">{{ t.subject }}</h3>
+        <p class="text-xs text-gray-400 mt-0.5">From {{ t.name }} ({{ t.email }}) · {{ t.created_at | timeago }}</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs px-2 py-0.5 rounded-full {% if t.priority=='high' %}bg-red-500/20 text-red-400{% elif t.priority=='normal' %}bg-blue-500/20 text-blue-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ t.priority }}</span>
+        <span class="text-xs px-2 py-0.5 rounded-full {% if t.status=='open' %}bg-yellow-500/20 text-yellow-400{% elif t.status=='resolved' %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ t.status | replace('_',' ') | title }}</span>
+      </div>
+    </div>
+    <p class="text-sm text-gray-300 mb-4">{{ t.message }}</p>
+    <form method="POST" action="{{ url_for('admin.update_ticket', tid=t.id) }}" class="flex gap-2 items-center">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <select name="status" class="admin-input text-xs py-1.5">
+        {% for s in ['open','in_progress','resolved','closed'] %}<option value="{{ s }}" {% if t.status==s %}selected{% endif %}>{{ s | replace('_',' ') | title }}</option>{% endfor %}
+      </select>
+      <button class="text-xs px-3 py-1.5 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 transition-all">Update</button>
+    </form>
+  </div>{% else %}
+  <div class="glass border border-white/10 rounded-2xl p-10 text-center text-gray-500">No {{ current_status | replace('_',' ') }} tickets.</div>{% endfor %}
+</div>
+{% endblock %}

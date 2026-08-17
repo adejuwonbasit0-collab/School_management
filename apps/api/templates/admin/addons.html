@@ -1,0 +1,96 @@
+{% extends "admin/base.html" %}
+{% block title %}Premium Workspace Add-ons — Admin{% endblock %}
+{% block content %}
+<div class="a-container" style="padding-bottom: 40px">
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight text-white font-display">Premium Modules & Workspace Add-ons</h1>
+      <p class="text-gray-400 text-sm mt-1">These are the real, sellable Product rows behind the user dashboard's paid tools. Edit anything here and it's exactly what a buyer sees on the marketplace.</p>
+    </div>
+  </div>
+
+  <div class="a-panel" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px;">
+    <div class="a-panel-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding: 20px;">
+      <h3 class="text-sm font-bold text-white uppercase tracking-wider">Workspace Add-on Catalog</h3>
+    </div>
+    <div class="a-panel-body" style="padding:0">
+      <table class="w-full text-sm" style="border-collapse: collapse">
+        <thead>
+          <tr class="text-xs text-gray-500 uppercase" style="border-bottom: 1px solid rgba(255,255,255,0.05); text-align: left">
+            <th class="px-6 py-4">Add-on Module</th>
+            <th class="px-6 py-4">Slug</th>
+            <th class="px-6 py-4">Price</th>
+            <th class="px-6 py-4">Status</th>
+            <th class="px-6 py-4" style="text-align: right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/5">
+          {% for m in modules %}
+          <tr>
+            <td class="px-6 py-4">
+              <div class="flex items-center gap-3">
+                {% if m.image_url %}<img src="{{ m.image_url }}" class="w-9 h-9 rounded-lg object-cover" style="flex-shrink:0"/>{% endif %}
+                <div>
+                  <div class="font-bold text-white text-sm">{{ m.name }}</div>
+                  {% if m.description %}<div class="text-xs text-gray-500" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.description }}</div>{% endif %}
+                </div>
+              </div>
+            </td>
+            <td class="px-6 py-4"><span class="font-mono text-xs text-gray-500">{{ m.slug }}</span></td>
+            <td class="px-6 py-4 text-white text-xs">{{ m.currency }} {{ m.price }}</td>
+            <td class="px-6 py-4">
+              <span class="text-xs {% if m.active %}text-green-400{% else %}text-gray-500{% endif %}">
+                {% if m.active %}● Active{% else %}○ Inactive{% endif %}
+              </span>
+            </td>
+            <td class="px-6 py-4" style="text-align: right">
+              <button type="button" class="a-btn a-btn-primary text-xs" style="padding: 6px 12px"
+                onclick='openEditAddon({{ {"slug": m.slug, "name": m.name, "description": m.description, "image_url": m.image_url, "demo_url": m.demo_url, "price": m.price, "currency": m.currency, "active": m.active}|tojson }})'>Edit</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Add-on Modal -->
+<div id="edit-addon-modal" class="a-modal-overlay">
+  <div class="a-modal" style="max-width:520px">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Add-on</div><button class="a-modal-close" onclick="closeModal('edit-addon-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.addons_save') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="slug" id="ea-slug"/>
+      <div style="display:grid;gap:12px">
+        <div><label class="a-label">Name</label><input name="name" id="ea-name" required class="a-input"/></div>
+        <div><label class="a-label">Description</label><textarea name="description" id="ea-description" class="a-input" rows="3"></textarea></div>
+        <div><label class="a-label">Image URL</label><input name="image_url" id="ea-image" class="a-input" placeholder="https://..."/></div>
+        <div><label class="a-label">Demo Link</label><input name="demo_url" id="ea-demo" class="a-input" placeholder="https://..."/></div>
+        <div class="a-grid a-grid-2" style="gap:12px">
+          <div><label class="a-label">Price</label><input name="price" id="ea-price" type="number" step="0.01" min="0" class="a-input"/></div>
+          <div><label class="a-label">Currency</label><input name="currency" id="ea-currency" class="a-input"/></div>
+        </div>
+        <label style="font-size:12px;display:flex;align-items:center;gap:8px">
+          <input type="checkbox" name="active" value="y" id="ea-active"/> Active (visible & purchasable on the marketplace)
+        </label>
+      </div>
+      <button type="submit" class="a-btn a-btn-primary" style="width:100%;margin-top:16px">Save Changes</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditAddon(m) {
+  document.getElementById('ea-slug').value = m.slug;
+  document.getElementById('ea-name').value = m.name || '';
+  document.getElementById('ea-description').value = m.description || '';
+  document.getElementById('ea-image').value = m.image_url || '';
+  document.getElementById('ea-demo').value = m.demo_url || '';
+  document.getElementById('ea-price').value = m.price || 0;
+  document.getElementById('ea-currency').value = m.currency || '';
+  document.getElementById('ea-active').checked = !!m.active;
+  openModal('edit-addon-modal');
+}
+</script>
+{% endblock %}

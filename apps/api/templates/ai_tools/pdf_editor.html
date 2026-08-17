@@ -1,0 +1,355 @@
+{% extends "public_base.html" %}
+{% block title %}PDF Editor — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+.tool-shell { max-width:920px;margin:0 auto;padding:48px 20px }
+.drop-zone { border:2px dashed rgba(var(--c-accent-rgb),0.3);border-radius:16px;padding:40px;text-align:center;transition:all .2s;cursor:pointer;background:rgba(var(--c-accent-rgb),0.03) }
+.drop-zone:hover,.drop-zone.drag-over { border-color:rgba(var(--c-accent-rgb),0.7);background:rgba(var(--c-accent-rgb),0.07) }
+.page-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;margin-top:20px }
+.page-card { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px;cursor:grab;position:relative;text-align:center }
+.page-card.dragging { opacity:0.4 }
+.page-card img { width:100%;border-radius:6px;background:#fff;transition:transform .2s }
+.page-card .num { font-size:11px;color:var(--c-text-3);margin-top:6px }
+.page-card .ctrls { display:flex;justify-content:center;gap:4px;margin-top:6px }
+.page-card .ctrls button { background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#cfe6ff;font-size:12px;padding:3px 7px;cursor:pointer }
+.page-card .ctrls button.del { color:#ff5b7e }
+.lightbox-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:999;padding:20px }
+.lightbox-overlay.open { display:flex }
+.lightbox-box { background:#12151c;border-radius:14px;padding:16px;max-width:95vw;max-height:92vh;overflow:auto;text-align:center }
+.lightbox-toolbar { display:flex;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap }
+.lightbox-toolbar button { background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#cfe6ff;font-size:12px;padding:6px 12px;cursor:pointer }
+#editorStage { position:relative;display:inline-block;background:#fff }
+#editorStage canvas { display:block }
+.text-box { position:absolute;min-width:40px;padding:2px 4px;border:1px dashed #38bdf8;background:rgba(56,189,248,0.08);cursor:move;white-space:pre;font-family:Helvetica,Arial,sans-serif;color:#111 }
+.text-box .del-box { position:absolute;top:-10px;right:-10px;background:#ef4444;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center;cursor:pointer;border:none }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Real PDF Content Editor</h1>
+    <p style="color:var(--c-text-2)">Interactive PDF Content Editor: Edit, replace, or add text, reorder, rotate, or delete pages, and save your modified PDF cleanly.</p>
+  </div>
+
+  <div class="lightbox-overlay" id="textLightbox">
+    <div class="lightbox-box">
+      <div class="lightbox-toolbar">
+        <button type="button" id="addTextBoxBtn">+ Add Text</button>
+        <span style="color:#9fb3d1;font-size:12px;align-self:center">Drag a box to move it, click to edit</span>
+        <button type="button" id="closeLightboxBtn">Done</button>
+      </div>
+      <p style="color:#7a8bab;font-size:11px;margin:0 0 8px">Basic Latin text only (no emoji/CJK). Add text after rotating a page, for predictable placement.</p>
+      <div id="editorStage"></div>
+    </div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <p style="color:#9fb3d1;margin-bottom:8px">Drag a PDF here, or</p>
+    <button class="btn-ghost-neon" type="button" onclick="document.getElementById('fileInput').click()">Choose File</button>
+    <input type="file" id="fileInput" accept="application/pdf" style="display:none">
+  </div>
+
+  <div id="toolbar" style="display:none;margin-top:16px;text-align:center;gap:10px;flex-wrap:wrap;justify-content:center" >
+    <button class="btn-ghost-neon" id="addBlankBtn" type="button">+ Add Blank Page</button>
+    <button class="btn-neon" id="saveBtn" type="button" style="margin-left:8px">💾 Save & Download</button>
+  </div>
+  <p id="status" style="text-align:center;color:var(--c-text-2);font-size:13px;margin-top:10px"></p>
+  <div class="page-grid" id="pageGrid"></div>
+</div>
+
+<script>
+const { PDFDocument, degrees } = PDFLib;
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let srcBytes = null;      // original file bytes, kept for final export
+let pages = [];           // ordered list of {id, kind:'page'|'blank', origIndex, rotation, annotations:[{x,y,text,size}]}
+let seq = 0;
+let currentPdf = null;    // kept so the lightbox can re-render at full size on demand
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const pageGrid = document.getElementById('pageGrid');
+const toolbar = document.getElementById('toolbar');
+const status = document.getElementById('status');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+async function loadFile(file) {
+  status.textContent = 'Loading…';
+  srcBytes = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: srcBytes.slice(0) }).promise;
+  currentPdf = pdf;
+  pages = [];
+  for (let i = 0; i < pdf.numPages; i++) {
+    pages.push({ id: seq++, kind: 'page', origIndex: i, rotation: 0, annotations: [] });
+  }
+  toolbar.style.display = 'flex';
+  await renderGrid(pdf);
+  status.textContent = `${pdf.numPages} page(s) loaded.`;
+}
+
+async function renderThumb(pdf, p) {
+  if (p.kind === 'blank') {
+    const c = document.createElement('canvas');
+    c.width = 120; c.height = 155;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = '#ccc'; ctx.strokeRect(0, 0, c.width, c.height);
+    return c.toDataURL();
+  }
+  const page = await pdf.getPage(p.origIndex + 1);
+  const viewport = page.getViewport({ scale: 0.3 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL();
+}
+
+async function renderGrid(pdf) {
+  pageGrid.innerHTML = '';
+  for (const p of pages) {
+    const dataUrl = await renderThumb(pdf, p);
+    const card = document.createElement('div');
+    card.className = 'page-card';
+    card.draggable = true;
+    card.dataset.id = p.id;
+    card.innerHTML = `
+      <img src="${dataUrl}" style="transform:rotate(${p.rotation}deg)"/>
+      <div class="num">${p.kind === 'blank' ? 'Blank page' : 'Page'}${p.annotations && p.annotations.length ? ` · ${p.annotations.length} text` : ''}</div>
+      <div class="ctrls">
+        <button data-act="rotate">⟳</button>
+        <button data-act="text">✏️ Text</button>
+        <button data-act="del" class="del">✕</button>
+      </div>`;
+    pageGrid.appendChild(card);
+  }
+  wireDragAndDrop();
+  wireCardButtons(pdf);
+}
+
+function wireCardButtons(pdf) {
+  pageGrid.querySelectorAll('.page-card').forEach(card => {
+    const id = parseInt(card.dataset.id);
+    card.querySelector('[data-act="rotate"]').addEventListener('click', () => {
+      const p = pages.find(x => x.id === id);
+      p.rotation = (p.rotation + 90) % 360;
+      card.querySelector('img').style.transform = `rotate(${p.rotation}deg)`;
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', () => {
+      pages = pages.filter(x => x.id !== id);
+      card.remove();
+    });
+    card.querySelector('[data-act="text"]').addEventListener('click', () => openTextEditor(id));
+  });
+}
+
+function wireDragAndDrop() {
+  let dragged = null;
+  pageGrid.querySelectorAll('.page-card').forEach(card => {
+    card.addEventListener('dragstart', () => { dragged = card; card.classList.add('dragging'); });
+    card.addEventListener('dragend', () => { card.classList.remove('dragging'); reorderFromDom(); });
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      const after = [...pageGrid.querySelectorAll('.page-card:not(.dragging)')].find(el => {
+        const r = el.getBoundingClientRect();
+        return e.clientY < r.top + r.height / 2 && e.clientX < r.right;
+      });
+      if (after) pageGrid.insertBefore(dragged, after);
+      else pageGrid.appendChild(dragged);
+    });
+  });
+}
+
+function reorderFromDom() {
+  const order = [...pageGrid.querySelectorAll('.page-card')].map(c => parseInt(c.dataset.id));
+  pages = order.map(id => pages.find(p => p.id === id));
+}
+
+// ── Text annotation lightbox: click a page to add/drag/edit text boxes on
+// top of it. Coordinates are stored in PDF point space (bottom-left
+// origin) so Save can draw them onto the real page regardless of the
+// preview scale used here. ──
+const textLightbox = document.getElementById('textLightbox');
+const editorStage = document.getElementById('editorStage');
+let editingPageId = null;
+let editorScale = 1;
+
+async function openTextEditor(pageId) {
+  const p = pages.find(x => x.id === pageId);
+  if (!p) return;
+  editingPageId = pageId;
+  editorStage.innerHTML = '';
+  let widthPts = 612, heightPts = 792;
+  // Fits the page to the actual available space in the lightbox (up to
+  // ~90% of the viewport in each dimension independently) instead of the
+  // previous math, which divided by whichever of width/height was LARGER
+  // — for a normal portrait page that's the height, so the page rendered
+  // far smaller than the lightbox had room for. This now uses whichever
+  // of width-limited or height-limited scale is smaller (so it never
+  // overflows), which for a typical page fills the box edge-to-edge.
+  const availWidth = window.innerWidth * 0.9 - 32;
+  const availHeight = window.innerHeight * 0.78;
+  if (p.kind === 'page') {
+    const page = await currentPdf.getPage(p.origIndex + 1);
+    const baseViewport = page.getViewport({ scale: 1 });
+    widthPts = baseViewport.width; heightPts = baseViewport.height;
+    editorScale = Math.min(3, availWidth / widthPts, availHeight / heightPts);
+    const viewport = page.getViewport({ scale: editorScale, rotation: p.rotation });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    editorStage.appendChild(canvas);
+    editorStage.style.width = viewport.width + 'px';
+    editorStage.style.height = viewport.height + 'px';
+  } else {
+    editorScale = Math.min(3, availWidth / 612, availHeight / 792);
+    const w = Math.round(612 * editorScale), h = Math.round(792 * editorScale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+    editorStage.appendChild(canvas);
+    editorStage.style.width = w + 'px'; editorStage.style.height = h + 'px';
+  }
+  (p.annotations || []).forEach(ann => renderTextBox(ann, p));
+  textLightbox.classList.add('open');
+}
+
+function renderTextBox(ann, p) {
+  const el = document.createElement('div');
+  el.className = 'text-box';
+  el.contentEditable = 'true';
+  el.textContent = ann.text;
+  el.style.fontSize = (ann.size * editorScale) + 'px';
+  // ann.x/ann.y are stored in PDF points from the top-left of the
+  // UNROTATED page; since the canvas above is already rendered rotated,
+  // dom position = pdf point * scale (simple case — rotation-aware
+  // placement is intentionally left simple: add text after your rotation
+  // is finalized for predictable placement).
+  el.style.left = (ann.x * editorScale) + 'px';
+  el.style.top = (ann.y * editorScale) + 'px';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'del-box';
+  delBtn.textContent = '✕';
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    p.annotations = p.annotations.filter(a => a !== ann);
+    el.remove();
+  });
+  el.appendChild(delBtn);
+  el.addEventListener('input', () => {
+    // keep the delete button even though contenteditable can wipe children
+    if (!el.contains(delBtn)) el.appendChild(delBtn);
+    ann.text = el.textContent.replace('✕', '').trim();
+  });
+  makeBoxDraggable(el, ann);
+  editorStage.appendChild(el);
+}
+
+function makeBoxDraggable(el, ann) {
+  el.addEventListener('mousedown', (e) => {
+    if (e.target !== el) return; // don't drag when clicking the delete button or while text-editing caret is placed mid-drag
+    const startX = e.clientX, startY = e.clientY;
+    const origX = ann.x, origY = ann.y;
+    function onMove(ev) {
+      ann.x = origX + (ev.clientX - startX) / editorScale;
+      ann.y = origY + (ev.clientY - startY) / editorScale;
+      el.style.left = (ann.x * editorScale) + 'px';
+      el.style.top = (ann.y * editorScale) + 'px';
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+document.getElementById('addTextBoxBtn').addEventListener('click', () => {
+  const p = pages.find(x => x.id === editingPageId);
+  if (!p) return;
+  if (!p.annotations) p.annotations = [];
+  const ann = { x: 40, y: 40, text: 'New text', size: 18 };
+  p.annotations.push(ann);
+  renderTextBox(ann, p);
+});
+
+document.getElementById('closeLightboxBtn').addEventListener('click', () => {
+  textLightbox.classList.remove('open');
+  editingPageId = null;
+  renderGrid(currentPdf); // refresh the "N text" label on the thumbnail
+});
+
+document.getElementById('addBlankBtn').addEventListener('click', async () => {
+  const p = { id: seq++, kind: 'blank', origIndex: null, rotation: 0, annotations: [] };
+  pages.push(p);
+  const card = document.createElement('div');
+  card.className = 'page-card';
+  card.draggable = true;
+  card.dataset.id = p.id;
+  const dataUrl = await renderThumb(null, p);
+  card.innerHTML = `
+    <img src="${dataUrl}"/>
+    <div class="num">Blank page</div>
+    <div class="ctrls">
+      <button data-act="text">✏️ Text</button>
+      <button data-act="del" class="del">✕</button>
+    </div>`;
+  pageGrid.appendChild(card);
+  card.querySelector('[data-act="del"]').addEventListener('click', () => { pages = pages.filter(x => x.id !== p.id); card.remove(); });
+  card.querySelector('[data-act="text"]').addEventListener('click', () => openTextEditor(p.id));
+  wireDragAndDrop();
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  if (!srcBytes || pages.length === 0) { status.textContent = 'Nothing to save.'; return; }
+  status.textContent = 'Building PDF…';
+  try {
+    const out = await PDFDocument.create();
+    const src = await PDFDocument.load(srcBytes.slice(0));
+    const font = await out.embedFont(PDFLib.StandardFonts.Helvetica);
+    for (const p of pages) {
+      let outPage;
+      if (p.kind === 'blank') {
+        outPage = out.addPage([612, 792]);
+      } else {
+        const [copied] = await out.copyPages(src, [p.origIndex]);
+        if (p.rotation) {
+          const base = copied.getRotation().angle || 0;
+          copied.setRotation(degrees((base + p.rotation) % 360));
+        }
+        outPage = out.addPage(copied);
+      }
+      const { height: pageHeight } = outPage.getSize();
+      for (const ann of (p.annotations || [])) {
+        if (!ann.text || !ann.text.trim()) continue;
+        outPage.drawText(ann.text, {
+          x: ann.x,
+          y: pageHeight - ann.y - ann.size,
+          size: ann.size,
+          font,
+          color: PDFLib.rgb(0, 0, 0),
+        });
+      }
+    }
+    const bytes = await out.save();
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'edited.pdf'; a.click();
+    URL.revokeObjectURL(url);
+    status.textContent = `Saved ${pages.length} page(s).`;
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+});
+</script>
+{% endblock %}

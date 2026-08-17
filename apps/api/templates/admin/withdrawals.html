@@ -1,0 +1,50 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Withdrawal Requests{% endblock %}
+{% block page_subtitle %}Client wallet withdrawal requests — balance is reserved the moment a request is made{% endblock %}
+{% block content %}
+
+<div class="a-panel">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Requests ({{ requests|length }})</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% for s in ['pending','approved','paid','rejected','all'] %}
+      <a href="{{ url_for('admin.withdrawals', status=s) }}" class="a-btn a-btn-xs {{ 'a-btn-primary' if active_status == s else '' }}">{{ s|title }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="a-panel-body">
+    {% if not requests %}
+    <p style="color:var(--text-3);font-size:13px">No {{ active_status }} withdrawal requests.</p>
+    {% endif %}
+    <div style="display:flex;flex-direction:column;gap:12px">
+      {% for r in requests %}
+      <div style="border:1px solid var(--border-1,rgba(255,255,255,0.08));border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:600;font-size:13px">{{ r.user.name or r.user.email }} — {{ r.amount | money(r.currency) }}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Requested {{ r.created_at.strftime('%b %d, %Y %H:%M') }}{% if r.resolved_at %} · Resolved {{ r.resolved_at.strftime('%b %d, %Y %H:%M') }}{% endif %}</div>
+            <div style="font-size:12px;margin-top:8px;background:rgba(255,255,255,0.04);border-radius:6px;padding:8px">{{ r.destination }}</div>
+            {% if r.admin_note %}<div style="font-size:11px;color:var(--text-3);margin-top:6px">Note: {{ r.admin_note }}</div>{% endif %}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+            {% set status_color = {'paid':'#34d399','rejected':'#f87171','approved':'#60a5fa'}.get(r.status, '#9ca3af') %}
+            <span style="font-size:11px;padding:2px 10px;border-radius:999px;background:{{ status_color }}22;color:{{ status_color }}">{{ r.status }}</span>
+            {% if r.status == 'pending' %}
+            <form method="POST" action="{{ url_for('admin.withdrawal_mark_paid', req_id=r.id) }}" style="display:flex;gap:6px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <input type="text" name="admin_note" placeholder="optional note" class="a-input a-input-sm"/>
+              <button type="submit" class="a-btn a-btn-xs a-btn-primary">Mark Paid</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.withdrawal_reject', req_id=r.id) }}" onsubmit="return confirm('Reject and refund this to the client\'s wallet?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-xs" style="color:#f87171">Reject &amp; Refund</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

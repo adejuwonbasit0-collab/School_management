@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Payments — {{ link.title }}{% endblock %}
+{% block page_subtitle %}{{ link.paid_count }} paid · {{ link.total_collected }} {{ link.currency }} collected{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('admin.payment_links') }}" class="topbar-btn">← All Payment Links</a>
+{% endblock %}
+
+{% block content %}
+<div class="a-panel">
+  <div class="a-table-wrap">
+    <table class="a-table">
+      <thead>
+        <tr>
+          <th>Payer</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th><th>Date</th><th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in payments %}
+        <tr>
+          <td>
+            <div style="font-weight:600">{{ p.payer_name or '—' }}</div>
+            <div class="text-muted mono" style="font-size:11px">{{ p.payer_email or '' }}</div>
+          </td>
+          <td>{{ p.amount }} {{ p.currency }}</td>
+          <td style="text-transform:capitalize">{{ (p.gateway or '')|replace('_',' ') }}</td>
+          <td style="font-size:11px;max-width:200px">
+            {{ p.gateway_ref or p.sender_reference or '—' }}
+            {% if p.proof_image %}<br/><a href="{{ p.proof_image }}" target="_blank" style="color:var(--cyan)">View proof →</a>{% endif %}
+          </td>
+          <td>
+            <span class="badge {{ 'badge-success' if p.status=='paid' else ('badge-warning' if p.status=='pending' else 'badge-danger') }}">{{ p.status }}</span>
+          </td>
+          <td class="text-muted" style="font-size:11px">{{ p.created_at.strftime('%b %d, %Y %H:%M') if p.created_at else '' }}</td>
+          <td style="text-align:right;white-space:nowrap">
+            {% if p.status == 'pending' and p.gateway in ('bank_transfer','crypto','wave','payoneer') %}
+            <form method="POST" action="{{ url_for('admin.confirm_payment_link_payment', pid=p.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-primary a-btn-xs">Confirm Paid</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.reject_payment_link_payment', pid=p.id) }}" style="display:inline" onsubmit="return confirm('Reject this payment claim?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-ghost a-btn-xs" style="color:#f87171">Reject</button>
+            </form>
+            {% else %}
+            <span class="text-muted" style="font-size:11px">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted)">No payments yet for this link.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

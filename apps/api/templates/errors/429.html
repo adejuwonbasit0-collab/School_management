@@ -1,0 +1,13 @@
+{% extends "public_base.html" %}
+{% block title %}Slow down — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+  <div class="text-center">
+    <p class="text-7xl mb-4">⏳</p>
+    <h1 class="text-6xl font-bold font-display gradient-text mb-4">429</h1>
+    <p class="text-gray-400 mb-2">Too many requests</p>
+    <p class="text-gray-500 text-sm mb-8">You're doing that a bit too fast — wait a moment and try again.</p>
+    <a href="/" class="btn-neon">← Go Home</a>
+  </div>
+</div>
+{% endblock %}

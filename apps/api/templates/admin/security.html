@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Security{% endblock %}
+{% block page_subtitle %}Two-factor authentication and account protection{% endblock %}
+{% block content %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Two-Factor Authentication (2FA)</div></div>
+  <div class="a-panel-body">
+    {% if current_user.totp_enabled %}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="width:10px;height:10px;border-radius:50%;background:#1DB954"></span>
+      <span style="color:#1DB954;font-weight:600;font-size:14px">2FA is enabled on your account</span>
+    </div>
+    <form method="POST" action="{{ url_for('admin.disable_2fa') }}" style="max-width:340px" onsubmit="return confirm('Disable 2FA? This makes your account less secure.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <label class="a-label">Confirm your password to disable</label>
+      <input type="password" name="password" required class="a-input" style="margin-top:6px;margin-bottom:12px"/>
+      <button class="a-btn" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#f87171">Disable 2FA</button>
+    </form>
+    {% else %}
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">
+      Adds a second step to login using an authenticator app (Google Authenticator, Authy, 1Password, etc.) —
+      even if someone gets your password, they can't log in without your phone too.
+    </p>
+    <button onclick="startSetup()" class="a-btn a-btn-primary" id="start-setup-btn">Set Up 2FA</button>
+
+    <div id="setup-flow" style="display:none;margin-top:20px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+        <img id="qr-code" src="" style="width:200px;height:200px;border-radius:12px;border:1px solid rgba(255,255,255,0.1)"/>
+        <div style="flex:1;min-width:240px">
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:8px">1. Scan this QR code with your authenticator app.</p>
+          <p style="font-size:11px;color:var(--text-3);margin-bottom:16px">Can't scan? Enter this code manually: <code id="manual-secret" style="color:#1DB954"></code></p>
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:8px">2. Enter the 6-digit code it shows:</p>
+          <form method="POST" action="{{ url_for('admin.enable_2fa') }}" style="display:flex;gap:8px">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input name="code" required maxlength="6" pattern="[0-9]*" inputmode="numeric" class="a-input" placeholder="000000" style="max-width:140px;text-align:center;letter-spacing:0.3em"/>
+            <button class="a-btn a-btn-primary">Verify & Enable</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Email Code (alternative to an authenticator app)</div></div>
+  <div class="a-panel-body">
+    {% if current_user.email_2fa_enabled %}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="width:10px;height:10px;border-radius:50%;background:#1DB954"></span>
+      <span style="color:#1DB954;font-weight:600;font-size:14px">Email-code 2FA is enabled</span>
+    </div>
+    <form method="POST" action="{{ url_for('admin.disable_email_2fa') }}" style="max-width:340px" onsubmit="return confirm('Disable email-code 2FA?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <label class="a-label">Confirm your password to disable</label>
+      <input type="password" name="password" required class="a-input" style="margin-top:6px;margin-bottom:12px"/>
+      <button class="a-btn" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#f87171">Disable</button>
+    </form>
+    {% elif current_user.totp_enabled %}
+    <p style="font-size:13px;color:var(--text-3)">Turn off authenticator-app 2FA above first — only one method can be active at a time.</p>
+    {% else %}
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">
+      No app to install — a 6-digit code is emailed to you at login instead. Slightly less secure than an
+      authenticator app (relies on your email account instead of a device you hold), but real protection if
+      you don't want to install anything.
+    </p>
+    <form method="POST" action="{{ url_for('admin.enable_email_2fa') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="a-btn a-btn-primary">Enable Email Code 2FA</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Sign-in with Google / GitHub</div></div>
+  <div class="a-panel-body">
+    <p style="font-size:13px;color:var(--text-3);line-height:1.7">
+      Not set up yet — this needs its own OAuth app registered with Google/GitHub (client ID + secret you'd
+      create directly on their developer consoles) before it can go live. Real, buildable, just a separate
+      piece of work from what's here today — ask if you want this scoped next.
+    </p>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Account Policy</div></div>
+  <div class="a-panel-body">
+    <ul style="font-size:13px;color:var(--text-2);line-height:2;list-style:disc;padding-left:20px">
+      <li><strong style="color:#fff">Single admin account.</strong> Only one user can hold the admin role at a time — attempting to promote a second account is blocked automatically, and the last remaining admin can't be demoted (that would lock everyone out).</li>
+      <li><strong style="color:#fff">Session timeout.</strong> You'll be signed out automatically after 10 minutes of inactivity.</li>
+      <li><strong style="color:#fff">New-device alerts.</strong> Logging in from an IP address not seen before sends an email alert to your admin notification address. (Real-time SMS-to-phone would need a paid SMS API like Twilio — not configured here.)</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+async function startSetup() {
+  document.getElementById('start-setup-btn').disabled = true;
+  const res = await fetch('{{ url_for("admin.setup_2fa") }}', { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } });
+  const data = await res.json();
+  document.getElementById('qr-code').src = data.qr_code;
+  document.getElementById('manual-secret').textContent = data.secret;
+  document.getElementById('setup-flow').style.display = 'block';
+}
+</script>
+{% endblock %}

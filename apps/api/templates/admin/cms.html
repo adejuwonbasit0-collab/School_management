@@ -1,0 +1,294 @@
+{% extends "admin/base.html" %}
+{% block page_title %}CMS / Content Blocks{% endblock %}
+{% block page_subtitle %}All site content is editable here{% endblock %}
+
+{% block content %}
+{# Global CSRF token for JavaScript #}
+<input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+
+<div class="space-y-5">
+  {% set block_defs = [
+    ("hero","Hero Section",[
+      ("badge","Live badge text e.g. 'Open for work'"),
+      ("headline","Main headline"),
+      ("subheadline","Subheadline / tagline"),
+      ("primary_cta_text","Primary button text"),
+      ("primary_cta_url","Primary button URL"),
+      ("secondary_cta_text","Secondary button text"),
+      ("secondary_cta_url","Secondary button URL"),
+    ]),
+    ("navbar","Navbar / Header",[
+      ("logo_text","Logo text"),("logo_image","Logo image URL"),
+      ("cta_text","CTA button text"),("cta_url","CTA button URL"),
+    ]),
+    ("about","About / Bio",[
+      ("name","Display name"),("title","Professional title"),
+      ("bio","Short bio paragraph"),("location","Location"),
+      ("email","Contact email"),("years_experience","Years of experience"),
+      ("skills","Skills (comma separated)"),("profile_image","Profile image URL"),
+    ]),
+    ("services_section","Services Section",[
+      ("heading","Section heading"),("subheading","Section subheading"),
+    ]),
+    ("cta","Call To Action",[
+      ("headline","CTA headline"),("subtext","CTA subtext"),
+      ("button_text","Button text"),("button_url","Button URL"),
+    ]),
+    ("footer","Footer",[
+      ("copyright","Copyright text"),("tagline","Footer tagline"),("address","Physical address"),
+    ]),
+    ("contact","Contact Page",[
+      ("heading","Page heading"),("subtext","Intro text"),
+      ("email","Contact email"),("phone","Phone number"),
+      ("address","Physical address"),("whatsapp","WhatsApp number"),
+    ]),
+    ("social","Social Links",[
+      ("twitter","Twitter/X URL"),("github","GitHub URL"),("linkedin","LinkedIn URL"),
+      ("instagram","Instagram URL"),("youtube","YouTube URL"),("discord","Discord URL"),
+    ]),
+  ] %}
+
+  {% for key, label, fields in block_defs %}
+  {% set block = blocks | selectattr('key','equalto',key) | first %}
+  {% set content = block.content if block else {} %}
+  <div class="glass border border-white/10 rounded-2xl overflow-hidden">
+    <button type="button" onclick="toggleSection('cms-{{ key }}')"
+      class="w-full flex items-center justify-between px-6 py-4 hover:bg-white/3 transition-colors text-left">
+      <div>
+        <span class="font-semibold text-white">{{ label }}</span>
+        <span class="text-xs text-gray-500 ml-3">{{ fields | length }} fields</span>
+      </div>
+      <span class="text-gray-400 text-sm" id="cms-{{ key }}-arrow">▼</span>
+    </button>
+    <div id="cms-{{ key }}" class="border-t border-white/10 p-6 hidden">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        {% for fname, flabel in fields %}
+        <div>
+          <label class="admin-label">{{ flabel }}</label>
+          <input id="cms-{{ key }}-{{ fname }}" value="{{ content.get(fname,'') if content else '' }}"
+            class="admin-input w-full mt-1" placeholder="{{ flabel }}"/>
+        </div>{% endfor %}
+      </div>
+
+      {% if key == 'hero' %}
+      <div class="border-t border-white/10 pt-4 mt-2 mb-4">
+        <p class="text-xs font-semibold text-white mb-3">Hero Background</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="admin-label">Background type</label>
+            <select id="cms-hero-background_type" class="admin-input w-full mt-1"
+              onchange="toggleHeroBgFields(this.value)">
+              <option value="default" {{ 'selected' if content.get('background_type','default')=='default' }}>Default (particles/grid, no photo)</option>
+              <option value="video" {{ 'selected' if content.get('background_type')=='video' }}>Video background</option>
+              <option value="image" {{ 'selected' if content.get('background_type')=='image' }}>Static image background</option>
+              <option value="slideshow" {{ 'selected' if content.get('background_type')=='slideshow' }}>Slideshow / image transition</option>
+            </select>
+          </div>
+          <div id="hero-bg-video-fields" class="hidden">
+            <label class="admin-label">Video URL (.mp4)</label>
+            <input id="cms-hero-video_url" value="{{ content.get('video_url','') }}" class="admin-input w-full mt-1" placeholder="https://.../hero.mp4"/>
+          </div>
+          <div id="hero-bg-image-fields" class="hidden">
+            <label class="admin-label">Image URL</label>
+            <input id="cms-hero-image_url" value="{{ content.get('image_url','') }}" class="admin-input w-full mt-1" placeholder="https://.../hero.jpg"/>
+          </div>
+          <div id="hero-bg-slideshow-fields" class="hidden sm:col-span-2">
+            <label class="admin-label">Slideshow image URLs (comma separated)</label>
+            <textarea id="cms-hero-slideshow_images" class="admin-input w-full mt-1" rows="2"
+              placeholder="https://.../1.jpg, https://.../2.jpg, https://.../3.jpg">{{ content.get('slideshow_images','') if content.get('slideshow_images') is string else (content.get('slideshow_images')|join(', ') if content.get('slideshow_images') else '') }}</textarea>
+            <label class="admin-label mt-2 block">Slide interval (ms)</label>
+            <input id="cms-hero-slideshow_interval" value="{{ content.get('slideshow_interval','5000') }}" class="admin-input w-full mt-1" placeholder="5000"/>
+          </div>
+        </div>
+      </div>
+      <script>
+        (function(){
+          var current = {{ (content.get('background_type') or 'default') | tojson }};
+          document.addEventListener('DOMContentLoaded', function(){ toggleHeroBgFields(current); });
+          if (document.readyState !== 'loading') toggleHeroBgFields(current);
+        })();
+      </script>
+      {% endif %}
+
+      <div class="flex items-center gap-3">
+        <button onclick="saveCMSBlock('{{ key }}', '{{ label }}', '{{ (fields | map(attribute=0) | list + (['background_type','video_url','image_url','slideshow_images','slideshow_interval'] if key=='hero' else [])) | join(',') }}')"
+          class="btn-neon text-xs py-2 px-5">Save "{{ label }}"</button>
+        <span id="cms-{{ key }}-status" class="text-xs text-gray-500"></span>
+      </div>
+    </div>
+  </div>{% endfor %}
+
+  <!-- Stats block (JSON array) -->
+  {% set stats_block = blocks | selectattr('key','equalto','stats') | first %}
+  <div class="glass border border-white/10 rounded-2xl overflow-hidden">
+    <button type="button" onclick="toggleSection('cms-stats')" class="w-full flex items-center justify-between px-6 py-4 hover:bg-white/3 transition-colors text-left">
+      <span class="font-semibold text-white">Stats Row</span>
+      <span class="text-gray-400 text-sm" id="cms-stats-arrow">▼</span>
+    </button>
+    <div id="cms-stats" class="border-t border-white/10 p-6 hidden">
+      <p class="text-xs text-gray-500 mb-3">Edit stats shown in the hero section (value + label + suffix)</p>
+      <div id="stats-editor" class="space-y-2 mb-4">
+        {% set stats = stats_block.content if stats_block and stats_block.content else [{"value":"50","label":"Projects","suffix":"+"},{"value":"30","label":"Clients","suffix":"+"},{"value":"5","label":"Years","suffix":"+"},{"value":"15","label":"Technologies","suffix":"+"}] %}
+        {% for s in stats %}
+        <div class="flex gap-2 items-center stat-row">
+          <input value="{{ s.value }}" class="admin-input stat-value" placeholder="50" style="width:80px"/>
+          <input value="{{ s.label }}" class="admin-input stat-label flex-1" placeholder="Projects Delivered"/>
+          <input value="{{ s.get('suffix','+') }}" class="admin-input stat-suffix" placeholder="+" style="width:60px"/>
+          <button onclick="this.parentElement.remove()" class="text-red-400 text-xs px-2 py-1 border border-red-500/30 rounded hover:bg-red-500/10">✕</button>
+        </div>{% endfor %}
+      </div>
+      <div class="flex gap-3">
+        <button onclick="addStatRow()" class="admin-btn-ghost text-xs">+ Add Stat</button>
+        <button onclick="saveStats()" class="btn-neon text-xs py-2 px-5">Save Stats</button>
+        <span id="cms-stats-status" class="text-xs text-gray-500 self-center"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toggleHeroBgFields(type) {
+  var video = document.getElementById('hero-bg-video-fields');
+  var image = document.getElementById('hero-bg-image-fields');
+  var slideshow = document.getElementById('hero-bg-slideshow-fields');
+  if (!video || !image || !slideshow) return;
+  video.classList.toggle('hidden', type !== 'video');
+  image.classList.toggle('hidden', type !== 'image');
+  slideshow.classList.toggle('hidden', type !== 'slideshow');
+}
+
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(id + '-arrow');
+  if (!el) return;
+  el.classList.toggle('hidden');
+  if (arrow) arrow.textContent = el.classList.contains('hidden') ? '▼' : '▲';
+}
+
+function getCsrf() {
+  const el = document.getElementById('csrf_token');
+  if (el) return el.value;
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta) return meta.content;
+  return '';
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast') || (function() {
+    const d = document.createElement('div');
+    d.id = 'toast';
+    d.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:12px 24px;border-radius:12px;color:#fff;font-size:14px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);';
+    document.body.appendChild(d);
+    return d;
+  })();
+  t.textContent = msg;
+  t.style.borderColor = type === 'success' ? '#00ff88' : type === 'error' ? '#ff4444' : '#ffffff44';
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() { t.style.display = 'none'; }, 3000);
+}
+
+async function saveCMSBlock(key, label, fieldNamesStr) {
+  const fieldNames = fieldNamesStr ? fieldNamesStr.split(',') : [];
+  const content = {};
+  fieldNames.forEach(function(f) {
+    const el = document.getElementById('cms-' + key + '-' + f);
+    if (el) content[f] = el.value;
+  });
+  const statusEl = document.getElementById('cms-' + key + '-status');
+  if (!statusEl) return;
+  statusEl.textContent = 'Saving…';
+  statusEl.style.color = 'var(--text-muted)';
+
+  try {
+    const response = await fetch('/admin/cms/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf()
+      },
+      body: JSON.stringify({ key: key, label: label, type: 'section', content: content })
+    });
+    const data = await response.json();
+    if (data.success) {
+      statusEl.textContent = '✓ Saved';
+      statusEl.style.color = '#00ff88';
+      showToast(label + ' saved!', 'success');
+    } else {
+      statusEl.textContent = '✕ ' + (data.error || 'Unknown error');
+      statusEl.style.color = '#f87171';
+      showToast('Error: ' + (data.error || 'Save failed'), 'error');
+    }
+  } catch (e) {
+    statusEl.textContent = '✕ Error';
+    statusEl.style.color = '#f87171';
+    showToast('Network error: ' + e.message, 'error');
+  }
+  setTimeout(function() {
+    if (statusEl.textContent !== '✕ Error' && !statusEl.textContent.startsWith('✕ ')) {
+      statusEl.textContent = '';
+    }
+  }, 4000);
+}
+
+function addStatRow() {
+  const container = document.getElementById('stats-editor');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'flex gap-2 items-center stat-row';
+  div.innerHTML = `
+    <input class="admin-input stat-value" placeholder="0" style="width:80px"/>
+    <input class="admin-input stat-label flex-1" placeholder="Label"/>
+    <input class="admin-input stat-suffix" placeholder="+" style="width:60px"/>
+    <button onclick="this.parentElement.remove()" class="text-red-400 text-xs px-2 py-1 border border-red-500/30 rounded hover:bg-red-500/10">✕</button>
+  `;
+  container.appendChild(div);
+}
+
+async function saveStats() {
+  const rows = document.querySelectorAll('.stat-row');
+  const stats = [];
+  rows.forEach(function(row) {
+    const v = row.querySelector('.stat-value')?.value;
+    const l = row.querySelector('.stat-label')?.value;
+    const s = row.querySelector('.stat-suffix')?.value || '+';
+    if (v && l) stats.push({ value: v, label: l, suffix: s });
+  });
+  const statusEl = document.getElementById('cms-stats-status');
+  if (!statusEl) return;
+  statusEl.textContent = 'Saving…';
+  try {
+    const response = await fetch('/admin/cms/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf()
+      },
+      body: JSON.stringify({ key: 'stats', label: 'Stats Row', type: 'section', content: stats })
+    });
+    const data = await response.json();
+    if (data.success) {
+      statusEl.textContent = '✓ Saved';
+      statusEl.style.color = '#00ff88';
+      showToast('Stats saved!', 'success');
+    } else {
+      statusEl.textContent = '✕ Error';
+      statusEl.style.color = '#f87171';
+      showToast('Error: ' + (data.error || 'Save failed'), 'error');
+    }
+  } catch (e) {
+    statusEl.textContent = '✕ Error';
+    statusEl.style.color = '#f87171';
+    showToast('Error: ' + e.message, 'error');
+  }
+  setTimeout(function() {
+    if (statusEl.textContent !== '✕ Error' && !statusEl.textContent.startsWith('✕ ')) {
+      statusEl.textContent = '';
+    }
+  }, 4000);
+}
+</script>
+{% endblock %}

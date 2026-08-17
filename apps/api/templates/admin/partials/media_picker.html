@@ -1,0 +1,192 @@
+<!-- ═══════════════════ GLOBAL MEDIA PICKER (WordPress-style) ═══════════════════
+     Usage on any admin field:
+     <input type="text" id="my-field" data-media-target="my-field">
+     <button type="button" class="media-picker-btn" data-media-target="my-field">📁 Choose from Library</button>
+
+     Optionally show a live preview:
+     <img id="my-field-preview" data-media-preview="my-field" style="display:none">
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+#media-picker-overlay {
+  position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+#media-picker-overlay.open { display: flex; }
+#media-picker-modal {
+  width: 100%; max-width: 920px; max-height: 86vh; background: #0a0d1a; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; overflow: hidden; display: flex; flex-direction: column;
+}
+#mp-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap }
+#mp-tabs { display: flex; gap: 4px }
+.mp-tab-btn { font-size: 12px; padding: 7px 16px; border-radius: 8px; border: 1px solid transparent; background: none; color: #8899b0; cursor: pointer }
+.mp-tab-btn.active { background: rgba(29, 185, 84,0.1); color: #1DB954; border-color: rgba(29, 185, 84,0.25) }
+#mp-search { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 14px; font-size: 13px; color: #fff; min-width: 200px; outline: none }
+#mp-search:focus { border-color: rgba(29, 185, 84,0.4) }
+#mp-body { flex: 1; overflow-y: auto; padding: 18px 22px }
+#mp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px }
+.mp-item { position: relative; border-radius: 10px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: rgba(255,255,255,0.03); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; transition: border-color .15s }
+.mp-item:hover { border-color: rgba(29, 185, 84,0.4) }
+.mp-item.selected { border-color: #1DB954; box-shadow: 0 0 0 2px rgba(29, 185, 84,0.25) }
+.mp-item img { width: 100%; height: 100%; object-fit: cover }
+.mp-item .mp-filename { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: #fff; font-size: 9px; padding: 14px 6px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#mp-dropzone { border: 2px dashed rgba(29, 185, 84,0.3); border-radius: 14px; padding: 28px; text-align: center; cursor: pointer; margin-bottom: 16px; transition: all .2s }
+#mp-dropzone.drag-over, #mp-dropzone:hover { border-color: rgba(29, 185, 84,0.6); background: rgba(29, 185, 84,0.04) }
+#mp-footer { padding: 14px 22px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center }
+#mp-url-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 9px 14px; font-size: 13px; color: #fff; flex: 1; outline: none }
+</style>
+
+<div id="media-picker-overlay" onclick="if(event.target===this) closeMediaPicker()">
+  <div id="media-picker-modal">
+    <div id="mp-header">
+      <div id="mp-tabs">
+        <button class="mp-tab-btn active" data-tab="library" onclick="mpSwitchTab('library')">Media Library</button>
+        <button class="mp-tab-btn" data-tab="upload" onclick="mpSwitchTab('upload')">Upload New</button>
+        <button class="mp-tab-btn" data-tab="url" onclick="mpSwitchTab('url')">From URL</button>
+      </div>
+      <input id="mp-search" type="text" placeholder="Search library…" oninput="mpSearch(this.value)">
+      <button onclick="closeMediaPicker()" style="background:none;border:none;color:#8899b0;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div id="mp-body">
+      <div id="mp-pane-library">
+        <div id="mp-grid"></div>
+        <p id="mp-empty" style="display:none;text-align:center;color:#6b7a9a;padding:40px;font-size:13px">No media found. Try the Upload New tab.</p>
+        <div style="text-align:center;margin-top:14px"><button id="mp-load-more" onclick="mpLoadMore()" style="display:none;font-size:12px;padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:none;color:#8899b0;cursor:pointer">Load more</button></div>
+      </div>
+      <div id="mp-pane-upload" style="display:none">
+        <div id="mp-dropzone" onclick="document.getElementById('mp-file-input').click()"
+          ondragover="event.preventDefault();this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="event.preventDefault();this.classList.remove('drag-over');mpUpload(event.dataTransfer.files[0])">
+          <div style="font-size:36px;margin-bottom:10px">📤</div>
+          <p style="color:#cfe6ff;font-size:14px;font-weight:600;margin-bottom:4px">Drop a file here or click to browse</p>
+          <p style="color:#6b7a9a;font-size:12px">Images, video, audio, PDF, documents</p>
+          <input id="mp-file-input" type="file" style="display:none" onchange="mpUpload(this.files[0])">
+        </div>
+        <p id="mp-upload-status" style="text-align:center;font-size:13px;color:#6b7a9a"></p>
+      </div>
+      <div id="mp-pane-url" style="display:none">
+        <p style="color:#9fb3d1;font-size:13px;margin-bottom:10px">Paste a direct URL to use — including a link to a file already in your Media Library, or any external file URL.</p>
+        <div style="display:flex;gap:8px">
+          <input id="mp-url-field" type="text" placeholder="https://example.com/file.jpg" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 14px;font-size:13px;color:#fff;outline:none">
+          <button onclick="mpUseUrl()" style="padding:9px 18px;background:linear-gradient(135deg,#1DB954,#F2C94C);border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer">Use URL</button>
+        </div>
+      </div>
+    </div>
+    <div id="mp-footer">
+      <span id="mp-selected-name" style="font-size:12px;color:#6b7a9a"></span>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeMediaPicker()" style="padding:8px 16px;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#cfe6ff;font-size:13px;cursor:pointer">Cancel</button>
+        <button onclick="mpConfirmSelection()" style="padding:8px 18px;background:linear-gradient(135deg,#1DB954,#F2C94C);border:none;border-radius:8px;color:#000;font-weight:700;font-size:13px;cursor:pointer">Select</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let mpTargetField = null;
+let mpSelectedUrl = null;
+let mpSelectedName = '';
+let mpPage = 1;
+let mpQuery = '';
+let mpSearchTimeout = null;
+
+function openMediaPicker(targetFieldId) {
+  mpTargetField = targetFieldId;
+  mpSelectedUrl = null;
+  mpSelectedName = '';
+  document.getElementById('mp-selected-name').textContent = '';
+  document.getElementById('media-picker-overlay').classList.add('open');
+  mpSwitchTab('library');
+  mpPage = 1;
+  mpQuery = '';
+  document.getElementById('mp-search').value = '';
+  mpLoadLibrary(true);
+}
+function closeMediaPicker() {
+  document.getElementById('media-picker-overlay').classList.remove('open');
+}
+function mpSwitchTab(tab) {
+  document.querySelectorAll('.mp-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('mp-pane-library').style.display = tab === 'library' ? 'block' : 'none';
+  document.getElementById('mp-pane-upload').style.display = tab === 'upload' ? 'block' : 'none';
+  document.getElementById('mp-pane-url').style.display = tab === 'url' ? 'block' : 'none';
+}
+function mpSearch(q) {
+  clearTimeout(mpSearchTimeout);
+  mpSearchTimeout = setTimeout(() => { mpQuery = q; mpPage = 1; mpLoadLibrary(true); }, 300);
+}
+async function mpLoadLibrary(reset) {
+  try {
+    const res = await fetch(`/admin/media/api/list?page=${mpPage}&q=${encodeURIComponent(mpQuery)}`);
+    const data = await res.json();
+    const grid = document.getElementById('mp-grid');
+    if (reset) grid.innerHTML = '';
+    document.getElementById('mp-empty').style.display = (reset && !data.files.length) ? 'block' : 'none';
+    data.files.forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'mp-item';
+      div.dataset.url = f.url;
+      div.dataset.name = f.name;
+      const thumb = f.type === 'image' ? `<img src="${f.url}" loading="lazy">` : `<span style="font-size:28px">${f.type==='video'?'🎬':f.type==='document'?'📄':'📦'}</span>`;
+      div.innerHTML = thumb + `<div class="mp-filename">${f.name}</div>`;
+      div.onclick = () => {
+        document.querySelectorAll('.mp-item').forEach(i => i.classList.remove('selected'));
+        div.classList.add('selected');
+        mpSelectedUrl = f.url; mpSelectedName = f.name;
+        document.getElementById('mp-selected-name').textContent = f.name;
+      };
+      grid.appendChild(div);
+    });
+    document.getElementById('mp-load-more').style.display = data.has_next ? 'inline-block' : 'none';
+  } catch (e) { /* silent */ }
+}
+function mpLoadMore() { mpPage++; mpLoadLibrary(false); }
+
+async function mpUpload(file) {
+  if (!file) return;
+  const status = document.getElementById('mp-upload-status');
+  status.textContent = 'Uploading ' + file.name + '…';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/admin/media/api/upload', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+      body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = 'Error: ' + (data.error || 'upload failed'); return; }
+    status.textContent = 'Uploaded! Selecting…';
+    mpSelectedUrl = data.url; mpSelectedName = data.name;
+    document.getElementById('mp-selected-name').textContent = data.name;
+    mpConfirmSelection();
+  } catch (e) { status.textContent = 'Upload failed: ' + e.message; }
+}
+function mpUseUrl() {
+  const url = document.getElementById('mp-url-field').value.trim();
+  if (!url) return;
+  mpSelectedUrl = url; mpSelectedName = url.split('/').pop();
+  mpConfirmSelection();
+}
+function mpConfirmSelection() {
+  if (!mpSelectedUrl || !mpTargetField) { closeMediaPicker(); return; }
+  const field = document.getElementById(mpTargetField);
+  if (field) {
+    field.value = mpSelectedUrl;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  const preview = document.querySelector(`[data-media-preview="${mpTargetField}"]`);
+  if (preview) {
+    preview.src = mpSelectedUrl;
+    preview.style.display = '';
+  }
+  closeMediaPicker();
+}
+
+// Auto-wire any button with class="media-picker-btn" + data-media-target="<fieldId>"
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.media-picker-btn');
+  if (btn) openMediaPicker(btn.dataset.mediaTarget);
+});
+</script>

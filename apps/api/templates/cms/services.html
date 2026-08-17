@@ -1,0 +1,40 @@
+{% extends "public_base.html" %}
+{% block title %}Services — {{ site_name }}{% endblock %}
+{% block meta_desc %}Services offered by {{ site_name }}.{% endblock %}
+{% block content %}
+<section class="py-16 px-4" data-aos="fade-up">
+  <div class="max-w-7xl mx-auto">
+    <div class="text-center mb-12">
+      <div class="section-badge mb-4 mx-auto w-fit">✦ What I Do</div>
+      <h1 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">Services I Offer</h1>
+      <p class="text-gray-400 max-w-xl mx-auto">Everything I bring to a project, from first sketch to shipped product.</p>
+    </div>
+
+    {% if services %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      {% set service_icons = {"Code2":"💻","Palette":"🎨","Bot":"🤖","Package":"📦","Server":"🖥️","Search":"🔍","Zap":"⚡","Globe":"🌐","Shield":"🛡️","Database":"🗄️","Cpu":"⚙️","Layers":"🔲"} %}
+      {% for s in services %}
+      <a href="{{ url_for('cms.service_detail', service_id=s.id) }}" class="glass-card-premium p-6 reveal hover:border-cyan-500/30 transition-all block" style="animation-delay:{{ loop.index0 * 0.06 }}s">
+        <div class="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xl mb-4">{{ service_icons.get(s.icon, '⚡') }}</div>
+        <h3 class="font-semibold text-white mb-2">{{ s.title }}</h3>
+        <p class="text-sm text-gray-400 mb-3 line-clamp-3">{{ s.description }}</p>
+        {% if s.features %}
+        <ul class="space-y-1 mb-3">
+          {% for f in s.features[:3] %}<li class="text-xs text-gray-400 flex items-center gap-1.5"><span class="text-green-400">✓</span>{{ f }}</li>{% endfor %}
+        </ul>{% endif %}
+        <div class="flex items-center justify-between mt-4">
+          {% if s.price %}<p class="text-xs text-cyan-400 font-mono">from {{ s.price }}</p>{% else %}<span></span>{% endif %}
+          <span class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 border border-white/10 group-hover:text-white transition-all flex-shrink-0">→</span>
+        </div>
+      </a>{% endfor %}
+    </div>
+    {% else %}
+    <p class="text-center text-gray-500">Services coming soon — add them in Admin → Portfolio → Services.</p>
+    {% endif %}
+
+    <div class="text-center mt-14">
+      <a href="{{ url_for('cms.hire_me') }}" class="btn-neon text-sm py-3 px-8">Start a Project →</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

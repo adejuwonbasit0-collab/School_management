@@ -1,0 +1,13 @@
+{% extends "public_base.html" %}
+{% block title %}Error 400 — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+  <div class="text-center">
+    <p class="text-7xl mb-4">⚠️</p>
+    <h1 class="text-6xl font-bold font-display gradient-text mb-4">400</h1>
+    <p class="text-gray-400 mb-2">Bad Request</p>
+    {% if reason %}<p class="text-gray-500 text-sm mb-8">{{ reason }}</p>{% else %}<div class="mb-8"></div>{% endif %}
+    <a href="/" class="btn-neon">← Go Home</a>
+  </div>
+</div>
+{% endblock %}

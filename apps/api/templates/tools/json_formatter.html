@@ -1,0 +1,121 @@
+{% extends "public_base.html" %}
+{% block title %}JSON Formatter — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.json-editor { font-family:"JetBrains Mono",monospace; font-size:13px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:1rem; color:#e2e8f0; resize:none; outline:none; width:100%; }
+.json-editor:focus { border-color:rgba(var(--c-accent-rgb),0.35); }
+.json-key    { color:var(--c-accent); }
+.json-string { color:#00ff88; }
+.json-number { color:var(--c-accent-2); }
+.json-bool   { color:#ff6b35; }
+.json-null   { color:var(--c-text-2); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-12">
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold font-display gradient-text">JSON Formatter</h1>
+      <p class="text-gray-400 text-sm mt-1">Format, validate, minify, and explore JSON</p>
+    </div>
+    <a href="{{ url_for('tools.index') }}" class="admin-btn-ghost text-sm">← Tools</a>
+  </div>
+
+  <!-- toolbar -->
+  <div class="glass-card rounded-xl p-3 mb-5 flex flex-wrap gap-2 items-center">
+    <button onclick="formatJSON()" class="btn-neon text-xs py-1.5 px-4">Format</button>
+    <button onclick="minifyJSON()" class="admin-btn-ghost text-xs">Minify</button>
+    <button onclick="validateJSON()" class="admin-btn-ghost text-xs">Validate</button>
+    <button onclick="sortKeys()" class="admin-btn-ghost text-xs">Sort Keys</button>
+    <button onclick="clearAll()" class="admin-btn-ghost text-xs">Clear</button>
+    <button onclick="pasteClipboard()" class="admin-btn-ghost text-xs">Paste</button>
+    <span id="json-status" class="ml-auto text-xs text-gray-500"></span>
+    <button onclick="copyOutput()" class="admin-btn-ghost text-xs">Copy Output</button>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div>
+      <p class="text-xs text-gray-500 mb-2">Input JSON</p>
+      <textarea id="json-input" class="json-editor h-96" placeholder='Paste or type JSON here...
+
+{"name": "bazillin", "version": 2}'></textarea>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500 mb-2">Formatted Output</p>
+      <div id="json-output" class="json-editor h-96 overflow-auto whitespace-pre"></div>
+    </div>
+  </div>
+
+  <!-- stats -->
+  <div class="glass-card rounded-xl p-4 mt-4 flex flex-wrap gap-6">
+    <div><p class="text-xs text-gray-500">Size</p><p class="text-sm text-white font-mono" id="stat-size">—</p></div>
+    <div><p class="text-xs text-gray-500">Keys</p><p class="text-sm text-white font-mono" id="stat-keys">—</p></div>
+    <div><p class="text-xs text-gray-500">Depth</p><p class="text-sm text-white font-mono" id="stat-depth">—</p></div>
+    <div><p class="text-xs text-gray-500">Valid</p><p class="text-sm font-mono" id="stat-valid">—</p></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function syntaxHighlight(json) {
+  return json.replace(/("(\u[a-zA-Z0-9]{4}|\[^u]|[^\"])*"(\s*:)?|(true|false|null)|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+    let cls = 'json-number';
+    if (/^"/.test(match)) cls = /:$/.test(match) ? 'json-key' : 'json-string';
+    else if (/true|false/.test(match)) cls = 'json-bool';
+    else if (/null/.test(match)) cls = 'json-null';
+    return `<span class="${cls}">${match}</span>`;
+  });
+}
+function countKeys(obj, c=0) {
+  if (typeof obj === 'object' && obj !== null) { for (const k in obj) { c++; c = countKeys(obj[k], c); } }
+  return c;
+}
+function maxDepth(obj, d=0) {
+  if (typeof obj !== 'object' || obj === null) return d;
+  return Math.max(...Object.values(obj).map(v => maxDepth(v, d+1)), d);
+}
+function formatJSON() {
+  const raw = document.getElementById('json-input').value.trim();
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    const pretty = JSON.stringify(parsed, null, 2);
+    document.getElementById('json-output').innerHTML = syntaxHighlight(pretty);
+    updateStats(raw, parsed, true);
+  } catch(e) {
+    document.getElementById('json-output').innerHTML = `<span style="color:#f87171">Error: ${e.message}</span>`;
+    document.getElementById('stat-valid').textContent = '✕ Invalid';
+    document.getElementById('stat-valid').className = 'text-sm font-mono text-red-400';
+  }
+}
+function minifyJSON() {
+  try { const p=JSON.parse(document.getElementById('json-input').value); document.getElementById('json-output').innerHTML=JSON.stringify(p); } catch(e){}
+}
+function validateJSON() {
+  try { JSON.parse(document.getElementById('json-input').value); document.getElementById('json-status').textContent='✓ Valid JSON'; document.getElementById('json-status').style.color='#00ff88'; }
+  catch(e) { document.getElementById('json-status').textContent='✕ '+e.message; document.getElementById('json-status').style.color='#f87171'; }
+}
+function sortKeys() {
+  try {
+    const parsed = JSON.parse(document.getElementById('json-input').value);
+    const sorted = JSON.parse(JSON.stringify(parsed, Object.keys(parsed).sort()));
+    document.getElementById('json-input').value = JSON.stringify(sorted, null, 2);
+    formatJSON();
+  } catch(e){}
+}
+function updateStats(raw, parsed, valid) {
+  document.getElementById('stat-size').textContent = (new Blob([raw]).size / 1024).toFixed(2) + ' KB';
+  document.getElementById('stat-keys').textContent = countKeys(parsed);
+  document.getElementById('stat-depth').textContent = maxDepth(parsed);
+  document.getElementById('stat-valid').textContent = valid ? '✓ Valid' : '✕ Invalid';
+  document.getElementById('stat-valid').className = 'text-sm font-mono ' + (valid ? 'text-green-400' : 'text-red-400');
+}
+function clearAll() { document.getElementById('json-input').value=''; document.getElementById('json-output').innerHTML=''; }
+async function pasteClipboard() { const t=await navigator.clipboard.readText(); document.getElementById('json-input').value=t; formatJSON(); }
+function copyOutput() { const t=document.getElementById('json-output').textContent; navigator.clipboard.writeText(t); showToast('Copied!','success'); }
+document.getElementById('json-input').addEventListener('input', () => {
+  clearTimeout(window._jsonTimer);
+  window._jsonTimer = setTimeout(formatJSON, 400);
+});
+</script>
+{% endblock %}

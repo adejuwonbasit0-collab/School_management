@@ -1,0 +1,65 @@
+{% extends "public_base.html" %}
+{% block title %}Diff Checker — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:1100px;margin:0 auto;padding:48px 20px">
+  <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Diff Checker</h1>
+  <p style="color:var(--c-text-2);margin-bottom:28px">Compare two texts side by side. Differences highlighted instantly.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div>
+      <label style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:8px">Original</label>
+      <textarea id="diff-left" oninput="doDiff()" rows="14"
+        style="width:100%;background:rgba(255,71,87,0.04);border:1px solid rgba(255,71,87,0.2);border-radius:12px;padding:14px;color:#e8edf8;font-size:13px;outline:none;resize:none;font-family:JetBrains Mono,monospace;line-height:1.7"
+        placeholder="Paste original text…"></textarea>
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:8px">Modified</label>
+      <textarea id="diff-right" oninput="doDiff()" rows="14"
+        style="width:100%;background:rgba(0,232,122,0.04);border:1px solid rgba(0,232,122,0.2);border-radius:12px;padding:14px;color:#e8edf8;font-size:13px;outline:none;resize:none;font-family:JetBrains Mono,monospace;line-height:1.7"
+        placeholder="Paste modified text…"></textarea>
+    </div>
+  </div>
+  <!-- Stats bar -->
+  <div id="diff-stats" style="display:flex;gap:16px;margin-bottom:16px;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px">
+    <span style="font-size:12px;color:var(--c-text-2)">Compare to see diff</span>
+  </div>
+  <!-- Diff output -->
+  <div id="diff-output" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;font-family:JetBrains Mono,monospace;font-size:12px;line-height:1.8;white-space:pre-wrap;min-height:100px;max-height:400px;overflow-y:auto;color:var(--c-text-2)">
+    Differences will appear here…
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function doDiff() {
+  const left  = document.getElementById('diff-left').value;
+  const right = document.getElementById('diff-right').value;
+  if (!left && !right) return;
+  const lLines = left.split('
+');
+  const rLines = right.split('
+');
+  const added   = rLines.filter(l=>!lLines.includes(l)).length;
+  const removed = lLines.filter(l=>!rLines.includes(l)).length;
+  const same    = lLines.filter(l=>rLines.includes(l)).length;
+  document.getElementById('diff-stats').innerHTML = `
+    <span style="font-size:12px;color:#00e87a;font-weight:700">+${added} added</span>
+    <span style="font-size:12px;color:#ff4757;font-weight:700">-${removed} removed</span>
+    <span style="font-size:12px;color:var(--c-text-2)">${same} unchanged</span>
+    <span style="font-size:12px;color:var(--c-text-2);margin-left:auto">${lLines.length} → ${rLines.length} lines</span>`;
+  let html = '';
+  const maxLen = Math.max(lLines.length, rLines.length);
+  for (let i=0; i<maxLen; i++) {
+    const l = lLines[i], r = rLines[i];
+    if (l === r) {
+      html += `<div style="color:#4a5a78;padding:1px 4px">  ${escHtml(l||'')}</div>`;
+    } else {
+      if (l !== undefined) html += `<div style="background:rgba(255,71,87,0.1);border-left:3px solid #ff4757;padding:1px 4px;color:#ff8891">- ${escHtml(l)}</div>`;
+      if (r !== undefined) html += `<div style="background:rgba(0,232,122,0.1);border-left:3px solid #00e87a;padding:1px 4px;color:#00e87a">+ ${escHtml(r)}</div>`;
+    }
+  }
+  document.getElementById('diff-output').innerHTML = html || '<span style="color:#3a4a62">No differences found</span>';
+}
+function escHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}

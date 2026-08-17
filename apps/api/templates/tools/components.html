@@ -1,0 +1,211 @@
+{% extends "public_base.html" %}
+{% block title %}UI Component Library — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+  .comp-card { transition: all 0.2s; }
+  .comp-card:hover { border-color: rgba(var(--c-accent-rgb),0.3); transform: translateY(-2px); }
+  .code-block { max-height: 300px; overflow-y: auto; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-12">
+  <div class="text-center mb-10">
+    <div class="section-badge">UI Component Library</div>
+    <h1 class="text-5xl font-bold font-display gradient-text mb-3">Build Faster</h1>
+    <p class="text-gray-400">Copy & paste these pre‑built components into your project</p>
+  </div>
+  <div class="flex flex-wrap gap-2 mb-8 justify-center">
+    <button onclick="filterComponents('all')" class="px-4 py-2 rounded-full border border-cyan-500/50 text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 transition-all" data-cat="all">All</button>
+    {% for cat in categories %}
+    <button onclick="filterComponents('{{ cat }}')" class="px-4 py-2 rounded-full border border-white/10 text-gray-400 hover:text-white hover:border-white/30 transition-all" data-cat="{{ cat }}">{{ cat }}</button>
+    {% endfor %}
+  </div>
+  <div id="component-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for comp in components %}
+    <div class="comp-card glass border border-white/10 rounded-2xl overflow-hidden" data-category="{{ comp.category }}">
+      <div class="h-48 bg-white/5 flex items-center justify-center overflow-hidden">
+        <iframe
+          srcdoc="{{ ('<script src=\"https://cdn.tailwindcss.com\"></script><style>*{box-sizing:border-box}body{margin:0;padding:16px;background:#0a0a0a;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif}' ~ (comp.css_code or '') ~ '</style>' ~ comp.html_code ~ (('<script>' ~ comp.js_code ~ '</script>') if comp.js_code else '')) | e }}"
+          style="width:100%;height:100%;border:0;pointer-events:none" sandbox="allow-scripts" loading="lazy" title="{{ comp.name }} preview"></iframe>
+      </div>
+      <div class="p-5">
+        <div class="flex justify-between items-start">
+          <div>
+            <h3 class="text-lg font-bold text-white">{{ comp.name }}</h3>
+            <span class="text-xs text-cyan-400">{{ comp.category }}</span>
+          </div>
+          {% if comp.featured %}<span class="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded">★ Featured</span>{% endif %}
+        </div>
+        {% if comp.description %}<p class="text-sm text-gray-400 mt-1">{{ comp.description }}</p>{% endif %}
+        <div class="flex flex-wrap gap-1 mt-2">
+          {% for tag in comp.tags %}
+          <span class="text-xs bg-white/5 text-gray-500 px-2 py-0.5 rounded">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        <button onclick="openComponentModal({{ comp.id }})" class="mt-4 btn-neon text-xs py-2 px-5 w-full">View & Copy Code</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-span-full text-center text-gray-500 py-12">No components yet. Check back soon!</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="component-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-4xl" style="max-height:90vh; overflow-y:auto;">
+    <div class="flex justify-between items-center mb-4">
+      <h3 id="modal-title" class="text-xl font-bold text-white"></h3>
+      <button onclick="toggleModal('component-modal')" class="text-gray-400 hover:text-white">✕</button>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="modal-preview" class="bg-white/5 rounded-xl p-4 min-h-[200px] flex items-center justify-center overflow-hidden"></div>
+      <div>
+        <div class="flex gap-2 border-b border-white/10 mb-3">
+          <button onclick="switchCodeTab('html')" id="code-tab-html" class="code-tab-btn px-3 py-1.5 text-sm border-b-2 -mb-px border-cyan-500 text-cyan-400">HTML</button>
+          <button onclick="switchCodeTab('css')" id="code-tab-css" class="code-tab-btn px-3 py-1.5 text-sm border-b-2 -mb-px border-transparent text-gray-400">CSS</button>
+          <button onclick="switchCodeTab('js')" id="code-tab-js" class="code-tab-btn px-3 py-1.5 text-sm border-b-2 -mb-px border-transparent text-gray-400">JS</button>
+        </div>
+        <pre id="code-block" class="bg-black/40 border border-white/10 rounded-xl p-4 text-xs font-mono text-cyan-200 overflow-x-auto max-h-64 whitespace-pre-wrap break-all"></pre>
+        <div class="flex gap-2 mt-3">
+          <button onclick="copyCode()" class="btn-neon text-xs py-2 px-5">Copy Full Code (HTML+CSS+JS)</button>
+          <button onclick="copyCurrentTabOnly()" class="admin-btn-ghost text-xs py-2 px-4">Copy This Tab Only</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentComponentId = null;
+let currentCodeTab = 'html';
+
+function filterComponents(cat) {
+  const cards = document.querySelectorAll('.comp-card');
+  document.querySelectorAll('[data-cat]').forEach(btn => {
+    const isActive = btn.dataset.cat === cat;
+    btn.classList.toggle('border-cyan-500/50', isActive);
+    btn.classList.toggle('text-cyan-400', isActive);
+    btn.classList.toggle('bg-cyan-500/10', isActive);
+    btn.classList.toggle('border-white/10', !isActive);
+    btn.classList.toggle('text-gray-400', !isActive);
+    btn.classList.toggle('bg-transparent', !isActive);
+  });
+  cards.forEach(card => {
+    if (cat === 'all' || card.dataset.category === cat) {
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+let currentComponentData = null;
+function openComponentModal(id) {
+  currentComponentId = id;
+  fetch('/api/component/' + id)
+    .then(res => res.json())
+    .then(data => {
+      currentComponentData = data;
+      document.getElementById('modal-title').textContent = data.name;
+      const doc = '<script src="https://cdn.tailwindcss.com"><\/script><style>*{box-sizing:border-box}body{margin:0;padding:20px;background:#0a0a0a;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif}'
+        + (data.css_code || '') + '</style>' + (data.html_code || '')
+        + (data.js_code ? '<script>' + data.js_code + '<\/script>' : '');
+      const iframe = document.createElement('iframe');
+      iframe.srcdoc = doc;
+      iframe.style.cssText = 'width:100%;height:260px;border:0';
+      iframe.setAttribute('sandbox', 'allow-scripts');
+      const preview = document.getElementById('modal-preview');
+      preview.innerHTML = '';
+      preview.appendChild(iframe);
+      switchCodeTab('html');
+    })
+    .catch(err => {
+      showToast('Error loading component', 'error');
+    });
+  toggleModal('component-modal');
+}
+
+function switchCodeTab(tab) {
+  currentCodeTab = tab;
+  document.querySelectorAll('.code-tab-btn').forEach(btn => {
+    btn.classList.remove('border-cyan-500', 'text-cyan-400');
+    btn.classList.add('border-transparent', 'text-gray-400');
+  });
+  const btn = document.getElementById('code-tab-' + tab);
+  if (btn) {
+    btn.classList.add('border-cyan-500', 'text-cyan-400');
+    btn.classList.remove('border-transparent', 'text-gray-400');
+  }
+  fetch('/api/component/' + currentComponentId + '/code?type=' + tab)
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('code-block').textContent = data.code || '// No code available';
+    })
+    .catch(() => {
+      document.getElementById('code-block').textContent = 'Error loading code';
+    });
+}
+
+function copyCode() {
+  // Combines HTML+CSS+JS into one self-contained snippet — copying just
+  // the currently-viewed tab (old behavior) meant pasting the HTML tab
+  // gave you unstyled markup with no CSS at all.
+  Promise.all([
+    fetch('/api/component/' + currentComponentId + '/code?type=html').then(r => r.json()),
+    fetch('/api/component/' + currentComponentId + '/code?type=css').then(r => r.json()),
+    fetch('/api/component/' + currentComponentId + '/code?type=js').then(r => r.json()),
+  ]).then(([htmlData, cssData, jsData]) => {
+    const html = htmlData.code || '';
+    const css = cssData.code || '';
+    const js = jsData.code || '';
+    let combined = html;
+    if (css.trim()) combined += `\n\n<style>\n${css}\n</style>`;
+    if (js.trim()) combined += `\n\n<script>\n${js}\n<\/script>`;
+    copyText(combined, 'Full code copied — HTML + CSS' + (js.trim() ? ' + JS' : '') + ' together!');
+  }).catch(() => {
+    // Fallback: just copy whatever tab is showing if the combined fetch fails
+    copyText(document.getElementById('code-block').textContent, 'Code copied!');
+  });
+}
+
+function copyCurrentTabOnly() {
+  copyText(document.getElementById('code-block').textContent, (currentCodeTab || 'Code').toUpperCase() + ' copied!');
+}
+
+function copyText(code, successMsg) {
+  navigator.clipboard.writeText(code).then(() => {
+    showToast(successMsg, 'success');
+  }).catch(() => {
+    const textarea = document.createElement('textarea');
+    textarea.value = code;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    showToast(successMsg, 'success');
+  });
+}
+
+// Init: show all
+document.addEventListener('DOMContentLoaded', function() {
+  filterComponents('all');
+});
+
+// toggleModal helper (reuse from existing site, if not defined)
+if (typeof toggleModal !== 'function') {
+  function toggleModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden');
+  }
+}
+if (typeof showToast !== 'function') {
+  function showToast(msg, type) {
+    // simple fallback
+    alert(msg);
+  }
+}
+</script>
+{% endblock %}

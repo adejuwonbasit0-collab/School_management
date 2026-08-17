@@ -1,0 +1,580 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block title %}Invoice Generator{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-display font-bold text-white tracking-tight">Invoice Generator</h1>
+            <p class="text-gray-400 text-sm mt-1">Create professional invoices</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="newInvoice()" class="px-4 py-2 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 border border-[#1DB954]/20 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                New Invoice
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <!-- Invoices List -->
+        <div class="xl:col-span-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col h-[800px] overflow-hidden">
+            <div class="p-4 border-b border-white/10">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-[#F2C94C]"></i>
+                    Recent Invoices
+                </h2>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                {% for invoice in invoices %}
+                <div class="p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 rounded-xl transition-all duration-200 cursor-pointer group relative">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="font-medium text-white text-sm">{{ invoice.invoice_number }}</div>
+                        {% if invoice.status == 'draft' %}
+                        <span class="px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded text-[10px] font-bold uppercase">Draft</span>
+                        {% elif invoice.status == 'sent' %}
+                        <span class="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px] font-bold uppercase">Sent</span>
+                        {% elif invoice.status == 'paid' %}
+                        <span class="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-[10px] font-bold uppercase">Paid</span>
+                        {% elif invoice.status == 'overdue' %}
+                        <span class="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-[10px] font-bold uppercase">Overdue</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="text-sm text-gray-300 mb-2 truncate">{{ invoice.client_name }}</div>
+                    
+                    <div class="flex justify-between items-end">
+                        <div class="text-xs text-gray-500">{{ invoice.created_at.strftime('%b %d, %Y') if invoice.created_at else '' }}</div>
+                        <div class="font-bold text-white">{{ invoice.currency }} {{ invoice.total }}</div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#0a0a0a] to-transparent flex items-center justify-end pr-3 opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                        <button onclick="copyPayLink('{{ invoice.id }}')" class="p-1.5 bg-white/10 hover:bg-[#1DB954]/20 rounded-lg text-[#1DB954]" title="Copy Pay Link">
+                            <i data-lucide="link" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="editInvoice('{{ invoice.id }}')" class="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white" title="Edit">
+                            <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="downloadPdf('{{ invoice.id }}')" class="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white" title="Download PDF">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="deleteInvoice('{{ invoice.id }}')" class="p-1.5 bg-white/10 hover:bg-red-500/20 rounded-lg text-red-400" title="Delete">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-12 text-gray-500">
+                    <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+                    <p class="text-sm">No invoices found.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Editor Area -->
+        <!-- Restructured so the toolbar is a normal flex child pinned below a
+             DEDICATED scroll area, instead of `position:absolute` floating
+             over the same box the form scrolled inside. The old layout made
+             every field reachable in theory, but on shorter/zoomed browser
+             windows the fixed 800px panel plus overlay toolbar made it easy
+             to lose track of which fields (business logo/header, notes,
+             totals) were still below the fold. -->
+        <div class="xl:col-span-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl h-[800px] max-h-[85vh] flex flex-col overflow-hidden">
+          <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+            <form id="invoiceForm" onsubmit="event.preventDefault();" class="space-y-8">
+                <input type="hidden" id="invoiceId" value="">
+                
+                <!-- Top Row: Details -->
+                <div class="flex flex-wrap md:flex-nowrap justify-between gap-6 pb-6 border-b border-white/10">
+                    <div>
+                        <h2 class="text-3xl font-display font-bold text-white mb-2 tracking-tight">INVOICE</h2>
+                        <div class="flex items-center gap-2">
+                            <span class="text-gray-400 text-sm">#</span>
+                            <input type="text" id="invNumber" class="bg-transparent border-none text-white font-medium focus:ring-0 p-0 text-sm w-32" value="INV-001" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-4 text-sm">
+                        <div class="space-y-2">
+                            <label class="block text-gray-400 text-right">Date</label>
+                            <input type="date" id="invDate" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white focus:border-[#1DB954] outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-gray-400 text-right">Due Date</label>
+                            <input type="date" id="invDueDate" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white focus:border-[#1DB954] outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-gray-400 text-right">Currency</label>
+                            <select id="invCurrency" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white focus:border-[#1DB954] outline-none w-28">
+                                {% for code, symbol, label in currencies %}
+                                <option value="{{ code }}">{{ code }} — {{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Addresses -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- From -->
+                    <div class="space-y-3">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">From</h3>
+
+                        <!-- Company logo header -->
+                        <div class="flex items-center gap-3">
+                            <div id="logoPreviewWrap" class="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                                <img id="logoPreview" src="" alt="" class="w-full h-full object-contain hidden">
+                                <i data-lucide="image" id="logoPlaceholderIcon" class="w-5 h-5 text-gray-500"></i>
+                            </div>
+                            <div>
+                                <button type="button" onclick="document.getElementById('logoFileInput').click()" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium text-white transition-colors flex items-center gap-1.5">
+                                    <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Logo
+                                </button>
+                                <button type="button" id="removeLogoBtn" onclick="removeLogo()" class="hidden ml-2 text-xs text-red-400 hover:text-red-300">Remove</button>
+                                <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" class="hidden" onchange="uploadLogo(this.files[0])">
+                            </div>
+                        </div>
+                        <input type="hidden" id="bizLogoUrl" value="">
+
+                        <input type="text" id="bizName" placeholder="Your Business Name" class="w-full bg-transparent border-b border-white/10 focus:border-[#1DB954] text-white font-medium px-0 py-1 outline-none transition-colors">
+                        <input type="email" id="bizEmail" placeholder="Email Address" class="w-full bg-transparent border-b border-white/10 focus:border-[#1DB954] text-white text-sm px-0 py-1 outline-none transition-colors">
+                        <textarea id="bizAddress" placeholder="Address" rows="2" class="w-full bg-transparent border-b border-white/10 focus:border-[#1DB954] text-white text-sm px-0 py-1 outline-none transition-colors resize-none"></textarea>
+                    </div>
+                    
+                    <!-- To -->
+                    <div class="space-y-3">
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Bill To</h3>
+                        <input type="text" id="clientName" placeholder="Client Name" class="w-full bg-transparent border-b border-white/10 focus:border-[#1DB954] text-white font-medium px-0 py-1 outline-none transition-colors">
+                        <input type="email" id="clientEmail" placeholder="Client Email" class="w-full bg-transparent border-b border-white/10 focus:border-[#1DB954] text-white text-sm px-0 py-1 outline-none transition-colors">
+                        <textarea id="clientAddress" placeholder="Client Address" rows="2" class="w-full bg-transparent border-b border-white/10 focus:border-[#1DB954] text-white text-sm px-0 py-1 outline-none transition-colors resize-none"></textarea>
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <div class="pt-4">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left" id="itemsTable">
+                            <thead>
+                                <tr class="text-xs text-gray-400 uppercase tracking-wider border-b border-white/10">
+                                    <th class="pb-3 w-[50%]">Description</th>
+                                    <th class="pb-3 w-[15%] text-center">Quantity</th>
+                                    <th class="pb-3 w-[15%] text-right">Rate</th>
+                                    <th class="pb-3 w-[15%] text-right">Amount</th>
+                                    <th class="pb-3 w-[5%]"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody" class="text-sm">
+                                <!-- Dynamic Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" onclick="addLineItem()" class="mt-4 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm transition-colors flex items-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Add Item
+                    </button>
+                </div>
+
+                <!-- Totals & Notes -->
+                <div class="flex flex-col md:flex-row gap-8 justify-between pt-4 border-t border-white/10">
+                    <div class="w-full md:w-1/2 space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Notes</label>
+                            <textarea id="invNotes" rows="2" placeholder="Any relevant notes..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] transition-all resize-none"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Terms & Conditions</label>
+                            <textarea id="invTerms" rows="2" placeholder="Payment terms..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] transition-all resize-none"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full md:w-1/3 space-y-3 text-sm">
+                        <div class="flex justify-between text-gray-300">
+                            <span>Subtotal</span>
+                            <span id="subtotalAmount">0.00</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-300">
+                            <span class="flex items-center gap-2">Tax <input type="number" id="taxRate" value="0" min="0" max="100" class="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-right outline-none focus:border-[#1DB954]" oninput="calculateTotals()"> %</span>
+                            <span id="taxAmount">0.00</span>
+                        </div>
+                        <div class="flex justify-between items-center text-gray-300 border-b border-white/10 pb-3">
+                            <span class="flex items-center gap-2">Discount <input type="number" id="discountAmount" value="0" min="0" class="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-right outline-none focus:border-[#1DB954]" oninput="calculateTotals()"></span>
+                            <span id="discountDisplay">- 0.00</span>
+                        </div>
+                        <div class="flex justify-between font-bold text-lg text-white pt-1">
+                            <span>Total</span>
+                            <span class="flex gap-1"><span id="currencySymbol">$</span><span id="totalAmount">0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+            </form>
+          </div>
+
+            <!-- Toolbar: always visible, never overlaps unscrolled content -->
+            <div class="shrink-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-white/10 p-4 flex justify-end gap-3 rounded-b-2xl">
+                <button onclick="saveInvoice('draft')" class="px-4 py-2 bg-white/5 text-white hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium transition-all">
+                    Save Draft
+                </button>
+                <button onclick="sendInvoice()" class="px-4 py-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/20 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                    <i data-lucide="send" class="w-4 h-4"></i> Send to Client
+                </button>
+                <button onclick="saveInvoice('final')" class="px-5 py-2 bg-[#1DB954] text-black hover:bg-[#1ed760] rounded-lg text-sm font-bold transition-all shadow-[0_0_15px_rgba(29,185,84,0.3)] flex items-center gap-2">
+                    <i data-lucide="check" class="w-4 h-4"></i> Save Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Full invoice data (all fields, not just the list-view summary) so
+    // editInvoice() can actually load an existing invoice instead of
+    // just alerting and doing nothing.
+    const INVOICES = {{ invoices_json|tojson }};
+    // Kept in sync with INVOICE_CURRENCIES in app/dashboard/routes.py.
+    // The <select> value is now a real ISO code (e.g. "NGN"), never a
+    // bare symbol — the symbol is only used for on-screen display.
+    const CURRENCY_SYMBOLS = {
+        NGN: '₦', USD: '$', EUR: '€', GBP: '£', CAD: '$', AUD: '$', ZAR: 'R',
+        KES: 'KSh', GHS: 'GH₵', XOF: 'CFA', EGP: 'E£', INR: '₹', AED: 'د.إ',
+        JPY: '¥', CNY: '¥', CHF: 'CHF', SEK: 'kr',
+    };
+
+    // Set default dates
+    document.getElementById('invDate').valueAsDate = new Date();
+    let dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 14); // default 14 days
+    document.getElementById('invDueDate').valueAsDate = dueDate;
+
+    // Table Logic
+    let itemCounter = 0;
+    
+    function addLineItem(desc = '', qty = 1, rate = 0) {
+        const tbody = document.getElementById('itemsBody');
+        const tr = document.createElement('tr');
+        tr.className = 'group border-b border-white/5 hover:bg-white/5 transition-colors';
+        tr.innerHTML = `
+            <td class="py-2 pr-2">
+                <input type="text" placeholder="Item description" class="item-desc w-full bg-transparent border-none focus:ring-0 text-white outline-none" value="${desc}">
+            </td>
+            <td class="py-2 px-2">
+                <input type="number" min="1" value="${qty}" class="item-qty w-full bg-transparent border-none focus:ring-0 text-white text-center outline-none" oninput="calculateTotals()">
+            </td>
+            <td class="py-2 px-2">
+                <input type="number" min="0" step="0.01" value="${rate}" class="item-rate w-full bg-transparent border-none focus:ring-0 text-white text-right outline-none" oninput="calculateTotals()">
+            </td>
+            <td class="py-2 px-2 text-right text-gray-300 item-amount">0.00</td>
+            <td class="py-2 pl-2 text-right">
+                <button type="button" onclick="removeLineItem(this)" class="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        lucide.createIcons();
+        calculateTotals();
+        itemCounter++;
+    }
+
+    function removeLineItem(btn) {
+        btn.closest('tr').remove();
+        calculateTotals();
+    }
+
+    function calculateTotals() {
+        let subtotal = 0;
+        const rows = document.querySelectorAll('#itemsBody tr');
+        
+        rows.forEach(row => {
+            const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+            const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+            const amount = qty * rate;
+            row.querySelector('.item-amount').textContent = amount.toFixed(2);
+            subtotal += amount;
+        });
+
+        const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+        const taxAmount = subtotal * (taxRate / 100);
+        
+        const discount = parseFloat(document.getElementById('discountAmount').value) || 0;
+        
+        const total = subtotal + taxAmount - discount;
+
+        document.getElementById('subtotalAmount').textContent = subtotal.toFixed(2);
+        document.getElementById('taxAmount').textContent = taxAmount.toFixed(2);
+        document.getElementById('discountDisplay').textContent = '- ' + discount.toFixed(2);
+        document.getElementById('totalAmount').textContent = Math.max(0, total).toFixed(2);
+        
+        // Update currency symbol (select value is now an ISO code, e.g. "NGN")
+        const currencyCode = document.getElementById('invCurrency').value;
+        document.getElementById('currencySymbol').textContent = CURRENCY_SYMBOLS[currencyCode] || currencyCode;
+    }
+    
+    // Add initial empty row
+    addLineItem();
+    
+    // Currency listener
+    document.getElementById('invCurrency').addEventListener('change', calculateTotals);
+
+    // API Functions
+    function getHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        };
+    }
+
+    function collectFormData(status = 'draft') {
+        const items = [];
+        document.querySelectorAll('#itemsBody tr').forEach(row => {
+            items.push({
+                description: row.querySelector('.item-desc').value,
+                quantity: parseFloat(row.querySelector('.item-qty').value) || 0,
+                rate: parseFloat(row.querySelector('.item-rate').value) || 0
+            });
+        });
+        
+        return {
+            id: document.getElementById('invoiceId').value,
+            invoice_number: document.getElementById('invNumber').value,
+            date: document.getElementById('invDate').value,
+            due_date: document.getElementById('invDueDate').value,
+            currency: document.getElementById('invCurrency').value,
+            
+            business_name: document.getElementById('bizName').value,
+            business_email: document.getElementById('bizEmail').value,
+            business_address: document.getElementById('bizAddress').value,
+            logo_url: document.getElementById('bizLogoUrl').value,
+            
+            client_name: document.getElementById('clientName').value,
+            client_email: document.getElementById('clientEmail').value,
+            client_address: document.getElementById('clientAddress').value,
+            
+            items: items,
+            tax_rate: parseFloat(document.getElementById('taxRate').value) || 0,
+            discount: parseFloat(document.getElementById('discountAmount').value) || 0,
+            notes: document.getElementById('invNotes').value,
+            terms: document.getElementById('invTerms').value,
+            
+            status: status
+        };
+    }
+
+    function saveInvoice(status) {
+        const data = collectFormData(status);
+        if (!data.client_name) {
+            alert("Client name is required");
+            return;
+        }
+
+        fetch('/dashboard/invoice-generator/create', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(resData => {
+            if (resData.error) {
+                alert(resData.error);
+                return;
+            }
+            alert('Invoice saved successfully');
+            location.href = '/dashboard/invoice-generator';
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Could not save invoice — please try again.');
+        });
+    }
+
+    function setLogoPreview(url) {
+        document.getElementById('bizLogoUrl').value = url || '';
+        const img = document.getElementById('logoPreview');
+        const icon = document.getElementById('logoPlaceholderIcon');
+        const removeBtn = document.getElementById('removeLogoBtn');
+        if (url) {
+            img.src = url;
+            img.classList.remove('hidden');
+            icon.classList.add('hidden');
+            removeBtn.classList.remove('hidden');
+        } else {
+            img.src = '';
+            img.classList.add('hidden');
+            icon.classList.remove('hidden');
+            removeBtn.classList.add('hidden');
+        }
+    }
+
+    function removeLogo() {
+        setLogoPreview('');
+        document.getElementById('logoFileInput').value = '';
+    }
+
+    function uploadLogo(file) {
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('logo', file);
+        fetch('/dashboard/invoice-generator/upload-logo', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            setLogoPreview(data.url);
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Logo upload failed — please try again.');
+        });
+    }
+
+    function sendInvoice() {
+        const id = document.getElementById('invoiceId').value;
+        if (!id) {
+            alert("Please save the invoice first before sending");
+            return;
+        }
+        // Fail fast client-side too — the backend already rejects a
+        // missing client email, but checking here means a saved invoice
+        // whose client fields were later cleared doesn't even attempt
+        // the request before catching it.
+        if (!document.getElementById('clientEmail').value.trim()) {
+            alert("Add a client email above before sending — this invoice doesn't have one yet.");
+            return;
+        }
+
+        fetch(`/dashboard/invoice-generator/${id}/send`, {
+            method: 'POST',
+            headers: getHeaders()
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            alert('Invoice sent to client');
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Could not send invoice — please try again.');
+        });
+    }
+
+    function downloadPdf(id) {
+        window.open(`/dashboard/invoice-generator/${id}/pdf`, '_blank');
+    }
+
+    function copyThePayUrl(url) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Payment link copied — send this to your client:\n' + url);
+        }).catch(() => {
+            prompt('Copy this payment link:', url);
+        });
+    }
+
+    function copyPayLink(id) {
+        const inv = INVOICES.find(i => String(i.id) === String(id));
+        if (!inv) {
+            alert('Could not find that invoice.');
+            return;
+        }
+        if (inv.pay_url) {
+            copyThePayUrl(inv.pay_url);
+            return;
+        }
+        // No pay link yet — this can happen for an invoice that was saved
+        // before it had a total, or before pay-link generation existed.
+        // Try to create/repair it now instead of just telling the user
+        // it's missing with no way to fix it.
+        fetch(`/dashboard/invoice-generator/${id}/ensure-pay-link`, {
+            method: 'POST',
+            headers: getHeaders()
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            inv.pay_url = data.pay_url;
+            copyThePayUrl(data.pay_url);
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Could not generate a payment link — please try again.');
+        });
+    }
+
+    function deleteInvoice(id) {
+        if (confirm('Are you sure you want to delete this invoice?')) {
+            fetch(`/dashboard/invoice-generator/${id}/delete`, {
+                method: 'POST',
+                headers: getHeaders()
+            })
+            .then(res => res.json())
+            .then(data => location.reload())
+            .catch(err => {
+                console.error(err);
+                alert('Could not delete invoice — please try again.');
+            });
+        }
+    }
+
+    function newInvoice() {
+        document.getElementById('invoiceForm').reset();
+        document.getElementById('invoiceId').value = '';
+        document.getElementById('invNumber').value = 'INV-' + Math.floor(Math.random() * 10000);
+        document.getElementById('itemsBody').innerHTML = '';
+        setLogoPreview('');
+        addLineItem();
+        calculateTotals();
+    }
+
+    function editInvoice(id) {
+        const inv = INVOICES.find(i => String(i.id) === String(id));
+        if (!inv) {
+            alert('Could not find that invoice.');
+            return;
+        }
+        document.getElementById('invoiceId').value = inv.id;
+        document.getElementById('invNumber').value = inv.invoice_number || '';
+        document.getElementById('invDueDate').value = inv.due_date || '';
+        // `inv.currency` is a real ISO code now (e.g. "NGN"); older
+        // invoices saved before this fix may still have a bare symbol
+        // ("$") stored — fall back to USD in that case rather than
+        // leaving the dropdown on whatever it happened to render first.
+        document.getElementById('invCurrency').value = CURRENCY_SYMBOLS[inv.currency] ? inv.currency : 'USD';
+        document.getElementById('bizName').value = inv.business_name || '';
+        document.getElementById('bizEmail').value = inv.business_email || '';
+        document.getElementById('bizAddress').value = inv.business_address || '';
+        setLogoPreview(inv.logo_url || '');
+        document.getElementById('clientName').value = inv.client_name || '';
+        document.getElementById('clientEmail').value = inv.client_email || '';
+        document.getElementById('clientAddress').value = inv.client_address || '';
+        document.getElementById('invNotes').value = inv.notes || '';
+        document.getElementById('invTerms').value = inv.terms || '';
+        document.getElementById('taxRate').value = inv.tax_rate || 0;
+        document.getElementById('discountAmount').value = inv.discount || 0;
+
+        document.getElementById('itemsBody').innerHTML = '';
+        const items = inv.items && inv.items.length ? inv.items : [{}];
+        items.forEach(item => {
+            addLineItem(item.description || '', item.quantity ?? item.qty ?? 1, item.rate ?? 0);
+        });
+        calculateTotals();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+{% endblock %}

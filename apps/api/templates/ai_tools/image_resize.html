@@ -1,0 +1,83 @@
+{% extends "public_base.html" %}
+{% block title %}Image Resizer — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:48px 20px">
+  <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Image Resizer</h1>
+  <p style="color:var(--c-text-2);margin-bottom:32px">Resize images in your browser. No upload to server, 100% private.</p>
+
+  <div style="background:rgba(255,255,255,0.03);border:2px dashed rgba(255,255,255,0.12);border-radius:16px;padding:40px;text-align:center;cursor:pointer;margin-bottom:20px" onclick="document.getElementById('img-input').click()" id="drop-zone2"
+    ondragover="event.preventDefault();this.style.borderColor='rgba(var(--c-accent-rgb),.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,.12)'"
+    ondrop="event.preventDefault();this.style.borderColor='rgba(255,255,255,.12)';handleFile(event.dataTransfer.files[0])">
+    <div style="font-size:48px;margin-bottom:12px">📐</div>
+    <div style="font-size:15px;font-weight:700;color:#e8edf8;margin-bottom:6px">Drop an image here or click to browse</div>
+    <div style="font-size:12px;color:var(--c-text-2)">PNG, JPG, WebP</div>
+    <input type="file" id="img-input" accept="image/*" style="display:none" onchange="handleFile(this.files[0])"/>
+  </div>
+
+  <div id="controls" style="display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:20px">
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-bottom:12px">
+      <div><label style="font-size:11px;color:#8899b0;text-transform:uppercase">Width (px)</label><br>
+        <input type="number" id="w-input" class="admin-input" style="width:110px">
+      </div>
+      <div><label style="font-size:11px;color:#8899b0;text-transform:uppercase">Height (px)</label><br>
+        <input type="number" id="h-input" class="admin-input" style="width:110px">
+      </div>
+      <label style="font-size:12px;color:#9fb3d1"><input type="checkbox" id="lock-ratio" checked> Lock aspect ratio</label>
+    </div>
+    <div id="orig-size" style="font-size:12px;color:var(--c-text-2);margin-bottom:12px"></div>
+    <button onclick="resizeImage()" style="padding:10px 20px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));border:none;border-radius:8px;font-weight:700;color:#000;cursor:pointer;font-size:13px;font-family:inherit">Resize</button>
+  </div>
+
+  <div id="result" style="display:none;text-align:center">
+    <img id="preview" style="max-width:100%;border-radius:12px;border:1px solid rgba(255,255,255,0.08);margin-bottom:14px">
+    <br>
+    <a id="downloadLink" download="resized.png" style="padding:10px 20px;background:rgba(var(--c-accent-rgb),0.1);border:1px solid rgba(var(--c-accent-rgb),0.25);border-radius:8px;color:var(--c-accent);font-weight:700;text-decoration:none;font-size:13px">⬇ Download</a>
+  </div>
+</div>
+<canvas id="resize-canvas" style="display:none"></canvas>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let originalImg = null, ratio = 1;
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      originalImg = img;
+      ratio = img.width / img.height;
+      document.getElementById('w-input').value = img.width;
+      document.getElementById('h-input').value = img.height;
+      document.getElementById('orig-size').textContent = `Original: ${img.width} × ${img.height}px`;
+      document.getElementById('controls').style.display = 'block';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('w-input').addEventListener('input', () => {
+  if (document.getElementById('lock-ratio').checked) {
+    document.getElementById('h-input').value = Math.round(document.getElementById('w-input').value / ratio);
+  }
+});
+document.getElementById('h-input').addEventListener('input', () => {
+  if (document.getElementById('lock-ratio').checked) {
+    document.getElementById('w-input').value = Math.round(document.getElementById('h-input').value * ratio);
+  }
+});
+function resizeImage() {
+  const w = parseInt(document.getElementById('w-input').value);
+  const h = parseInt(document.getElementById('h-input').value);
+  const canvas = document.getElementById('resize-canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(originalImg, 0, 0, w, h);
+  const dataUrl = canvas.toDataURL('image/png');
+  document.getElementById('preview').src = dataUrl;
+  document.getElementById('downloadLink').href = dataUrl;
+  document.getElementById('result').style.display = 'block';
+}
+</script>
+{% endblock %}

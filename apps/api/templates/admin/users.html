@@ -1,0 +1,229 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Users{% endblock %}
+{% block page_subtitle %}{{ users.total }} total registered users{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('auth.register') }}" target="_blank" class="topbar-btn primary">
+  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  Add User
+</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Filters -->
+<div class="a-panel" style="margin-bottom:16px">
+  <div class="a-panel-body" style="padding:14px 20px">
+    <form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div class="a-search" style="flex:1;min-width:200px">
+        <svg class="a-search-icon" width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input name="q" value="{{ q }}" class="a-input a-search-input" placeholder="Search name or email…"/>
+      </div>
+      <select name="role" class="a-input" style="width:160px">
+        <option value="">All Roles</option>
+        {% for r in roles %}<option value="{{ r.name }}" {% if current_role==r.name %}selected{% endif %}>{{ r.name|title }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="a-btn a-btn-ghost">Filter</button>
+      {% if q or current_role %}
+      <a href="{{ url_for('admin.users') }}" class="a-btn a-btn-ghost">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="a-panel">
+  <div class="a-table-wrap">
+    <table class="a-table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Role</th>
+          <th>Credits</th>
+          <th>Status</th>
+          <th>Joined</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users.items %}
+        <tr>
+          <!-- User -->
+          <td>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="a-avatar-fallback a-avatar-md">{{ (u.name or u.email or 'U')[0]|upper }}</div>
+              <div>
+                <div style="font-weight:600;font-size:13px;color:var(--text)">{{ u.name or '—' }}</div>
+                <div class="text-muted mono">{{ u.email }}</div>
+              </div>
+            </div>
+          </td>
+          <!-- Role (inline change) -->
+          <td>
+            <form method="POST" action="{{ url_for('admin.update_user_role', uid=u.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <select name="role" onchange="this.form.submit()" class="a-input" style="width:120px;padding:5px 10px;font-size:12px">
+                {% for r in roles %}
+                <option value="{{ r.name }}" {% if u.role and u.role.id==r.id %}selected{% endif %}>{{ r.name|title }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <!-- Credits -->
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyan)">{{ u.credits }}</span>
+              <button onclick="addCredits({{ u.id }}, this)" data-uid="{{ u.id }}"
+                class="a-btn a-btn-ghost a-btn-xs">+</button>
+            </div>
+          </td>
+          <!-- Status -->
+          <td>
+            {% if u.is_banned %}
+              <span class="badge badge-danger"><span class="badge-dot"></span>Banned</span>
+            {% elif u.email_verified %}
+              <span class="badge badge-success"><span class="badge-dot"></span>Verified</span>
+            {% else %}
+              <span class="badge badge-warning"><span class="badge-dot"></span>Unverified</span>
+            {% endif %}
+          </td>
+          <!-- Joined -->
+          <td><span class="text-muted">{{ u.created_at | timeago }}</span></td>
+          <!-- Actions -->
+          <td style="text-align:right">
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              <a href="{{ url_for('admin.customer_timeline', user_id=u.id) }}" class="a-btn a-btn-ghost a-btn-xs" title="Full history — projects, invoices, meetings, tickets, wallet">🕐 Timeline</a>
+              <button type="button" class="a-btn a-btn-ghost a-btn-xs" title="Manually grant/revoke a premium dashboard product — use this to unblock a customer immediately if the automatic unlock-on-payment didn't fire"
+                onclick='openProductsModal({{ u.id }}, "{{ u.email }}")'>🔓 Products</button>
+              {% if u.id != current_user.id %}
+              <a href="{{ url_for('cms.start_preview', uid=u.id) }}" class="a-btn a-btn-ghost a-btn-xs" title="View their dashboard exactly as they see it — read-only, doesn't touch their account">👁 Preview</a>
+              {% endif %}
+              <form method="POST" action="{{ url_for('admin.toggle_ban', uid=u.id) }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="a-btn a-btn-warning a-btn-xs">{{ 'Unban' if u.is_banned else 'Ban' }}</button>
+              </form>
+              {% if not (u.role and u.role.name == 'admin') %}
+              <form method="POST" action="{{ url_for('admin.delete_user', uid=u.id) }}" style="display:inline"
+                onsubmit="return confirm('Permanently delete {{ u.email }}?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">
+          <div class="a-empty">
+            <div class="a-empty-icon">👤</div>
+            <div class="a-empty-title">No users found</div>
+            <div class="a-empty-desc">Try adjusting your filters</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if users.pages > 1 %}
+  <div class="a-pagination">
+    {% if users.has_prev %}
+    <a href="{{ url_for('admin.users', page=users.prev_num, q=q, role=current_role) }}" class="a-page-btn">←</a>
+    {% endif %}
+    {% for p in users.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+      {% if p %}
+      <a href="{{ url_for('admin.users', page=p, q=q, role=current_role) }}"
+         class="a-page-btn {{ 'active' if p==users.page }}">{{ p }}</a>
+      {% else %}
+      <span class="a-page-btn" style="cursor:default">…</span>
+      {% endif %}
+    {% endfor %}
+    {% if users.has_next %}
+    <a href="{{ url_for('admin.users', page=users.next_num, q=q, role=current_role) }}" class="a-page-btn">→</a>
+    {% endif %}
+    <span style="font-size:12px;color:var(--text-muted);margin-left:8px">
+      {{ users.page }}/{{ users.pages }} · {{ users.total }} total
+    </span>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add/Remove Credits Modal -->
+<div id="credits-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-sm">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Adjust Credits</div>
+      <button class="a-modal-close" onclick="closeModal('credits-modal')">✕</button>
+    </div>
+    <div class="a-modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Adjusting credits for user <strong id="credits-user-email" style="color:var(--text)"></strong></p>
+      <label class="a-label">Amount (negative to remove credits)</label>
+      <input type="number" id="credits-amount" class="a-input" value="10"/>
+      <label class="a-label" style="margin-top:10px;display:block">Reason</label>
+      <input type="text" id="credits-reason" class="a-input" placeholder="e.g. Goodwill credit, support resolution"/>
+    </div>
+    <div class="a-modal-footer">
+      <button onclick="closeModal('credits-modal')" class="a-btn a-btn-ghost">Cancel</button>
+      <button onclick="submitCredits()" class="a-btn a-btn-primary">Add Credits</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let creditsUid = null;
+function addCredits(uid, btn) {
+  creditsUid = uid;
+  document.getElementById('credits-user-email').textContent = btn.closest('tr').querySelector('.mono').textContent;
+  openModal('credits-modal');
+}
+async function submitCredits() {
+  const amount = parseInt(document.getElementById('credits-amount').value);
+  const reason = document.getElementById('credits-reason').value;
+  if (!amount) return showToast('Enter a non-zero amount','error');
+  const res = await fetch(`/admin/users/${creditsUid}/credits`, {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':getCsrf()},
+    body:`amount=${amount}&reason=${encodeURIComponent(reason)}&csrf_token=${getCsrf()}`
+  });
+  const d = await res.json();
+  if (d.success) { showToast(`${amount > 0 ? 'Added' : 'Removed'} ${Math.abs(amount)} credits`,'success'); closeModal('credits-modal'); setTimeout(()=>location.reload(),800); }
+  else showToast(d.error||'Failed','error');
+}
+
+function openProductsModal(uid, email) {
+  document.getElementById('products-user-email').textContent = email;
+  document.getElementById('products-modal-body').innerHTML = [
+    ['invoice-generator', 'Invoice Generator'],
+    ['funnel-builder', 'Sales Funnel Builder'],
+    ['payment-link-generator', 'Payment Link Generator'],
+    ['whatsapp-bot', 'WhatsApp Business Bot'],
+  ].map(([slug, name]) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:13px">${name}</span>
+      <div style="display:flex;gap:6px">
+        <form method="POST" action="/admin/users/${uid}/grant-product" style="display:inline">
+          <input type="hidden" name="csrf_token" value="${getCsrf()}"/>
+          <input type="hidden" name="product_slug" value="${slug}"/>
+          <button type="submit" class="a-btn a-btn-primary a-btn-xs">Grant</button>
+        </form>
+        <form method="POST" action="/admin/users/${uid}/revoke-product" style="display:inline">
+          <input type="hidden" name="csrf_token" value="${getCsrf()}"/>
+          <input type="hidden" name="product_slug" value="${slug}"/>
+          <button type="submit" class="a-btn a-btn-ghost a-btn-xs">Revoke</button>
+        </form>
+      </div>
+    </div>`).join('');
+  openModal('products-modal');
+}
+</script>
+
+<div id="products-modal" class="a-modal-overlay">
+  <div class="a-modal" style="max-width:440px">
+    <div class="a-modal-header"><div class="a-modal-title">Manage Products — <span id="products-user-email"></span></div><button class="a-modal-close" onclick="closeModal('products-modal')">✕</button></div>
+    <div class="a-modal-body" id="products-modal-body"></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+﻿{% extends "public_base.html" %}
+{% block title %}URL → File — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-16">
+  <h1 class="text-4xl font-bold font-display gradient-text mb-4 text-center">URL → File</h1>
+  <p class="text-gray-400 text-center mb-8">Enter a URL to a file (image, video, audio, PDF) and download it directly.</p>
+  <div class="glass border border-white/10 rounded-2xl p-8">
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">File URL</label>
+        <input type="url" name="url" placeholder="https://example.com/file.pdf" required class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500/50">
+      </div>
+      <button type="submit" class="btn-neon w-full justify-center mt-4">Fetch & Download</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

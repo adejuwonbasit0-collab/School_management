@@ -1,0 +1,112 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Financials{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div>
+    <h1 class="text-xl font-bold text-white">Financials & Accountability</h1>
+    <p class="text-xs text-gray-500">Every invoice, traceable to a project and client — full money-in trail.</p>
+  </div>
+</div>
+
+<!-- Currency tabs — Paystack-style: pick a currency, every total below is that
+     currency's own real numbers, never blended with any other currency. -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+  {% for c in available_currencies %}
+  <a href="{{ url_for('admin.financials', currency=c, status=current_status) }}"
+     class="ds-btn ds-btn-sm {{ 'ds-btn-primary' if selected_currency==c else 'ds-btn-ghost' }}">
+    {{ c }}
+    {% if currency_totals[c].count %}<span style="opacity:.6;margin-left:4px">({{ currency_totals[c].count }})</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+  <div class="ds-card" style="padding:16px"><p class="text-xs text-gray-500">Total Invoiced ({{ selected_currency }})</p><p class="text-xl font-bold text-white">{{ totals.invoiced | money(selected_currency) }}</p></div>
+  <div class="ds-card" style="padding:16px"><p class="text-xs text-gray-500">Paid ({{ selected_currency }})</p><p class="text-xl font-bold text-green-400">{{ totals.paid | money(selected_currency) }}</p></div>
+  <div class="ds-card" style="padding:16px"><p class="text-xs text-gray-500">Outstanding ({{ selected_currency }})</p><p class="text-xl font-bold text-yellow-400">{{ totals.unpaid | money(selected_currency) }}</p></div>
+  <div class="ds-card" style="padding:16px"><p class="text-xs text-gray-500">Cancelled ({{ selected_currency }})</p><p class="text-xl font-bold text-gray-500">{{ totals.cancelled | money(selected_currency) }}</p></div>
+  <div class="ds-card" style="padding:16px"><p class="text-xs text-gray-500">Marketplace Revenue ({{ selected_currency }})</p><p class="text-xl font-bold text-cyan-400">{{ order_revenue | money(selected_currency) }}</p></div>
+  <div class="ds-card" style="padding:16px"><p class="text-xs text-gray-500">Bot/Automation MRR (USD)</p><p class="text-xl font-bold text-purple-400">{{ bot_mrr | money('USD') }}</p></div>
+</div>
+
+{% if billed_channels or billed_workflows %}
+<div class="ds-card mb-6" style="padding:20px">
+  <h3 class="font-bold text-white text-sm mb-1">Bots & Automations Run For Customers</h3>
+  <p class="text-xs text-gray-500 mb-3">Assign a channel or workflow to a customer under its own settings (Social Channels / Automation) to have it show up here.</p>
+  <table class="w-full text-xs">
+    <thead><tr class="text-gray-500 text-left"><th class="pb-2">Name</th><th class="pb-2">Type</th><th class="pb-2">Customer</th><th class="pb-2">Monthly Fee</th><th class="pb-2"></th></tr></thead>
+    <tbody>
+      {% for c in billed_channels %}
+      <tr class="border-t border-white/5">
+        <td class="py-2 text-white">{{ c.label }}</td>
+        <td class="py-2 text-gray-400">Bot ({{ c.platform }})</td>
+        <td class="py-2 text-gray-400">{{ c.client_project.title if c.client_project else '—' }}</td>
+        <td class="py-2 text-gray-300">{{ "$%.2f"|format(c.monthly_fee) if c.monthly_fee else '—' }}</td>
+        <td class="py-2 text-right">
+          <form method="POST" action="{{ url_for('admin.invoice_channel', cid=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button class="text-xs px-2 py-1 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10">Invoice this month</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      {% for w in billed_workflows %}
+      <tr class="border-t border-white/5">
+        <td class="py-2 text-white">{{ w.name }}</td>
+        <td class="py-2 text-gray-400">Automation</td>
+        <td class="py-2 text-gray-400">{{ w.client_project.title if w.client_project else '—' }}</td>
+        <td class="py-2 text-gray-300">{{ "$%.2f"|format(w.monthly_fee) if w.monthly_fee else '—' }}</td>
+        <td class="py-2 text-right">
+          <form method="POST" action="{{ url_for('admin.invoice_workflow', wid=w.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button class="text-xs px-2 py-1 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10">Invoice this month</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if gateway_breakdown %}
+<div class="ds-card mb-6" style="padding:20px">
+  <h3 class="font-bold text-white text-sm mb-3">Paid Revenue by Payment Method</h3>
+  <div class="flex flex-wrap gap-6">
+    {% for gateway, amount, count in gateway_breakdown %}
+    <div><p class="text-xs text-gray-500">{{ (gateway or 'unknown') | title }}</p><p class="text-lg font-bold text-white">{{ amount | money }} <span class="text-xs text-gray-500 font-normal">({{ count }})</span></p></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="flex gap-2 mb-4 flex-wrap">
+  {% for s in ['all','unpaid','paid','cancelled'] %}
+  <a href="{{ url_for('admin.financials', status=s, currency=selected_currency) }}" class="ds-btn {{ 'ds-btn-primary' if current_status==s else 'ds-btn-ghost' }} ds-btn-sm">{{ s|title }}</a>
+  {% endfor %}
+</div>
+
+<div class="ds-card" style="padding:0">
+  <div class="a-table-wrap">
+    <table class="a-table">
+      <thead><tr><th>Invoice</th><th>Client</th><th>Project</th><th>Amount</th><th>Status</th><th>Method</th><th>Created</th><th>Paid</th></tr></thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td>#{{ inv.id }} — {{ inv.title }}</td>
+          <td>{{ inv.project.client.name or inv.project.client.email if inv.project.client else '—' }}</td>
+          <td><a href="{{ url_for('admin.admin_project_detail', pid=inv.project_id) }}" class="text-cyan-400">{{ inv.project.title }}</a></td>
+          <td>{{ inv.amount | money(inv.currency) }}</td>
+          <td><span class="ds-badge {% if inv.status=='paid' %}ds-badge-green{% elif inv.status=='cancelled' %}ds-badge-gray{% else %}ds-badge-yellow{% endif %}">{{ inv.status }}</span></td>
+          <td>{{ (inv.gateway or '—') | title }}</td>
+          <td>{{ inv.created_at.strftime('%b %d, %Y') }}</td>
+          <td>{{ inv.paid_at.strftime('%b %d, %Y') if inv.paid_at else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-gray-500 py-8">No invoices yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

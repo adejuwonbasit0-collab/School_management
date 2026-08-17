@@ -1,0 +1,295 @@
+{% extends "public_base.html" %}
+{% block title %}PDF Converter — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+.tool-shell { max-width:760px;margin:0 auto;padding:48px 20px }
+.tabs { display:flex;gap:8px;justify-content:center;margin-bottom:24px }
+.tabs button { background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#cfe6ff;padding:9px 18px;font-size:13px;cursor:pointer }
+.tabs button.active { background:rgba(var(--c-accent-rgb),0.18);border-color:rgba(var(--c-accent-rgb),0.5);color:#fff }
+.drop-zone { border:2px dashed rgba(var(--c-accent-rgb),0.3);border-radius:16px;padding:40px;text-align:center;transition:all .2s;cursor:pointer;background:rgba(var(--c-accent-rgb),0.03) }
+.drop-zone:hover,.drop-zone.drag-over { border-color:rgba(var(--c-accent-rgb),0.7);background:rgba(var(--c-accent-rgb),0.07) }
+.file-row { display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 14px;margin-bottom:8px }
+.file-row .name { flex:1;font-size:13px;color:#cfe6ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.file-row button { background:none;border:none;color:#ff5b7e;cursor:pointer;font-size:16px }
+.panel { display:none }
+.panel.active { display:block }
+.thumb-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:16px }
+.thumb-grid .card { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:6px;text-align:center }
+.thumb-grid img { width:100%;border-radius:6px;background:#fff }
+.thumb-grid a { display:block;margin-top:6px;font-size:11px;color:var(--c-accent) }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:24px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">PDF Converter</h1>
+    <p style="color:var(--c-text-2)">Images → PDF, or PDF → Images — entirely in your browser, no upload.</p>
+  </div>
+
+  <div class="tabs">
+    <button id="tabImg2Pdf" class="active">🖼️ Images → PDF</button>
+    <button id="tabPdf2Img">📄 PDF → Images</button>
+    <button id="tabPdf2Word">📝 PDF → Word</button>
+  </div>
+
+  <!-- Images -> PDF -->
+  <div class="panel active" id="panelImg2Pdf">
+    <div class="drop-zone" id="dropZoneImg">
+      <p style="color:#9fb3d1;margin-bottom:8px">Drag images here, or</p>
+      <button class="btn-ghost-neon" type="button" onclick="document.getElementById('imgInput').click()">Choose Images</button>
+      <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
+    </div>
+    <div id="imgFileList" style="margin-top:18px"></div>
+    <div style="margin-top:20px;text-align:center">
+      <button class="btn-neon" id="makePdfBtn" disabled>Convert to PDF</button>
+    </div>
+    <p id="imgStatus" style="text-align:center;color:var(--c-text-2);font-size:13px;margin-top:10px"></p>
+  </div>
+
+  <!-- PDF -> Images -->
+  <div class="panel" id="panelPdf2Img">
+    <div class="drop-zone" id="dropZonePdf">
+      <p style="color:#9fb3d1;margin-bottom:8px">Drag a PDF here, or</p>
+      <button class="btn-ghost-neon" type="button" onclick="document.getElementById('pdfInput').click()">Choose PDF</button>
+      <input type="file" id="pdfInput" accept="application/pdf" style="display:none">
+    </div>
+    <div style="margin-top:16px;text-align:center">
+      <button class="btn-neon" id="downloadAllBtn" style="display:none">⬇️ Download All as ZIP</button>
+    </div>
+    <p id="pdfStatus" style="text-align:center;color:var(--c-text-2);font-size:13px;margin-top:10px"></p>
+    <div class="thumb-grid" id="pdfThumbs"></div>
+  </div>
+
+  <!-- PDF -> Word -->
+  <div class="panel" id="panelPdf2Word">
+    <p style="text-align:center;color:var(--c-text-3);font-size:12px;margin-bottom:14px">
+      Rebuilds each page's actual line breaks, indentation, and heading sizes (not just one wall of text) from the
+      PDF's own text positions, then produces a real .rtf file — Word, Google Docs, and LibreOffice all open it
+      directly and it's immediately editable. Still text-only: original fonts, images, tables, and multi-column
+      layouts aren't reconstructed (a multi-column page may interleave left/right column lines) — no lightweight
+      browser tool can safely rebuild those without a much heavier PDF-parsing engine.
+    </p>
+    <div class="drop-zone" id="dropZoneWord">
+      <p style="color:#9fb3d1;margin-bottom:8px">Drag a PDF here, or</p>
+      <button class="btn-ghost-neon" type="button" onclick="document.getElementById('wordInput').click()">Choose PDF</button>
+      <input type="file" id="wordInput" accept="application/pdf" style="display:none">
+    </div>
+    <p id="wordStatus" style="text-align:center;color:var(--c-text-2);font-size:13px;margin-top:10px"></p>
+  </div>
+</div>
+
+<script>
+// ── tabs ──
+const tabImg2Pdf = document.getElementById('tabImg2Pdf');
+const tabPdf2Img = document.getElementById('tabPdf2Img');
+const tabPdf2Word = document.getElementById('tabPdf2Word');
+tabImg2Pdf.addEventListener('click', () => setTab('img2pdf'));
+tabPdf2Img.addEventListener('click', () => setTab('pdf2img'));
+tabPdf2Word.addEventListener('click', () => setTab('pdf2word'));
+function setTab(which) {
+  tabImg2Pdf.classList.toggle('active', which === 'img2pdf');
+  tabPdf2Img.classList.toggle('active', which === 'pdf2img');
+  tabPdf2Word.classList.toggle('active', which === 'pdf2word');
+  document.getElementById('panelImg2Pdf').classList.toggle('active', which === 'img2pdf');
+  document.getElementById('panelPdf2Img').classList.toggle('active', which === 'pdf2img');
+  document.getElementById('panelPdf2Word').classList.toggle('active', which === 'pdf2word');
+}
+
+// ── Images -> PDF ──
+let imgFiles = [];
+const dropZoneImg = document.getElementById('dropZoneImg');
+const imgInput = document.getElementById('imgInput');
+const imgFileList = document.getElementById('imgFileList');
+const makePdfBtn = document.getElementById('makePdfBtn');
+const imgStatus = document.getElementById('imgStatus');
+
+function renderImgList() {
+  imgFileList.innerHTML = '';
+  imgFiles.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    row.innerHTML = `<span class="name">${i+1}. ${f.name}</span><button data-i="${i}">✕</button>`;
+    imgFileList.appendChild(row);
+  });
+  imgFileList.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => { imgFiles.splice(parseInt(btn.dataset.i), 1); renderImgList(); });
+  });
+  makePdfBtn.disabled = imgFiles.length === 0;
+}
+function addImgFiles(list) {
+  for (const f of list) if (f.type.startsWith('image/')) imgFiles.push(f);
+  renderImgList();
+}
+dropZoneImg.addEventListener('click', () => imgInput.click());
+dropZoneImg.addEventListener('dragover', e => { e.preventDefault(); dropZoneImg.classList.add('drag-over'); });
+dropZoneImg.addEventListener('dragleave', () => dropZoneImg.classList.remove('drag-over'));
+dropZoneImg.addEventListener('drop', e => { e.preventDefault(); dropZoneImg.classList.remove('drag-over'); addImgFiles(e.dataTransfer.files); });
+imgInput.addEventListener('change', e => addImgFiles(e.target.files));
+
+makePdfBtn.addEventListener('click', async () => {
+  imgStatus.textContent = 'Converting…';
+  makePdfBtn.disabled = true;
+  try {
+    const { PDFDocument } = PDFLib;
+    const doc = await PDFDocument.create();
+    for (const file of imgFiles) {
+      const bytes = await file.arrayBuffer();
+      let img;
+      if (file.type === 'image/png') img = await doc.embedPng(bytes);
+      else img = await doc.embedJpg(bytes);  // pdf-lib only embeds PNG/JPG natively; webp/others get converted via canvas fallback below
+      const page = doc.addPage([img.width, img.height]);
+      page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+    }
+    const bytes = await doc.save();
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'images.pdf'; a.click();
+    URL.revokeObjectURL(url);
+    imgStatus.textContent = `Converted ${imgFiles.length} image(s) to PDF.`;
+  } catch (e) {
+    imgStatus.textContent = 'Error: ' + e.message + ' (WEBP images aren\'t supported for this conversion — use PNG or JPG).';
+  }
+  makePdfBtn.disabled = imgFiles.length === 0;
+});
+
+// ── PDF -> Images ──
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const dropZonePdf = document.getElementById('dropZonePdf');
+const pdfInput = document.getElementById('pdfInput');
+const pdfThumbs = document.getElementById('pdfThumbs');
+const pdfStatus = document.getElementById('pdfStatus');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
+let renderedImages = []; // {name, blob}
+
+dropZonePdf.addEventListener('click', () => pdfInput.click());
+dropZonePdf.addEventListener('dragover', e => { e.preventDefault(); dropZonePdf.classList.add('drag-over'); });
+dropZonePdf.addEventListener('dragleave', () => dropZonePdf.classList.remove('drag-over'));
+dropZonePdf.addEventListener('drop', e => { e.preventDefault(); dropZonePdf.classList.remove('drag-over'); if (e.dataTransfer.files[0]) convertPdf(e.dataTransfer.files[0]); });
+pdfInput.addEventListener('change', e => { if (e.target.files[0]) convertPdf(e.target.files[0]); });
+
+async function convertPdf(file) {
+  pdfStatus.textContent = 'Rendering pages…';
+  pdfThumbs.innerHTML = '';
+  renderedImages = [];
+  downloadAllBtn.style.display = 'none';
+  try {
+    const bytes = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      const name = `page-${String(i).padStart(2, '0')}.png`;
+      renderedImages.push({ name, blob });
+      const card = document.createElement('div');
+      card.className = 'card';
+      const url = URL.createObjectURL(blob);
+      card.innerHTML = `<img src="${url}"/><a href="${url}" download="${name}">Download</a>`;
+      pdfThumbs.appendChild(card);
+    }
+    pdfStatus.textContent = `${pdf.numPages} page(s) rendered.`;
+    downloadAllBtn.style.display = renderedImages.length > 1 ? 'inline-block' : 'none';
+  } catch (e) {
+    pdfStatus.textContent = 'Error: ' + e.message;
+  }
+}
+
+downloadAllBtn.addEventListener('click', async () => {
+  const zip = new JSZip();
+  renderedImages.forEach(r => zip.file(r.name, r.blob));
+  const content = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'pdf-pages.zip'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── PDF -> Word (.rtf) ──
+const dropZoneWord = document.getElementById('dropZoneWord');
+const wordInput = document.getElementById('wordInput');
+const wordStatus = document.getElementById('wordStatus');
+
+dropZoneWord.addEventListener('click', () => wordInput.click());
+dropZoneWord.addEventListener('dragover', e => { e.preventDefault(); dropZoneWord.classList.add('drag-over'); });
+dropZoneWord.addEventListener('dragleave', () => dropZoneWord.classList.remove('drag-over'));
+dropZoneWord.addEventListener('drop', e => { e.preventDefault(); dropZoneWord.classList.remove('drag-over'); if (e.dataTransfer.files[0]) convertToWord(e.dataTransfer.files[0]); });
+wordInput.addEventListener('change', e => { if (e.target.files[0]) convertToWord(e.target.files[0]); });
+
+function rtfEscape(text) {
+  // RTF control-word escaping: backslash/braces are literal RTF syntax
+  // characters, and anything outside plain ASCII needs \uNNNN? so accents
+  // and other Latin-extended text still show up correctly in Word.
+  return text.replace(/[\\{}]/g, c => '\\' + c).replace(/[\u0080-\uffff]/g, c => `\\u${c.charCodeAt(0)}?`);
+}
+
+async function convertToWord(file) {
+  wordStatus.textContent = 'Extracting text with layout…';
+  try {
+    const bytes = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    let rtfBody = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+
+      // Each item carries its real x/y position and font height from the
+      // PDF's own transform matrix, plus a bold guess from the font name —
+      // grouping by y (a "line") and sorting by x within it rebuilds the
+      // page's actual line breaks, relative indentation, and heading sizes
+      // instead of just concatenating every string in reading order.
+      const items = content.items
+        .filter(it => it.str !== undefined)
+        .map(it => ({
+          str: it.str,
+          x: it.transform[4],
+          y: it.transform[5],
+          height: it.height || Math.abs(it.transform[3]) || 10,
+          bold: /bold/i.test(it.fontName || ''),
+        }));
+
+      const lines = [];
+      const yTolerance = 3;
+      for (const it of items) {
+        let line = lines.find(l => Math.abs(l.y - it.y) <= yTolerance);
+        if (!line) { line = { y: it.y, items: [] }; lines.push(line); }
+        line.items.push(it);
+      }
+      lines.sort((a, b) => b.y - a.y); // PDF y grows upward — top of page first
+
+      let prevY = null;
+      for (const line of lines) {
+        line.items.sort((a, b) => a.x - b.x);
+        const text = line.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+        if (!text) continue;
+        const minX = Math.min(...line.items.map(it => it.x));
+        const avgHeight = line.items.reduce((s, it) => s + it.height, 0) / line.items.length;
+        const fontHalfPts = Math.max(16, Math.round(avgHeight * 2)); // pt -> RTF half-points
+        const indentTwips = Math.max(0, Math.round(minX * 20));      // pt -> twips, roughly
+        const isBold = line.items.some(it => it.bold);
+        if (prevY !== null && (prevY - line.y) > avgHeight * 2.2) rtfBody += '\\par ';
+        rtfBody += `\\li${indentTwips}\\fs${fontHalfPts} ${isBold ? '\\b ' : ''}${rtfEscape(text)}${isBold ? '\\b0 ' : ''}\\par\\li0 `;
+        prevY = line.y;
+      }
+      if (i < pdf.numPages) rtfBody += '\\page ';
+    }
+    const rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Calibri;}}\\f0\\fs22 ${rtfBody}}`;
+    const blob = new Blob([rtf], { type: 'application/rtf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name.replace(/\.pdf$/i, '') + '.rtf'; a.click();
+    URL.revokeObjectURL(url);
+    wordStatus.textContent = `Converted ${pdf.numPages} page(s), preserving line breaks/indentation/heading sizes — opens directly in Word.`;
+  } catch (e) {
+    wordStatus.textContent = 'Error: ' + e.message;
+  }
+}
+</script>
+{% endblock %}

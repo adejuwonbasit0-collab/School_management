@@ -1,0 +1,121 @@
+{% extends "admin/base.html" %}
+{% block title %}Graphics Studio — Admin{% endblock %}
+{% block content %}
+<div class="a-container" style="padding-bottom: 40px">
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight text-white font-display">Graphics Studio</h1>
+      <p class="text-gray-400 text-sm mt-1">Design social media banners, generate AI stock visuals, removal backgrounds, and crop creative assets.</p>
+    </div>
+    <a href="{{ url_for('admin.creative_studios_hub') }}" class="a-btn a-btn-secondary text-xs">Back to Studios</a>
+  </div>
+
+  <div class="a-grid a-grid-3" style="gap: 24px; align-items: start">
+    <!-- Generator Panel -->
+    <div class="a-panel col-span-1" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px;">
+      <div class="a-panel-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding: 20px;">
+        <h3 class="text-sm font-bold text-white uppercase tracking-wider">AI Asset Generator</h3>
+      </div>
+      <div class="a-panel-body p-6 space-y-4">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Describe the image you want to generate:</label>
+          <textarea id="image-prompt" class="a-input" rows="3" placeholder="e.g. A professional high-tech cybernetic business dashboard mockup, dark blue theme, clean layout, neon accents..." style="width: 100%; resize: none; font-size:13px"></textarea>
+        </div>
+        
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Aspect Ratio</label>
+          <select id="image-aspect" class="a-input" style="width:100%; font-size:13px">
+            <option value="1:1">Square (1:1)</option>
+            <option value="16:9">Horizontal Banner (16:9)</option>
+            <option value="9:16">Vertical Story (9:16)</option>
+          </select>
+        </div>
+
+        <button onclick="generateAIImage()" id="gen-btn" class="a-btn a-btn-primary w-full flex items-center justify-center gap-2">
+          <span>Generate Asset</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Canvas Preview Workspace -->
+    <div class="a-panel col-span-2" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px;">
+      <div class="a-panel-header flex justify-between items-center" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding: 20px;">
+        <h3 class="text-sm font-bold text-white uppercase tracking-wider">Preview & Workspace Canvas</h3>
+        <div class="flex gap-2">
+          <button onclick="downloadCanvasImage()" class="a-btn a-btn-secondary text-xs flex items-center gap-1.5" style="padding: 6px 12px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Download
+          </button>
+        </div>
+      </div>
+      <div class="a-panel-body p-6 flex flex-col items-center justify-center" style="min-height: 400px; position: relative;">
+        <!-- Generating Loader -->
+        <div id="canvas-loader" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center hidden rounded-xl" style="z-index: 10;">
+          <div class="w-10 h-10 border-4 border-white/10 border-t-[#1DB954] rounded-full animate-spin mb-3"></div>
+          <div class="text-xs text-gray-400 animate-pulse">Generating your creative visual asset...</div>
+        </div>
+
+        <div class="border border-white/10 rounded-xl overflow-hidden shadow-2xl bg-black/60 flex items-center justify-center p-2" style="max-width:100%; max-height: 500px;">
+          <img id="workspace-preview" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60" alt="Canvas Asset" style="max-width: 100%; height: auto; border-radius: 8px;">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function generateAIImage() {
+    const prompt = document.getElementById("image-prompt").value.trim();
+    if (!prompt) return alert("Please specify what to generate.");
+    
+    const btn = document.getElementById("gen-btn");
+    const loader = document.getElementById("canvas-loader");
+    const preview = document.getElementById("workspace-preview");
+    
+    btn.disabled = true;
+    btn.textContent = "Generating...";
+    loader.classList.remove("hidden");
+    
+    try {
+      // Use pollinations free direct endpoint
+      const width = document.getElementById("image-aspect").value === "16:9" ? 1024 : (document.getElementById("image-aspect").value === "9:16" ? 576 : 800);
+      const height = document.getElementById("image-aspect").value === "16:9" ? 576 : (document.getElementById("image-aspect").value === "9:16" ? 1024 : 800);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
+      
+      // Pre-load image
+      const img = new Image();
+      img.src = url;
+      img.onload = () => {
+        preview.src = url;
+        loader.classList.add("hidden");
+        btn.disabled = false;
+        btn.textContent = "Generate Asset";
+      };
+      img.onerror = () => {
+        loader.classList.add("hidden");
+        btn.disabled = false;
+        btn.textContent = "Generate Asset";
+        alert("Failed to pre-load image.");
+      };
+    } catch(e) {
+      loader.classList.add("hidden");
+      btn.disabled = false;
+      btn.textContent = "Generate Asset";
+      alert("Error generating asset.");
+    }
+  }
+
+  function downloadCanvasImage() {
+    const preview = document.getElementById("workspace-preview");
+    if (!preview.src) return alert("Nothing to download.");
+    
+    const link = document.createElement("a");
+    link.href = preview.src;
+    link.download = "studio_graphics_asset.jpg";
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+</script>
+{% endblock %}

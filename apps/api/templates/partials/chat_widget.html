@@ -1,0 +1,287 @@
+<!-- ═══════════════════════════ FAQ / SUPPORT CHAT WIDGET ═══════════════════════════ -->
+<style>
+#faq-widget-toggle {
+  position: fixed; bottom: 22px; right: 22px; z-index: 9998;
+  width: 58px; height: 58px; border-radius: 50%;
+  background: linear-gradient(135deg, #1DB954, #F2C94C);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 8px 28px rgba(29, 185, 84,0.35), 0 4px 12px rgba(0,0,0,0.4);
+  border: none; font-size: 24px; transition: transform .2s;
+}
+#faq-widget-toggle:hover { transform: scale(1.07); }
+#faq-widget-toggle .unread-dot {
+  position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #ff4757; border: 2px solid #04060d; display: none;
+}
+#faq-widget-panel {
+  position: fixed; bottom: 92px; right: 22px; z-index: 9999;
+  width: min(370px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 140px));
+  background: rgba(8,11,20,0.92); backdrop-filter: blur(28px) saturate(160%); -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+  opacity: 0; transform: translateY(16px) scale(0.97); pointer-events: none;
+  transition: opacity .22s cubic-bezier(0.16,1,0.3,1), transform .22s cubic-bezier(0.16,1,0.3,1);
+}
+#faq-widget-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+#faq-widget-header {
+  padding: 16px 18px; background: linear-gradient(135deg, rgba(29, 185, 84,0.12), rgba(242, 201, 76,0.1));
+  border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between;
+}
+#faq-widget-body { flex: 1; overflow-y: auto; padding: 14px; font-size: 13px; }
+.faq-bubble { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 11px 14px; margin-bottom: 10px; color: #cfe6ff; line-height: 1.55; }
+.faq-bubble.user { background: rgba(29, 185, 84,0.1); border-color: rgba(29, 185, 84,0.2); margin-left: 30px; }
+.faq-option-btn {
+  display: block; width: 100%; text-align: left; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; color: #e8edf8; font-size: 12.5px; cursor: pointer; transition: all .15s;
+}
+.faq-option-btn:hover { border-color: rgba(29, 185, 84,0.4); background: rgba(29, 185, 84,0.06); }
+.faq-cat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #5a6a88; margin: 12px 0 6px; font-weight: 700; }
+#faq-widget-footer { padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px; }
+#faq-search-input { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 9px 12px; font-size: 12.5px; color: #e8edf8; outline: none; }
+#faq-search-input:focus { border-color: rgba(29, 185, 84,0.4); }
+.faq-handoff-btn {
+  width: 100%; text-align: center; padding: 10px; border-radius: 10px; margin-top: 8px;
+  background: linear-gradient(135deg,#1DB954,#F2C94C); color: #000; font-weight: 700; font-size: 12.5px; cursor: pointer; border: none;
+}
+</style>
+
+<button id="faq-widget-toggle" onclick="toggleFaqWidget()" aria-label="Help and support">
+  💬<span class="unread-dot" id="faq-unread-dot"></span>
+</button>
+
+<div id="faq-widget-panel">
+  <div id="faq-widget-header">
+    <div>
+      <div style="font-weight:800;font-size:14px;color:#fff">Need help?</div>
+      <div style="font-size:11px;color:#9fb3d1">Ask a quick question or talk to us</div>
+    </div>
+    <button onclick="toggleFaqWidget()" style="background:none;border:none;color:#9fb3d1;font-size:18px;cursor:pointer">✕</button>
+  </div>
+  <div id="faq-widget-body">
+    <div class="faq-bubble">👋 Hi! Pick a question below, search, or talk to a real person.</div>
+    <div id="faq-menu"></div>
+  </div>
+  <div id="faq-widget-footer">
+    <input id="faq-search-input" type="text" placeholder="Search or type a question…" onkeydown="if(event.key==='Enter')faqSearch()">
+    <button onclick="faqSearch()" style="background:rgba(29, 185, 84,0.12);border:1px solid rgba(29, 185, 84,0.25);border-radius:10px;padding:0 14px;color:#1DB954;font-size:12px;cursor:pointer">Go</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  let faqOpened = false;
+  let faqTranscript = [];
+
+  window.toggleFaqWidget = function() {
+    const panel = document.getElementById('faq-widget-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open') && !faqOpened) {
+      faqOpened = true;
+      loadFaqMenu();
+    }
+  };
+
+  async function loadFaqMenu() {
+    const menu = document.getElementById('faq-menu');
+    try {
+      const res = await fetch('{{ url_for("cms.api_faq_list") }}');
+      const data = await res.json();
+      const cats = Object.keys(data.categories || {});
+      if (!cats.length) {
+        menu.innerHTML = '<p style="color:#6b7a9a;font-size:12px">No FAQs published yet — use the search box or talk to a person below.</p>';
+        return;
+      }
+      menu.innerHTML = cats.map(cat => `
+        <div class="faq-cat-label">${cat}</div>
+        ${data.categories[cat].map(item => `<button class="faq-option-btn" onclick="faqAnswer(${item.id}, this)">${item.question}</button>`).join('')}
+      `).join('');
+    } catch (e) {
+      menu.innerHTML = '<p style="color:#ff5b7e;font-size:12px">Could not load FAQs.</p>';
+    }
+  }
+
+  window.faqAnswer = async function(id, btn) {
+    const question = btn.textContent;
+    appendBubble(question, true);
+    faqTranscript.push('Q: ' + question);
+    try {
+      const res = await fetch(`{{ url_for("cms.api_faq_answer", fid=0) }}`.replace('/0', '/' + id));
+      const data = await res.json();
+      appendBubble(data.answer, false);
+      faqTranscript.push('A: ' + data.answer);
+    } catch (e) {
+      appendBubble('Sorry, something went wrong fetching that answer.', false);
+    }
+    document.getElementById('faq-widget-body').scrollTop = 999999;
+  };
+
+  window.faqSearch = async function() {
+    const input = document.getElementById('faq-search-input');
+    const q = input.value.trim();
+    if (!q) return;
+    appendBubble(q, true);
+    faqTranscript.push('Q: ' + q);
+    input.value = '';
+    try {
+      const res = await fetch('{{ url_for("cms.api_faq_search") }}?q=' + encodeURIComponent(q));
+      const data = await res.json();
+      const body = document.getElementById('faq-widget-body');
+      if (data.results && data.results.length) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = `<div class="faq-bubble">I found ${data.results.length} possible match${data.results.length>1?'es':''}:</div>` +
+          data.results.map(r => `<button class="faq-option-btn" onclick="faqAnswer(${r.id}, this)">${r.question}</button>`).join('');
+        body.appendChild(wrap);
+      } else {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = `<div class="faq-bubble">I couldn't find an answer for that. Want to talk to a real person instead?</div>
+          <button class="faq-handoff-btn" onclick="showHandoffForm()">💬 Talk to a Person</button>`;
+        body.appendChild(wrap);
+      }
+      body.scrollTop = 999999;
+    } catch (e) { /* silent */ }
+  };
+
+  function appendBubble(text, isUser) {
+    const body = document.getElementById('faq-widget-body');
+    const div = document.createElement('div');
+    div.className = 'faq-bubble' + (isUser ? ' user' : '');
+    div.textContent = text;
+    body.appendChild(div);
+    if (!isUser && !liveThreadId) {
+      const handoff = document.createElement('button');
+      handoff.className = 'faq-handoff-btn';
+      handoff.style.marginBottom = '10px';
+      handoff.textContent = 'Still need help? Talk to a Person →';
+      handoff.onclick = showHandoffForm;
+      body.appendChild(handoff);
+    }
+  }
+
+  window.showHandoffForm = function() {
+    const body = document.getElementById('faq-widget-body');
+    const wrap = document.createElement('div');
+    wrap.className = 'faq-bubble';
+    wrap.innerHTML = `
+      <div style="font-weight:700;margin-bottom:8px;color:#fff">Talk to a real person</div>
+      {% if not current_user.is_authenticated %}
+      <input id="handoff-name" placeholder="Your name" style="width:100%;margin-bottom:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:7px 10px;color:#fff;font-size:12px">
+      <input id="handoff-email" placeholder="Your email" style="width:100%;margin-bottom:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:7px 10px;color:#fff;font-size:12px">
+      {% endif %}
+      <textarea id="handoff-message" placeholder="What do you need help with?" rows="3" style="width:100%;margin-bottom:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:7px 10px;color:#fff;font-size:12px;resize:none"></textarea>
+      <button class="faq-handoff-btn" onclick="submitHandoff()">Send to our team</button>
+    `;
+    body.appendChild(wrap);
+    body.scrollTop = 999999;
+  };
+
+  window.submitHandoff = async function() {
+    const nameEl = document.getElementById('handoff-name');
+    const emailEl = document.getElementById('handoff-email');
+    const message = document.getElementById('handoff-message').value.trim();
+    if (!message) return;
+    const payload = {
+      name: nameEl ? nameEl.value.trim() : undefined,
+      email: emailEl ? emailEl.value.trim() : undefined,
+      message,
+      transcript: faqTranscript.join('\n'),
+    };
+    try {
+      const res = await fetch('{{ url_for("cms.api_chat_handoff") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      const body = document.getElementById('faq-widget-body');
+      if (res.ok && data.success) {
+        const note = document.createElement('div');
+        note.className = 'faq-bubble';
+        note.innerHTML = data.thread_id
+          ? `✅ Sent! I'll reply right here as soon as I see it — no need to leave this chat.`
+          : `✅ Sent! Our team will get back to you by email shortly.`;
+        body.appendChild(note);
+        if (data.thread_id) enterLiveChatMode(data.thread_id);
+      } else {
+        const note = document.createElement('div');
+        note.className = 'faq-bubble';
+        note.style.color = '#ff5b7e';
+        note.textContent = data.error || 'Something went wrong, please try again.';
+        body.appendChild(note);
+      }
+      body.scrollTop = 999999;
+    } catch (e) { /* silent */ }
+  };
+
+  // ── Live chat mode ──────────────────────────────────────────────────────
+  // Once a logged-in visitor hands off to a human, the widget stops being a
+  // dead-end FAQ box and becomes a real chat: their messages + the admin's
+  // replies both show up right here, polling the same thread used on the
+  // full Messages page. The visitor never has to leave the widget to keep
+  // talking, and can still ask FAQ questions any time via "Back to menu".
+  let liveThreadId = null;
+  let livePollSince = 0;
+  let livePollTimer = null;
+
+  window.enterLiveChatMode = function(threadId) {
+    liveThreadId = threadId;
+    livePollSince = 0;
+    const footer = document.getElementById('faq-widget-footer');
+    footer.innerHTML = `
+      <button onclick="exitLiveChatMode()" title="Back to FAQ menu" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:0 12px;color:#9fb3d1;font-size:14px;cursor:pointer">←</button>
+      <input id="live-chat-input" type="text" placeholder="Type a message…" style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;font-size:12.5px;color:#e8edf8;outline:none"
+        onkeydown="if(event.key==='Enter')sendLiveChatMessage()">
+      <button onclick="sendLiveChatMessage()" style="background:rgba(29,185,84,0.12);border:1px solid rgba(29,185,84,0.25);border-radius:10px;padding:0 14px;color:#1DB954;font-size:12px;cursor:pointer">Send</button>
+    `;
+    if (livePollTimer) clearInterval(livePollTimer);
+    pollLiveChat();
+    livePollTimer = setInterval(pollLiveChat, 8000);
+  };
+
+  window.exitLiveChatMode = function() {
+    if (livePollTimer) clearInterval(livePollTimer);
+    liveThreadId = null;
+    const footer = document.getElementById('faq-widget-footer');
+    footer.innerHTML = `
+      <input id="faq-search-input" type="text" placeholder="Search or type a question…" onkeydown="if(event.key==='Enter')faqSearch()">
+      <button onclick="faqSearch()" style="background:rgba(29,185,84,0.12);border:1px solid rgba(29,185,84,0.25);border-radius:10px;padding:0 14px;color:#1DB954;font-size:12px;cursor:pointer">Go</button>
+    `;
+  };
+
+  async function pollLiveChat() {
+    if (!liveThreadId) return;
+    try {
+      const res = await fetch(`/messages/${liveThreadId}/poll?since=${livePollSince}`);
+      const data = await res.json();
+      if (!data.messages || !data.messages.length) return;
+      const body = document.getElementById('faq-widget-body');
+      data.messages.forEach(m => {
+        appendBubble(m.content, m.is_mine);
+        livePollSince = Math.max(livePollSince, m.id);
+      });
+      body.scrollTop = 999999;
+    } catch (e) { /* silent */ }
+  }
+
+  window.sendLiveChatMessage = async function() {
+    const input = document.getElementById('live-chat-input');
+    const content = input.value.trim();
+    if (!content || !liveThreadId) return;
+    input.value = '';
+    appendBubble(content, true);
+    document.getElementById('faq-widget-body').scrollTop = 999999;
+    try {
+      // thread_id encodes both user ids as "a-b" — the other one is the admin
+      const ids = liveThreadId.split('-').map(Number);
+      const receiverId = ids.find(id => id !== {{ current_user.id if current_user.is_authenticated else 'null' }});
+      const res = await fetch('{{ url_for("comms.send_message") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ receiver_id: receiverId, content }),
+      });
+      const data = await res.json();
+      if (data.id) livePollSince = Math.max(livePollSince, data.id);
+    } catch (e) { /* silent */ }
+  };
+})();
+</script>

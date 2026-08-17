@@ -1,0 +1,305 @@
+{% extends "public_base.html" %}
+{% block title %}Voice Studio — {{ site_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-12">
+  <div class="text-center mb-8">
+    <a href="{{ url_for('tools.index') }}" class="text-xs text-gray-400 hover:text-white mb-2 inline-block">← Tools Hub</a>
+    <h1 class="text-3xl font-extrabold text-white mb-2">🎙️ AI Voice Studio</h1>
+    <p class="text-gray-400 text-sm">Text to speech with real, distinct voices — free for everyone, no account needed to generate.</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Left: Text-to-Speech -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6">
+        <label class="block text-xs font-semibold text-gray-400 uppercase mb-2">Text to convert</label>
+        <textarea id="vs-text" rows="6" maxlength="5000" placeholder="Type or paste up to 5000 characters..."
+          class="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-white text-sm resize-none focus:outline-none focus:border-[#1DB954]" oninput="vsUpdateCount()"></textarea>
+        <div class="flex justify-between text-xs text-gray-500 mt-1">
+          <span id="vs-count">0 / 5000</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase mb-2">Voice</label>
+            <select id="vs-voice" class="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white text-sm">
+              <option value="">Loading voices...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase mb-2">
+              Speed: <span id="vs-speed-label">1.00x</span>
+            </label>
+            <input type="range" id="vs-speed" min="0.5" max="1.5" step="0.05" value="1.0" class="w-full accent-[#1DB954]" oninput="document.getElementById('vs-speed-label').textContent = parseFloat(this.value).toFixed(2) + 'x'"/>
+          </div>
+        </div>
+
+        <button id="vs-generate-btn" onclick="vsGenerate()"
+          class="w-full mt-5 bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-3 rounded-xl transition-colors">
+          ✨ Generate Speech
+        </button>
+        <p id="vs-error" class="text-red-400 text-xs mt-3 hidden"></p>
+
+        <div id="vs-current-audio-wrap" class="mt-5 bg-black/30 border border-white/10 rounded-xl p-4 hidden">
+          <audio id="vs-current-audio" controls class="w-full"></audio>
+          <a id="vs-current-download" download class="inline-flex items-center gap-2 mt-3 text-xs text-[#1DB954] hover:underline">⬇ Download MP3</a>
+        </div>
+      </div>
+
+      <!-- Record your own voice -->
+      <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6">
+        <h3 class="text-sm font-bold text-white mb-1">🎤 Record Your Own Voice</h3>
+        <p class="text-xs text-gray-500 mb-2">Uses your browser's microphone — nothing is uploaded until you stop recording.</p>
+        {% if current_user.is_authenticated %}
+        <p class="text-[10px] text-gray-600 mb-4">Saved recordings go to "My Voices" on the right — for playback, download, and reuse as your own audio clips. (Note: this saves your recording as a clip, it doesn't clone your voice for new text — that needs a paid voice-cloning provider.)</p>
+        <input id="vs-record-name" type="text" placeholder="Name this recording (e.g. 'Intro line')"
+          class="w-full bg-black/30 border border-white/10 rounded-xl p-2.5 text-white text-xs mb-3 focus:outline-none focus:border-[#1DB954]"/>
+        {% else %}
+        <p class="text-[10px] text-amber-400/80 mb-4"><a href="{{ url_for('auth.login') }}" class="underline">Log in</a> to save recordings to a personal voice library — you can still record and download without an account.</p>
+        {% endif %}
+        <div class="flex items-center gap-3">
+          <button id="vs-record-btn" onclick="vsToggleRecording()"
+            class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold py-2.5 px-5 rounded-xl transition-colors">
+            ⏺ Start Recording
+          </button>
+          <span id="vs-record-status" class="text-xs text-gray-400"></span>
+        </div>
+        <div id="vs-recorded-wrap" class="mt-4 bg-black/30 border border-white/10 rounded-xl p-4 hidden">
+          <audio id="vs-recorded-audio" controls class="w-full"></audio>
+          <a id="vs-recorded-download" download class="inline-flex items-center gap-2 mt-3 text-xs text-[#1DB954] hover:underline">⬇ Download Recording</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: History + My Voices -->
+    <div class="space-y-4">
+      <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6">
+        <h3 class="text-sm font-bold text-white mb-4">History (this session)</h3>
+        <div id="vs-history-empty" class="text-xs text-gray-500">Nothing generated yet.</div>
+        <div id="vs-history-list" class="space-y-3 max-h-[380px] overflow-y-auto"></div>
+        {% if not current_user.is_authenticated %}
+        <p class="text-[10px] text-gray-600 mt-4">History clears when you leave this page — <a href="{{ url_for('auth.login') }}" class="underline">log in</a> and generations are saved automatically so you can star favorites.</p>
+        {% endif %}
+      </div>
+
+      {% if current_user.is_authenticated %}
+      <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6">
+        <h3 class="text-sm font-bold text-white mb-4">🎗️ My Voices</h3>
+        <p class="text-[10px] text-gray-600 mb-3">Your saved recordings and favorited generations, across visits.</p>
+        <div id="vs-myvoices-empty" class="text-xs text-gray-500">Nothing saved yet.</div>
+        <div id="vs-myvoices-list" class="space-y-3 max-h-[380px] overflow-y-auto"></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+let vsMediaRecorder = null;
+let vsChunks = [];
+let vsRecording = false;
+let vsRecordSeconds = 0;
+let vsRecordTimer = null;
+const vsLoggedIn = {{ 'true' if current_user.is_authenticated else 'false' }};
+const vsFavoriteUrlBase = "{{ url_for('tools.voice_studio_toggle_favorite', gen_id=0) }}".replace('/0/favorite', '');
+const vsDeleteUrlBase = "{{ url_for('tools.voice_studio_delete_recording', sample_id=0) }}".replace('/0', '');
+
+function vsUpdateCount() {
+  document.getElementById('vs-count').textContent = document.getElementById('vs-text').value.length + ' / 5000';
+}
+
+function vsShowError(msg) {
+  const el = document.getElementById('vs-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function vsClearError() {
+  document.getElementById('vs-error').classList.add('hidden');
+}
+
+function vsAddHistory(audioUrl, text, voice, generationId) {
+  document.getElementById('vs-history-empty').classList.add('hidden');
+  const list = document.getElementById('vs-history-list');
+  const card = document.createElement('div');
+  card.className = 'bg-black/30 border border-white/10 rounded-xl p-3';
+  const starBtn = generationId
+    ? `<button onclick="vsToggleFavorite(${generationId}, this)" class="text-[10px] text-amber-400 hover:underline">☆ Favorite</button>`
+    : '';
+  card.innerHTML = `
+    <p class="text-xs text-gray-300 mb-2 line-clamp-2">${(text || '(recording)').replace(/</g,'&lt;')}</p>
+    <audio src="${audioUrl}" controls class="w-full h-8"></audio>
+    <div class="flex justify-between items-center mt-2">
+      <span class="text-[10px] text-gray-500">${voice || 'Recording'}</span>
+      <div class="flex items-center gap-3">
+        ${starBtn}
+        <a href="${audioUrl}" download class="text-[10px] text-[#1DB954] hover:underline">Download</a>
+      </div>
+    </div>`;
+  list.prepend(card);
+}
+
+async function vsToggleFavorite(generationId, btnEl) {
+  try {
+    const res = await fetch(`${vsFavoriteUrlBase}/${generationId}/favorite`, { method: 'POST' });
+    const data = await res.json();
+    if (data.is_favorite !== undefined) {
+      btnEl.textContent = data.is_favorite ? '★ Favorited' : '☆ Favorite';
+      if (data.is_favorite) vsLoadMyVoices();
+    }
+  } catch (e) { /* non-critical */ }
+}
+
+function vsRenderMyVoices(data) {
+  const list = document.getElementById('vs-myvoices-list');
+  const empty = document.getElementById('vs-myvoices-empty');
+  if (!list) return;
+  list.innerHTML = '';
+  const items = [...(data.recordings || []).map(r => ({...r, kind: 'recording'})), ...(data.favorites || []).map(f => ({...f, kind: 'favorite'}))];
+  if (!items.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'bg-black/30 border border-white/10 rounded-xl p-3';
+    const label = item.kind === 'recording' ? item.name : (item.title || item.text);
+    const deleteBtn = item.kind === 'recording'
+      ? `<button onclick="vsDeleteRecording(${item.id}, this)" class="text-[10px] text-red-400 hover:underline">Delete</button>`
+      : '';
+    card.innerHTML = `
+      <p class="text-xs text-gray-300 mb-2 line-clamp-2">${(label || '').replace(/</g,'&lt;')}</p>
+      <audio src="${item.url}" controls class="w-full h-8"></audio>
+      <div class="flex justify-between items-center mt-2">
+        <span class="text-[10px] text-gray-500">${item.kind === 'recording' ? 'Your recording' : (item.voice_name || 'Favorite')}</span>
+        <div class="flex items-center gap-3">
+          ${deleteBtn}
+          <a href="${item.url}" download class="text-[10px] text-[#1DB954] hover:underline">Download</a>
+        </div>
+      </div>`;
+    list.appendChild(card);
+  });
+}
+
+async function vsLoadMyVoices() {
+  if (!vsLoggedIn) return;
+  try {
+    const res = await fetch("{{ url_for('tools.voice_studio_my_voices') }}");
+    const data = await res.json();
+    vsRenderMyVoices(data);
+  } catch (e) { /* non-critical */ }
+}
+
+async function vsDeleteRecording(id, btnEl) {
+  try {
+    await fetch(`${vsDeleteUrlBase}/${id}`, { method: 'DELETE' });
+    vsLoadMyVoices();
+  } catch (e) { /* non-critical */ }
+}
+
+async function vsLoadVoices() {
+  const select = document.getElementById('vs-voice');
+  try {
+    const res = await fetch("{{ url_for('tools.voice_studio_voices') }}");
+    const data = await res.json();
+    select.innerHTML = '';
+    (data.voices || []).forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.name + (v.free ? '' : ' (premium)');
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    select.innerHTML = '<option value="en-US-JennyNeural">Jenny — English (US), Woman</option>';
+  }
+}
+
+async function vsGenerate() {
+  const text = document.getElementById('vs-text').value.trim();
+  if (!text) { vsShowError('Enter some text first.'); return; }
+  vsClearError();
+  const btn = document.getElementById('vs-generate-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  try {
+    const res = await fetch("{{ url_for('tools.voice_studio_generate') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        voice_id: document.getElementById('vs-voice').value,
+        speed: parseFloat(document.getElementById('vs-speed').value),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { vsShowError(data.error || 'Generation failed.'); return; }
+    document.getElementById('vs-current-audio-wrap').classList.remove('hidden');
+    document.getElementById('vs-current-audio').src = data.audio_url;
+    document.getElementById('vs-current-download').href = data.audio_url;
+    vsAddHistory(data.audio_url, text, data.voice, data.generation_id);
+  } catch (e) {
+    vsShowError('Failed to reach the server: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Generate Speech';
+  }
+}
+
+async function vsToggleRecording() {
+  const btn = document.getElementById('vs-record-btn');
+  const status = document.getElementById('vs-record-status');
+  if (vsRecording) {
+    vsMediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    vsChunks = [];
+    vsMediaRecorder = new MediaRecorder(stream);
+    vsMediaRecorder.ondataavailable = (e) => vsChunks.push(e.data);
+    vsMediaRecorder.onstop = async () => {
+      clearInterval(vsRecordTimer);
+      stream.getTracks().forEach(t => t.stop());
+      vsRecording = false;
+      btn.textContent = '⏺ Start Recording';
+      status.textContent = 'Saving...';
+      const blob = new Blob(vsChunks, { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', blob, 'recording.webm');
+      const nameEl = document.getElementById('vs-record-name');
+      if (nameEl && nameEl.value.trim()) formData.append('name', nameEl.value.trim());
+      try {
+        const res = await fetch("{{ url_for('tools.voice_studio_record') }}", { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.audio_url) {
+          document.getElementById('vs-recorded-wrap').classList.remove('hidden');
+          document.getElementById('vs-recorded-audio').src = data.audio_url;
+          document.getElementById('vs-recorded-download').href = data.audio_url;
+          vsAddHistory(data.audio_url, '(recording)', 'Your voice', null);
+          if (nameEl) nameEl.value = '';
+          status.textContent = vsLoggedIn ? 'Saved to My Voices.' : '';
+          vsLoadMyVoices();
+        } else {
+          vsShowError(data.error || 'Could not save recording.');
+          status.textContent = '';
+        }
+      } catch (e) {
+        vsShowError('Upload failed: ' + e.message);
+        status.textContent = '';
+      }
+    };
+    vsMediaRecorder.start();
+    vsRecording = true;
+    vsRecordSeconds = 0;
+    btn.textContent = '⏹ Stop (0s)';
+    vsRecordTimer = setInterval(() => {
+      vsRecordSeconds++;
+      btn.textContent = `⏹ Stop (${vsRecordSeconds}s)`;
+    }, 1000);
+  } catch (e) {
+    vsShowError('Microphone access denied or unavailable: ' + e.message);
+  }
+}
+
+vsLoadVoices();
+vsLoadMyVoices();
+</script>
+{% endblock %}

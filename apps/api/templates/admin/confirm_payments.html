@@ -1,0 +1,135 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Confirm Payments{% endblock %}
+{% block page_subtitle %}{{ pending_count }} awaiting review{% endblock %}
+{% block content %}
+<div class="flex gap-2 mb-5">
+  {% for s in ['pending', 'approved', 'rejected', 'all'] %}
+  <a href="{{ url_for('admin.confirm_payments', status=s) }}" class="text-xs px-4 py-2 rounded-lg border {% if active_status==s %}border-cyan-500 text-cyan-400{% else %}border-white/10 text-gray-400 hover:border-white/20{% endif %} transition-all capitalize">{{ s }}</a>
+  {% endfor %}
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-body" style="padding:0">
+    {% if not payments %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No {{ active_status if active_status != 'all' else '' }} payments.</p>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Customer</th>
+        <th class="text-left px-3 py-3">For</th>
+        <th class="text-left px-3 py-3">Amount</th>
+        <th class="text-left px-3 py-3 hidden md:table-cell">Reference</th>
+        <th class="text-left px-3 py-3">Proof</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for p in payments %}
+        <tr>
+          <td class="px-5 py-3">
+            <div class="text-white">{{ p.user.name if p.user else '—' }}</div>
+            <div class="text-gray-500 text-xs">{{ p.user.email if p.user else '' }}</div>
+          </td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ p.kind | replace('_', ' ') | title }} #{{ p.reference_id }}</td>
+          <td class="px-3 py-3 text-white font-medium">{{ p.amount | money(p.currency) }}</td>
+          <td class="px-3 py-3 hidden md:table-cell text-gray-400 text-xs font-mono">{{ p.sender_reference or '—' }}</td>
+          <td class="px-3 py-3">
+            {% if p.proof_image %}
+            <button type="button" onclick="openProofViewer('{{ p.proof_image }}', '{{ p.user.name if p.user else p.id }}')" class="text-xs text-cyan-400 hover:underline flex items-center gap-1">
+              🖼️ View Receipt
+            </button>
+            {% else %}
+            <span class="text-xs text-gray-500">None</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full
+              {% if p.status=='approved' %}bg-green-500/20 text-green-400
+              {% elif p.status=='rejected' %}bg-red-500/20 text-red-400
+              {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">{{ p.status }}</span>
+            {% if p.status == 'rejected' and p.rejection_reason %}
+            <div class="text-xs text-gray-500 mt-1 max-w-[180px]">{{ p.rejection_reason }}</div>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-right whitespace-nowrap space-x-1">
+            {% if p.status == 'pending' %}
+            <form method="POST" action="{{ url_for('admin.approve_payment', pid=p.id) }}" class="inline" onsubmit="return confirm('Approve this {{ p.amount | money(p.currency) }} payment?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10">Approve</button>
+            </form>
+            <button onclick="toggleModal('reject-{{ p.id }}')" class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Reject</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+{% for p in payments if p.status == 'pending' %}
+<div id="reject-{{ p.id }}" class="modal-overlay hidden">
+  <div class="modal-box max-w-sm">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-bold text-white">Reject Payment</h3>
+      <button onclick="toggleModal('reject-{{ p.id }}')" class="text-gray-400 hover:text-white">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin.reject_payment', pid=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <label class="admin-label">Reason (the customer will see this)</label>
+      <textarea name="reason" required rows="3" class="a-input w-full mt-1" placeholder="We couldn't find a matching transfer in our statement for this amount/reference."></textarea>
+      <button class="a-btn a-btn-primary w-full" style="margin-top:14px">Confirm Rejection</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<div id="proof-viewer" class="modal-overlay hidden" style="z-index:200">
+  <div class="modal-box" style="max-width:min(90vw,700px);padding:0;overflow:hidden">
+    <div class="flex justify-between items-center px-4 py-3 border-b border-white/10">
+      <h3 class="text-sm font-semibold text-white" id="proof-viewer-title">Payment Proof</h3>
+      <button onclick="toggleModal('proof-viewer')" class="text-gray-400 hover:text-white">✕</button>
+    </div>
+    <div style="background:#000;display:flex;align-items:center;justify-content:center;min-height:300px;max-height:65vh;overflow:auto">
+      <img id="proof-viewer-img" src="" style="transition:transform .15s ease;cursor:zoom-in;max-width:100%;display:block"/>
+    </div>
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-t border-white/10">
+      <div class="flex gap-2">
+        <button type="button" onclick="proofZoom(0.25)" class="text-xs px-3 py-1.5 rounded border border-white/10 text-gray-300 hover:border-white/20">🔍+ Zoom In</button>
+        <button type="button" onclick="proofZoom(-0.25)" class="text-xs px-3 py-1.5 rounded border border-white/10 text-gray-300 hover:border-white/20">🔍− Zoom Out</button>
+        <button type="button" onclick="proofRotate()" class="text-xs px-3 py-1.5 rounded border border-white/10 text-gray-300 hover:border-white/20">⟳ Rotate</button>
+      </div>
+      <a id="proof-viewer-download" href="" download class="text-xs px-3 py-1.5 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">⬇ Download</a>
+    </div>
+  </div>
+</div>
+
+<script>
+let _proofZoomLevel = 1, _proofRotation = 0;
+function openProofViewer(src, label) {
+  _proofZoomLevel = 1; _proofRotation = 0;
+  const img = document.getElementById('proof-viewer-img');
+  img.style.transform = 'scale(1) rotate(0deg)';
+  img.src = src;
+  document.getElementById('proof-viewer-title').textContent = 'Payment Proof — ' + label;
+  document.getElementById('proof-viewer-download').href = src;
+  toggleModal('proof-viewer');
+}
+function proofZoom(delta) {
+  _proofZoomLevel = Math.max(0.5, Math.min(4, _proofZoomLevel + delta));
+  _applyProofTransform();
+}
+function proofRotate() {
+  _proofRotation = (_proofRotation + 90) % 360;
+  _applyProofTransform();
+}
+function _applyProofTransform() {
+  document.getElementById('proof-viewer-img').style.transform = `scale(${_proofZoomLevel}) rotate(${_proofRotation}deg)`;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const img = document.getElementById('proof-viewer-img');
+  if (img) img.addEventListener('click', () => proofZoom(_proofZoomLevel < 2 ? 0.5 : -1.5));
+});
+</script>
+{% endblock %}

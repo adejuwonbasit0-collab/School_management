@@ -1,0 +1,82 @@
+{% extends "public_base.html" %}
+{% block title %}{{ agent.name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-16">
+  <div class="flex items-center gap-3 mb-6">
+    <span style="font-size:32px">{{ agent.avatar_emoji }}</span>
+    <div>
+      <h1 class="text-xl font-bold text-white">{{ agent.name }}</h1>
+      {% if agent.role %}<p class="text-sm text-gray-500">{{ agent.role }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="glass-card-premium rounded-2xl flex flex-col" style="height:60vh">
+    <div id="widget-messages" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+      {% if history %}
+        {% for m in history %}
+        <div class="widget-msg widget-msg-{{ m.role }}">
+          <div class="widget-msg-body">{{ m.content }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="widget-msg widget-msg-assistant">
+        <div class="widget-msg-body">{{ agent.public_greeting or ("Hi, I'm " + agent.name + ". How can I help?") }}</div>
+      </div>
+      {% endif %}
+    </div>
+    <form id="widget-form" class="flex gap-2 p-4 border-t border-white/10" onsubmit="return sendWidgetMessage(event)">
+      <input id="widget-input" type="text" placeholder="Type a message…" class="input-field flex-1 text-sm" autocomplete="off"/>
+      <button type="submit" id="widget-send-btn" class="px-5 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30 transition-colors">Send</button>
+    </form>
+  </div>
+  <p id="widget-error" class="text-xs text-red-400 mt-2"></p>
+</div>
+
+<style>
+.widget-msg { max-width: 85%; }
+.widget-msg-user { align-self: flex-end; margin-left: auto; }
+.widget-msg-assistant { align-self: flex-start; }
+.widget-msg-body { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.widget-msg-user .widget-msg-body { background: linear-gradient(90deg,#00f5ff22,#bf00ff22); border: 1px solid rgba(0,245,255,0.2); color: #fff; }
+.widget-msg-assistant .widget-msg-body { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: #d1d5db; }
+</style>
+
+<script>
+async function sendWidgetMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('widget-input');
+  const message = input.value.trim();
+  if (!message) return false;
+  const messagesEl = document.getElementById('widget-messages');
+  const errorEl = document.getElementById('widget-error');
+  const sendBtn = document.getElementById('widget-send-btn');
+
+  messagesEl.insertAdjacentHTML('beforeend', `
+    <div class="widget-msg widget-msg-user"><div class="widget-msg-body">${message.replace(/</g,'&lt;')}</div></div>`);
+  input.value = '';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  errorEl.textContent = '';
+  sendBtn.disabled = true;
+
+  try {
+    const res = await fetch('{{ url_for("cms.agent_widget_send", agent_id=agent.id) }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({ message })
+    });
+    const d = await res.json();
+    if (d.error) {
+      errorEl.textContent = d.error;
+    } else {
+      messagesEl.insertAdjacentHTML('beforeend', `
+        <div class="widget-msg widget-msg-assistant"><div class="widget-msg-body">${d.response.replace(/</g,'&lt;')}</div></div>`);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error — please try again.';
+  }
+  sendBtn.disabled = false;
+  return false;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "public_base.html" %}
+{% block title %}CSV Analyzer — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:1000px;margin:0 auto;padding:48px 20px">
+  <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">CSV Analyzer</h1>
+  <p style="color:var(--c-text-2);margin-bottom:32px">Upload a CSV and get instant stats, visualizations, and insights — all in the browser.</p>
+
+  <div style="background:rgba(255,255,255,0.03);border:2px dashed rgba(255,255,255,0.12);border-radius:16px;padding:40px;text-align:center;cursor:pointer;margin-bottom:20px" onclick="document.getElementById('csv-input').click()">
+    <div style="font-size:48px;margin-bottom:12px">📊</div>
+    <div style="font-size:15px;font-weight:700;color:#e8edf8;margin-bottom:6px">Drop CSV file or click to browse</div>
+    <input type="file" id="csv-input" accept=".csv,.tsv,.txt" style="display:none" onchange="loadCSV(event)"/>
+  </div>
+
+  <div id="csv-stats" style="display:none"></div>
+  <div id="csv-table-wrap" style="display:none;margin-top:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:auto;max-height:400px"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function loadCSV(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = r => {
+    const text = r.target.result;
+    const lines = text.trim().split(/
+?
+/);
+    const sep = text.includes('	') ? '	' : ',';
+    const headers = lines[0].split(sep).map(h=>h.trim().replace(/^"|"$/g,''));
+    const rows = lines.slice(1).map(l => l.split(sep).map(v=>v.trim().replace(/^"|"$/g,'')));
+
+    // Stats
+    const numCols = headers.map((h,i) => ({h, vals: rows.map(r=>parseFloat(r[i])).filter(v=>!isNaN(v))})).filter(c=>c.vals.length > rows.length/2);
+    const statsHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+        ${[['Rows',rows.length,'var(--c-accent)'],['Columns',headers.length,'var(--c-accent-2)'],['Numeric Cols',numCols.length,'#00e87a'],['Empty Cells', rows.reduce((s,r)=>s+r.filter(v=>!v).length,0), '#ffd32a']].map(([l,v,c])=>`
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:center">
+          <div style="font-size:26px;font-weight:800;color:${c};font-family:Space Grotesk,sans-serif">${v}</div>
+          <div style="font-size:11px;color:var(--c-text-2);margin-top:4px;text-transform:uppercase;letter-spacing:.05em">${l}</div>
+        </div>`).join('')}
+      </div>
+      ${numCols.length ? `<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;color:#e8edf8;margin-bottom:14px">Numeric Column Statistics</div>
+        <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>${['Column','Min','Max','Mean','Sum'].map(h=>`<th style="text-align:left;padding:8px 12px;color:var(--c-text-3);text-transform:uppercase;font-size:10px;letter-spacing:.06em;border-bottom:1px solid rgba(255,255,255,0.07)">${h}</th>`).join('')}</tr></thead>
+          <tbody>${numCols.map(c=>{const min=Math.min(...c.vals),max=Math.max(...c.vals),mean=c.vals.reduce((a,b)=>a+b,0)/c.vals.length,sum=c.vals.reduce((a,b)=>a+b,0);return`<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">${[c.h,min.toFixed(2),max.toFixed(2),mean.toFixed(2),sum.toFixed(2)].map((v,i)=>`<td style="padding:8px 12px;color:${i===0?'#e8edf8':'var(--c-accent)'};font-family:${i===0?'inherit':'JetBrains Mono,monospace'}">${v}</td>`).join('')}</tr>`;}).join('')}</tbody>
+        </table></div>
+      </div>` : ''}`;
+    document.getElementById('csv-stats').innerHTML = statsHTML;
+    document.getElementById('csv-stats').style.display = 'block';
+
+    // Table preview
+    const tableHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+      <thead><tr style="position:sticky;top:0;background:#070a14">${headers.map(h=>`<th style="text-align:left;padding:10px 14px;color:var(--c-text-3);text-transform:uppercase;font-size:10px;letter-spacing:.06em;border-bottom:1px solid rgba(255,255,255,0.08)">${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0,100).map((row,ri)=>`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);background:${ri%2?'rgba(255,255,255,0.01)':'transparent'}">${row.map(v=>`<td style="padding:8px 14px;color:#8899b0;max-width:200px;overflow:hidden;text-overflow:ellipsis">${v||'<span style="color:#3a4a62">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>${rows.length>100?`<div style="padding:12px 14px;font-size:11px;color:var(--c-text-3);border-top:1px solid rgba(255,255,255,0.06)">Showing first 100 of ${rows.length} rows</div>`:''}`;
+    document.getElementById('csv-table-wrap').innerHTML = tableHTML;
+    document.getElementById('csv-table-wrap').style.display = 'block';
+  };
+  reader.readAsText(file);
+}
+</script>
+{% endblock %}

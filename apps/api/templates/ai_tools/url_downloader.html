@@ -1,0 +1,75 @@
+{% extends "public_base.html" %}
+{% block title %}URL File Downloader — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:700px;margin:0 auto;padding:48px 20px }
+.opt-row { display:flex;gap:10px;margin-bottom:14px }
+.note { font-size:12px;color:var(--c-text-2);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 16px;margin-top:18px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">URL File Downloader</h1>
+    <p style="color:var(--c-text-2)">Fetch a direct file link (video, image, document) and save it locally.</p>
+  </div>
+
+  <div class="opt-row">
+    <input id="url" class="admin-input" style="flex:1" placeholder="https://example.com/file.mp4">
+    <button class="btn-neon" id="fetchBtn">Fetch</button>
+  </div>
+  <p id="status" style="text-align:center;color:var(--c-text-2);font-size:13px"></p>
+  <div id="preview" style="text-align:center"></div>
+
+  <div class="note">
+    This tool fetches <strong>direct file links</strong> (a URL ending in the actual media file). It does not extract video from streaming platforms like YouTube, Instagram, or TikTok — doing so would bypass those platforms' terms of service, so that's intentionally not supported here.
+  </div>
+</div>
+<script>
+document.getElementById('fetchBtn').addEventListener('click', async () => {
+  const url = document.getElementById('url').value.trim();
+  const status = document.getElementById('status');
+  const preview = document.getElementById('preview');
+  if (!url) { status.textContent = 'Enter a URL first.'; return; }
+  status.textContent = 'Fetching…';
+  preview.innerHTML = '';
+  const controller = new AbortController();
+  const clientTimeout = setTimeout(() => controller.abort(), 20000); // 20s hard cap, client-side
+  try {
+    const res = await fetch('{{ url_for("ai.api_url_fetch") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ url }),
+      signal: controller.signal,
+    });
+    clearTimeout(clientTimeout);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      status.textContent = 'Error: ' + (err.error || res.statusText);
+      return;
+    }
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const filename = url.split('/').pop().split('?')[0] || 'download';
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = filename; a.click();
+    status.textContent = `Downloaded: ${filename} (${Math.round(blob.size/1024)} KB)`;
+    if (blob.type.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = objUrl; img.style.maxWidth = '100%'; img.style.borderRadius = '12px'; img.style.marginTop = '14px';
+      preview.appendChild(img);
+    } else if (blob.type.startsWith('video/')) {
+      const vid = document.createElement('video');
+      vid.src = objUrl; vid.controls = true; vid.style.maxWidth = '100%'; vid.style.borderRadius = '12px'; vid.style.marginTop = '14px';
+      preview.appendChild(vid);
+    }
+  } catch (e) {
+    clearTimeout(clientTimeout);
+    status.textContent = e.name === 'AbortError'
+      ? 'Timed out after 20s — the source is too slow or unreachable. Try a different link.'
+      : 'Error: ' + e.message;
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends "public_base.html" %}
+{% block title %}Background Remover — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:48px 20px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+    <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  </div>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,#00f5ff,#bf00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px">Background Remover</h1>
+  <p style="color:var(--c-text-2);margin-bottom:32px">Remove image backgrounds instantly in your browser — no uploads, no API key, 100% private.</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <!-- Upload -->
+    <div style="background:rgba(255,255,255,0.03);border:2px dashed rgba(255,255,255,0.12);border-radius:16px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="event.preventDefault();this.style.borderColor='rgba(0,245,255,.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,.12)'" ondrop="handleDrop(event)">
+      <div style="font-size:48px;margin-bottom:12px">🖼️</div>
+      <div style="font-size:15px;font-weight:700;color:#e8edf8;margin-bottom:6px">Drop image here</div>
+      <div style="font-size:12px;color:var(--c-text-2)">or click to browse · PNG, JPG, WebP</div>
+      <input type="file" id="file-input" accept="image/*" style="display:none" onchange="processImage(event)"/>
+    </div>
+    <!-- Preview area -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px" id="preview-area">
+      <div style="font-size:12px;color:#3a4a62">Result will appear here</div>
+    </div>
+  </div>
+
+  <!-- Tolerance slider -->
+  <div style="margin-top:20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <label style="font-size:12px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em">Tolerance (background sensitivity)</label>
+      <span id="tol-val" style="font-size:12px;color:#00f5ff;font-family:JetBrains Mono,monospace">30</span>
+    </div>
+    <input type="range" id="tolerance" min="1" max="100" value="30" style="width:100%;accent-color:#00f5ff" oninput="document.getElementById('tol-val').textContent=this.value"/>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button onclick="reprocess()" style="flex:1;padding:10px;background:linear-gradient(135deg,#00f5ff,#bf00ff);border:none;border-radius:10px;font-weight:700;color:#000;cursor:pointer;font-family:inherit">Re-process</button>
+      <button onclick="downloadResult()" id="dl-btn" disabled style="flex:1;padding:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-weight:700;color:var(--c-text-2);cursor:pointer;font-family:inherit">Download PNG</button>
+    </div>
+    <button onclick="useAiRemoval()" id="ai-btn" style="display:none;width:100%;margin-top:10px;padding:10px;background:rgba(191,0,255,0.08);border:1px solid rgba(191,0,255,0.3);border-radius:10px;font-weight:700;color:#bf00ff;cursor:pointer;font-family:inherit">✨ Use AI removal (higher quality, handles complex backgrounds)</button>
+    <div id="ai-status" style="display:none;margin-top:8px;font-size:12px;color:var(--c-text-2);text-align:center"></div>
+  </div>
+
+  <div style="margin-top:16px;padding:12px 16px;background:rgba(0,245,255,0.04);border:1px solid rgba(0,245,255,0.12);border-radius:10px;font-size:12px;color:var(--c-text-2)">
+    💡 <strong style="color:#e8edf8">How it works:</strong> The free tool samples your background from the image edges and removes matching pixels, with feathered edges. Works best on solid/simple backgrounds. For busy or complex backgrounds, use the AI option above if it's available.
+  </div>
+</div>
+
+<canvas id="hidden-canvas" style="display:none"></canvas>
+<canvas id="result-canvas" style="display:none"></canvas>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let originalImageData = null;
+let imgEl = null;
+let currentFile = null;
+let aiAvailable = false;
+
+fetch('{{ url_for("ai.bg_remove_status") }}').then(r => r.json()).then(d => {
+  aiAvailable = d.ai_available;
+  if (aiAvailable) document.getElementById('ai-btn').style.display = 'block';
+}).catch(() => {});
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'rgba(255,255,255,0.12)';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadFile(file);
+}
+
+function processImage(e) { loadFile(e.target.files[0]); }
+
+function loadFile(file) {
+  currentFile = file;
+  const reader = new FileReader();
+  reader.onload = r => {
+    imgEl = new Image();
+    imgEl.onload = () => {
+      const canvas = document.getElementById('hidden-canvas');
+      canvas.width = imgEl.width; canvas.height = imgEl.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imgEl, 0, 0);
+      originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      removeBackground();
+    };
+    imgEl.src = r.target.result;
+    // Show original preview
+    const prev = document.getElementById('preview-area');
+    prev.innerHTML = `<img src="${r.target.result}" style="max-width:100%;max-height:240px;border-radius:8px;object-fit:contain"/>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function reprocess() { if (originalImageData) removeBackground(); }
+
+function removeBackground() {
+  if (!originalImageData) return;
+  const tol = parseInt(document.getElementById('tolerance').value);
+  const src = originalImageData;
+  const w = src.width, h = src.height;
+  const canvas = document.getElementById('result-canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const dst = ctx.createImageData(w, h);
+  const d = src.data;
+  const alpha = new Uint8ClampedArray(w * h).fill(255); // 255 = keep, 0 = background
+
+  // Sample the background color from a ring around all four edges
+  // (much more representative than just the 4 corner pixels, and works
+  // even if one corner happens to sit on the subject).
+  let sr = 0, sg = 0, sb = 0, n = 0;
+  const step = Math.max(1, Math.floor(Math.min(w, h) / 200));
+  for (let x = 0; x < w; x += step) {
+    for (const y of [0, h - 1]) {
+      const i = (y * w + x) * 4;
+      sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; n++;
+    }
+  }
+  for (let y = 0; y < h; y += step) {
+    for (const x of [0, w - 1]) {
+      const i = (y * w + x) * 4;
+      sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; n++;
+    }
+  }
+  const bgR = sr / n, bgG = sg / n, bgB = sb / n;
+
+  // Flood fill from every edge pixel that's close to the background color,
+  // so background regions get removed even when they don't perfectly match
+  // the average edge color (shadows/gradients), while the subject itself
+  // (which is only connected to the edge through a color jump) stays intact.
+  const visited = new Uint8Array(w * h);
+  const stack = [];
+  const within = (i, mult) => {
+    const dr = d[i] - bgR, dg = d[i + 1] - bgG, db = d[i + 2] - bgB;
+    return Math.sqrt(dr * dr + dg * dg + db * db) < tol * mult;
+  };
+  const pushIfBg = (x, y) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const p = y * w + x;
+    if (visited[p]) return;
+    const i = p * 4;
+    if (within(i, 2.2)) { visited[p] = 1; alpha[p] = 0; stack.push([x, y]); }
+  };
+  for (let x = 0; x < w; x++) { pushIfBg(x, 0); pushIfBg(x, h - 1); }
+  for (let y = 0; y < h; y++) { pushIfBg(0, y); pushIfBg(w - 1, y); }
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    pushIfBg(x + 1, y); pushIfBg(x - 1, y); pushIfBg(x, y + 1); pushIfBg(x, y - 1);
+  }
+
+  // Feather the alpha channel at the boundary for a smoother edge instead
+  // of a hard cutout (3x3 box blur of the alpha only).
+  const feathered = new Uint8ClampedArray(alpha);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const p = y * w + x;
+      // Only blur near boundaries (where alpha differs from a neighbor) to keep interior crisp.
+      const a = alpha[p];
+      const n1 = alpha[p - 1], n2 = alpha[p + 1], n3 = alpha[p - w], n4 = alpha[p + w];
+      if (a !== n1 || a !== n2 || a !== n3 || a !== n4) {
+        feathered[p] = (a + n1 + n2 + n3 + n4) / 5;
+      }
+    }
+  }
+
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 4;
+    dst.data[i] = d[i]; dst.data[i + 1] = d[i + 1]; dst.data[i + 2] = d[i + 2];
+    dst.data[i + 3] = feathered[p];
+  }
+  ctx.putImageData(dst, 0, 0);
+
+  // Show result with checkered background
+  const prev = document.getElementById('preview-area');
+  prev.style.background = 'repeating-conic-gradient(#1a1f2e 0% 25%,#141820 0% 50%) 0 0/20px 20px';
+  prev.innerHTML = `<img src="${canvas.toDataURL('image/png')}" style="max-width:100%;max-height:240px;object-fit:contain;border-radius:8px"/>`;
+  document.getElementById('dl-btn').disabled = false;
+  document.getElementById('dl-btn').style.color = '#e8edf8';
+  document.getElementById('dl-btn').style.borderColor = 'rgba(0,245,255,0.3)';
+}
+
+async function useAiRemoval() {
+  if (!currentFile) return;
+  const status = document.getElementById('ai-status');
+  status.style.display = 'block';
+  status.textContent = 'Processing with AI…';
+  try {
+    const fd = new FormData();
+    fd.append('image', currentFile);
+    const res = await fetch('{{ url_for("ai.bg_remove_v2") }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Request failed.' }));
+      status.textContent = err.error || 'AI removal failed.';
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const prev = document.getElementById('preview-area');
+    prev.style.background = 'repeating-conic-gradient(#1a1f2e 0% 25%,#141820 0% 50%) 0 0/20px 20px';
+    prev.innerHTML = `<img src="${url}" style="max-width:100%;max-height:240px;object-fit:contain;border-radius:8px"/>`;
+    const a = document.createElement('a'); a._aiUrl = url;
+    window._lastAiResult = url;
+    document.getElementById('dl-btn').disabled = false;
+    document.getElementById('dl-btn').style.color = '#e8edf8';
+    document.getElementById('dl-btn').style.borderColor = 'rgba(0,245,255,0.3)';
+    document.getElementById('dl-btn').onclick = () => { const a = document.createElement('a'); a.href = url; a.download = 'bg-removed-ai.png'; a.click(); };
+    status.textContent = '✓ Done — AI result shown above.';
+  } catch (e) {
+    status.textContent = 'Could not reach the AI service.';
+  }
+}
+
+function downloadResult() {
+  const canvas = document.getElementById('result-canvas');
+  const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'bg-removed.png'; a.click();
+}
+</script>
+{% endblock %}

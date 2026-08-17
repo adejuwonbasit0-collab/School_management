@@ -1,0 +1,27 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block title %}Setup Freelancer Profile — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-12">
+  <h1 class="text-2xl font-bold font-display gradient-text mb-8">Freelancer Profile Setup</h1>
+  <div class="glass border border-white/10 rounded-2xl p-8">
+    <form method="POST" action="{{ url_for('freelance.setup_profile') }}" class="space-y-5">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Professional Title *</label><input name="title" value="{{ profile.title or '' }}" required class="admin-input w-full mt-1" placeholder="e.g. Full-Stack Developer"/></div>
+      <div><label class="admin-label">Bio</label><textarea name="bio" rows="4" class="admin-input w-full mt-1 resize-none" placeholder="Tell clients about yourself…">{{ profile.bio or '' }}</textarea></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="admin-label">Hourly Rate ($)</label><input name="hourly_rate" type="number" step="0.01" value="{{ profile.hourly_rate or '' }}" class="admin-input w-full mt-1" placeholder="50"/></div>
+        <div><label class="admin-label">Availability</label>
+          <select name="availability" class="admin-input w-full mt-1">
+            {% for a in ['available','busy','unavailable'] %}<option value="{{ a }}" {% if profile.availability==a %}selected{% endif %}>{{ a | title }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div><label class="admin-label">Skills (comma separated)</label><input name="skills" value="{{ profile.skills | join(', ') if profile.skills else '' }}" class="admin-input w-full mt-1" placeholder="Python, React, PostgreSQL"/></div>
+      <div><label class="admin-label">Languages (comma separated)</label><input name="languages" value="{{ profile.languages | join(', ') if profile.languages else '' }}" class="admin-input w-full mt-1" placeholder="English, French"/></div>
+      <div><label class="admin-label">Location</label><input name="location" value="{{ profile.location or '' }}" class="admin-input w-full mt-1" placeholder="Lagos, Nigeria"/></div>
+      <div><label class="admin-label">Portfolio URL</label><input name="portfolio_url" value="{{ profile.portfolio_url or '' }}" type="url" class="admin-input w-full mt-1" placeholder="https://…"/></div>
+      <button type="submit" class="btn-neon py-3 px-8">Save Profile</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

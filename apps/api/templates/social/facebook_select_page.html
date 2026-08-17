@@ -1,0 +1,18 @@
+{% extends "public_base.html" %}
+{% block title %}Choose a Facebook Page{% endblock %}
+{% block content %}
+<div class="dashboard-shell" style="max-width:560px;margin:60px auto">
+  <div class="portal-card">
+    <h1 class="text-xl font-bold text-white mb-2">Which Page should be connected?</h1>
+    <p class="text-sm text-gray-400 mb-6">Your Facebook account manages more than one Page — pick the one you want linked to this project.</p>
+    <div class="space-y-3">
+      {% for page in pages %}
+      <a href="{{ url_for('social.facebook_oauth_select', page_id=page.id) }}" class="milestone-row" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none">
+        <span class="text-sm font-semibold text-white">{{ page.name }}</span>
+        <span class="ds-btn ds-btn-primary ds-btn-sm">Connect This Page</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

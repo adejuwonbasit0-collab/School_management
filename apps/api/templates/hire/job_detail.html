@@ -1,0 +1,32 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block title %}{{ job.title }} — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-12">
+  <a href="{{ url_for('freelance.jobs') }}" class="text-sm text-cyan-400 hover:text-cyan-300 mb-6 inline-block">← Back to Jobs</a>
+  <div class="glass border border-white/10 rounded-2xl p-8 mb-6">
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-white mb-1">{{ job.title }}</h1>
+        <p class="text-sm text-gray-400">{{ job.category }} · Posted {{ job.created_at | timeago }} · {{ job.proposals.count() }} proposals</p>
+      </div>
+      <span class="text-xs px-3 py-1 rounded-full {% if job.status=='open' %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ job.status | title }}</span>
+    </div>
+    {% if job.budget_max %}<p class="text-xl font-bold text-white mb-4">{{ (job.budget_min | int if job.budget_min else 0) | money }} – {{ job.budget_max | int | money }}</p>{% endif %}
+    <p class="text-gray-300 leading-relaxed mb-6">{{ job.description }}</p>
+    {% if job.skills %}<div class="flex flex-wrap gap-2"><{% for s in job.skills %}<span class="text-xs px-2 py-1 rounded bg-white/5 border border-white/10 text-gray-300">{{ s }}</span>{% endfor %}</div>{% endif %}
+  </div>
+  {% if current_user.is_authenticated and current_user.is_freelancer() and job.status=='open' %}
+  <div class="glass border border-cyan-500/20 rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Submit a Proposal</h3>
+    <form method="POST" action="{{ url_for('freelance.apply_job', job_id=job.id) }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Cover Letter *</label><textarea name="cover_letter" rows="4" required class="admin-input w-full mt-1 resize-none" placeholder="Explain why you're the right fit…"></textarea></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="admin-label">Your Bid ($)</label><input name="bid_amount" type="number" step="0.01" class="admin-input w-full mt-1"/></div>
+        <div><label class="admin-label">Delivery (days)</label><input name="delivery_days" type="number" class="admin-input w-full mt-1"/></div>
+      </div>
+      <button type="submit" class="btn-neon">Submit Proposal</button>
+    </form>
+  </div>{% endif %}
+</div>
+{% endblock %}

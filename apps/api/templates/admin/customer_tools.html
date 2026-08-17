@@ -1,0 +1,160 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Customer Tools{% endblock %}
+{% block page_subtitle %}The 6 customer SaaS products — use them free & unlocked, and manage every setting{% endblock %}
+
+{% block content %}
+<div class="a-panel" style="margin-bottom:16px;border-color:#1DB954;background:rgba(29,185,84,0.06)">
+  <div class="a-panel-body" style="padding:14px 20px">
+    <strong style="color:#1DB954">✓ You have full, free access to every tool below</strong>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:4px">
+      As admin you bypass all pricing and licensing checks automatically — "Launch" opens the exact same
+      live tool a paying customer uses, fully unlocked. Use the settings on each card to control what
+      customers see: price, billing, images, description, feature list, demo link, license, and visibility.
+    </p>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+  {% for t in tools %}
+  {% set slug = t.slug %}
+  {% set info = t.info %}
+  {% set p = t.product %}
+  <div class="a-panel">
+    <div class="a-panel-body" style="padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:44px;height:44px;border-radius:10px;background:{{ info.color }}22;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          {% if p and p.images and p.images[0] %}
+          <img src="{{ p.images[0] }}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>
+          {% else %}
+          <div style="width:10px;height:10px;border-radius:50%;background:{{ info.color }}"></div>
+          {% endif %}
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px;color:var(--text)">{{ info.name }}</div>
+          <div class="text-muted" style="font-size:11px">{{ info.category }} · {{ (p.status if p else 'active')|title }}</div>
+        </div>
+        <span class="badge badge-purple">{{ t.active_users }} active user{{ '' if t.active_users == 1 else 's' }}</span>
+      </div>
+
+      {% if p and p.description %}
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">{{ p.description|truncate(110) }}</p>
+      {% endif %}
+
+      <div style="display:flex;gap:16px;margin-bottom:14px;font-size:12px">
+        <div>
+          <div class="text-muted" style="font-size:10px;text-transform:uppercase">Price</div>
+          <div style="font-weight:700;font-family:'JetBrains Mono',monospace">
+            {% if p and p.price %}{{ p.price|int | money(p.currency) }}{% else %}Free{% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size:10px;text-transform:uppercase">Billing</div>
+          <div style="font-weight:600">{{ (p.billing_period if p else 'one_time')|replace('_',' ')|title }}</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size:10px;text-transform:uppercase">License</div>
+          <div style="font-weight:600">{{ (p.license if p else 'standard')|title }}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <a href="{{ url_for(info.endpoint) }}" class="a-btn a-btn-primary a-btn-sm" style="flex:1;text-align:center">Launch Tool</a>
+        <button type="button" class="a-btn a-btn-ghost a-btn-sm" onclick="openModal('edit-tool-{{ slug }}')">Manage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage modal -->
+  <div id="edit-tool-{{ slug }}" class="a-modal-overlay">
+    <div class="a-modal a-modal-lg">
+      <div class="a-modal-header">
+        <div class="a-modal-title">Manage — {{ info.name }}</div>
+        <button class="a-modal-close" onclick="closeModal('edit-tool-{{ slug }}')">✕</button>
+      </div>
+      <form method="POST" action="{{ url_for('admin.customer_tools_update', slug=slug) }}">
+        <div class="a-modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <div style="grid-column:span 2">
+            <label class="a-label">Title</label>
+            <input name="title" class="a-input" value="{{ p.title if p else info.name }}"/>
+          </div>
+
+          <div style="grid-column:span 2">
+            <label class="a-label">Short description (shown on marketplace card)</label>
+            <input name="description" class="a-input" value="{{ p.description if p else '' }}"/>
+          </div>
+
+          <div style="grid-column:span 2">
+            <label class="a-label">Full description</label>
+            <textarea name="long_desc" class="a-input" rows="3">{{ p.long_desc if p else '' }}</textarea>
+          </div>
+
+          <div>
+            <label class="a-label">Price — 0 = free</label>
+            <input name="price" type="number" step="0.01" min="0" class="a-input" value="{{ p.price if p else 0 }}"/>
+          </div>
+          <div>
+            <label class="a-label">Sale price (optional)</label>
+            <input name="sale_price" type="number" step="0.01" min="0" class="a-input" value="{{ p.sale_price if p and p.sale_price else '' }}"/>
+          </div>
+
+          <div>
+            <label class="a-label">Currency</label>
+            <input name="currency" class="a-input" value="{{ p.currency if p else 'USD' }}"/>
+          </div>
+          <div>
+            <label class="a-label">Billing period</label>
+            <select name="billing_period" class="a-input">
+              {% for bp in ['one_time','monthly','yearly'] %}
+              <option value="{{ bp }}" {% if p and p.billing_period==bp %}selected{% endif %}>{{ bp|replace('_',' ')|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="a-label">License</label>
+            <select name="license" class="a-input">
+              {% for lic in ['standard','extended','custom'] %}
+              <option value="{{ lic }}" {% if p and p.license==lic %}selected{% endif %}>{{ lic|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="a-label">Visibility / status</label>
+            <select name="status" class="a-input">
+              {% for s in ['active','draft','archived'] %}
+              <option value="{{ s }}" {% if p and p.status==s %}selected{% endif %}>{{ s|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div style="grid-column:span 2">
+            <label class="a-label">Product image URL</label>
+            <input name="image_url" class="a-input" value="{{ (p.images[0] if p and p.images else '') }}" placeholder="https://…"/>
+          </div>
+
+          <div>
+            <label class="a-label">Demo link</label>
+            <input name="demo_url" class="a-input" value="{{ p.demo_url if p else '' }}" placeholder="https://…"/>
+          </div>
+          <div>
+            <label class="a-label">Preview link</label>
+            <input name="preview_url" class="a-input" value="{{ p.preview_url if p else '' }}" placeholder="https://…"/>
+          </div>
+
+          <div style="grid-column:span 2">
+            <label class="a-label">Feature list — one per line</label>
+            <textarea name="features" class="a-input" rows="4" placeholder="Unlimited funnels&#10;Custom domains&#10;Stripe + Paystack checkout">{{ (p.features or [])|join('\n') if p else '' }}</textarea>
+          </div>
+        </div>
+        <div class="a-modal-footer">
+          <button type="button" class="a-btn a-btn-ghost" onclick="closeModal('edit-tool-{{ slug }}')">Cancel</button>
+          <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "public_base.html" %}
+{% block title %}AI Docstring Generator — {{ site_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-12">
+  <div class="flex items-center justify-between mb-8">
+    <div><h1 class="text-3xl font-bold font-display gradient-text">AI Docstring Generator</h1><p class="text-gray-400 text-sm mt-1">Add complete, idiomatic docstrings/comments to your function or class</p></div>
+    <a href="{{ url_for('ai.index') }}" class="admin-btn-ghost text-sm">← AI Hub</a>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="glass-card rounded-2xl p-5">
+      <label class="admin-label">Paste Your Code</label>
+      <textarea id="code-input" rows="18" class="input-field font-mono text-xs mt-1 resize-none w-full" placeholder="Paste a function or class to document…"></textarea>
+      <button onclick="runRefactor()" id="run-btn" class="w-full btn-neon mt-4 justify-center py-3">📚 Add Docstrings</button>
+      {% if not current_user.is_authenticated %}<p class="text-xs text-amber-400 mt-2">Sign in to use AI tools.</p>{% endif %}
+    </div>
+    <div>
+      <div id="placeholder" class="glass-card rounded-2xl p-8 text-center h-full flex flex-col items-center justify-center">
+        <div class="text-5xl mb-4">📚</div>
+        <p class="text-gray-400">Paste code and click "Add Docstrings" to see the documented version</p>
+      </div>
+      <div id="result" class="hidden space-y-4">
+        <div id="loading" class="hidden glass-card rounded-2xl p-8 text-center">
+          <div class="w-12 h-12 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mx-auto mb-4"></div>
+          <p class="text-gray-400">Generating docstrings…</p>
+        </div>
+        <div id="content" class="hidden glass-card rounded-2xl p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-white">Documented Code</h3>
+            <button onclick="copyResult()" class="admin-btn-ghost text-xs">Copy</button>
+          </div>
+          <div id="output" class="prose text-sm max-h-[600px] overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function runRefactor() {
+  const code = document.getElementById('code-input').value.trim();
+  if (!code) return showToast('Please paste some code first', 'error');
+  {% if not current_user.is_authenticated %}return showToast('Please sign in to use AI tools', 'error');{% endif %}
+  document.getElementById('placeholder').classList.add('hidden');
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('content').classList.add('hidden');
+  document.getElementById('run-btn').disabled = true;
+  try {
+    const res = await fetch('{{ url_for("ai.api_generic") }}', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify({ tool: 'docstring', content: code })
+    });
+    const data = await res.json();
+    document.getElementById('loading').classList.add('hidden');
+    if (data.error) { showToast(data.error,'error'); document.getElementById('placeholder').classList.remove('hidden'); document.getElementById('result').classList.add('hidden'); }
+    else { document.getElementById('content').classList.remove('hidden'); document.getElementById('output').innerHTML = marked.parse(data.response); }
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+  document.getElementById('run-btn').disabled = false;
+}
+function copyResult() { navigator.clipboard.writeText(document.getElementById('output').textContent); showToast('Copied!','success'); }
+</script>
+{% endblock %}

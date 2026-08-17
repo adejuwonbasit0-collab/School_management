@@ -1,0 +1,49 @@
+{% extends "public_base.html" %}
+{% block title %}Hire Talent — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-12">
+  <div class="text-center mb-12">
+    <h1 class="text-4xl font-bold font-display gradient-text mb-3">Hire Top Freelancers</h1>
+    <p class="text-gray-400">Find verified developers and designers for your project</p>
+  </div>
+  <div class="flex justify-end mb-6">
+    {% if current_user.is_authenticated and current_user.is_client() %}
+    <a href="{{ url_for('freelance.post_job') }}" class="btn-neon text-sm">+ Post a Job</a>{% endif %}
+  </div>
+  {% if freelancers %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
+    {% for f in freelancers %}
+    <div class="glass border border-white/10 rounded-2xl p-5 hover:border-cyan-500/30 transition-all">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-black font-bold">{{ (f.user.name or f.user.email)[0] | upper }}</div>
+        <div>
+          <p class="font-semibold text-white">{{ f.user.name }}</p>
+          <p class="text-xs text-gray-400">{{ f.title or 'Freelancer' }}</p>
+        </div>
+        {% if f.verified %}<span class="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">✓</span>{% endif %}
+      </div>
+      {% if f.skills %}<div class="flex flex-wrap gap-1.5 mb-3">{% for s in f.skills[:4] %}<span class="text-xs px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">{{ s }}</span>{% endfor %}</div>{% endif %}
+      <div class="flex justify-between text-sm mt-3">
+        <span class="text-gray-400">{{ f.completed_jobs }} jobs done</span>
+        {% if f.hourly_rate %}<span class="text-white font-mono">{{ f.hourly_rate | int | money }}/hr</span>{% endif %}
+      </div>
+    </div>{% endfor %}
+  </div>{% endif %}
+  {% if jobs %}
+  <h2 class="text-2xl font-bold font-display text-white mb-6">Open Jobs</h2>
+  <div class="space-y-4">
+    {% for j in jobs %}
+    <a href="{{ url_for('freelance.job_detail', job_id=j.id) }}" class="glass border border-white/10 rounded-xl p-5 flex items-center justify-between hover:border-cyan-500/30 transition-all group block">
+      <div>
+        <h3 class="font-semibold text-white group-hover:text-cyan-300 transition-colors">{{ j.title }}</h3>
+        <p class="text-sm text-gray-400 mt-1">{{ j.category }} · {{ j.proposals.count() }} proposals</p>
+        {% if j.skills %}<div class="flex gap-1.5 mt-2">{% for s in j.skills[:3] %}<span class="text-xs px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">{{ s }}</span>{% endfor %}</div>{% endif %}
+      </div>
+      <div class="text-right flex-shrink-0 ml-4">
+        {% if j.budget_max %}<p class="font-mono text-white">{{ (j.budget_min | int if j.budget_min else 0) | money }}–{{ j.budget_max | int | money }}</p>{% endif %}
+        <p class="text-xs text-gray-500">{{ j.created_at | timeago }}</p>
+      </div>
+    </a>{% endfor %}
+  </div>{% endif %}
+</div>
+{% endblock %}

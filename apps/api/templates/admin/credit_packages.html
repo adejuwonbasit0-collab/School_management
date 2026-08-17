@@ -1,0 +1,177 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Credit Packages{% endblock %}
+{% block content %}
+
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Packages</p><p class="text-2xl font-bold text-white">{{ packages | length }}</p></div>
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Active</p><p class="text-2xl font-bold text-white">{{ packages | selectattr('active') | list | length }}</p></div>
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Credit Revenue</p><p class="text-2xl font-bold text-white">{{ total_revenue | int | money }}</p></div>
+  <div class="glass border border-white/10 rounded-xl p-4"><p class="text-xs text-gray-500 mb-1">Credits Sold</p><p class="text-2xl font-bold text-white">{{ "{:,}".format(total_credits_sold) }}</p></div>
+</div>
+
+<div class="glass border border-white/10 rounded-2xl p-5 mb-8">
+  <h2 class="text-sm font-semibold text-white mb-1">Quick Buy Pricing (dashboard quantity stepper)</h2>
+  <p class="text-xs text-gray-500 mb-4">This is the rate for the "Quick Buy" +/- stepper on the user dashboard — separate from the fixed packages below. e.g. 10 credits per unit at $0.50 means 2 units = 20 credits = $1.00.</p>
+  <form method="POST" action="{{ url_for('admin.update_credit_pricing') }}" class="flex flex-wrap items-end gap-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div>
+      <label class="admin-label">Credits per unit</label>
+      <input type="number" name="credit_unit_size" value="{{ unit_pricing.unit_size }}" min="1" class="admin-input mt-1 w-32"/>
+    </div>
+    <div>
+      <label class="admin-label">Price per unit</label>
+      <input type="number" name="credit_unit_price" value="{{ unit_pricing.unit_price }}" min="0.01" step="0.01" class="admin-input mt-1 w-32"/>
+    </div>
+    <div>
+      <label class="admin-label">Max units per purchase</label>
+      <input type="number" name="credit_max_units" value="{{ unit_pricing.max_units }}" min="1" class="admin-input mt-1 w-32"/>
+    </div>
+    <button class="btn-neon text-xs py-2 px-5">Save Pricing</button>
+  </form>
+</div>
+
+<div class="flex justify-between items-center mb-4">
+  <p class="text-gray-400 text-sm">{{ packages | length }} packages — prices shown to users on the dashboard Buy Credits page</p>
+  <button onclick="toggleModal('add-package-modal')" class="btn-neon text-xs py-2 px-4">+ Add Package</button>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+  {% for p in packages %}
+  <div class="glass border {% if p.is_popular %}border-cyan-500/40{% else %}border-white/10{% endif %} rounded-2xl p-5 {% if not p.active %}opacity-50{% endif %}">
+    {% if p.is_popular %}<span class="text-xs text-cyan-400 font-mono mb-2 block">★ Popular</span>{% endif %}
+    {% if not p.active %}<span class="text-xs text-gray-500 font-mono mb-2 block">○ Inactive</span>{% endif %}
+    <h3 class="font-bold text-white text-lg mb-1">{{ p.name }}</h3>
+    <p class="text-sm text-gray-400 mb-3">{{ p.description or "" }}</p>
+    <p class="text-2xl font-bold font-display text-white mb-1">{{ "{:,}".format(p.credits) }} <span class="text-sm text-gray-400 font-normal">credits</span></p>
+    <p class="text-xl font-semibold text-cyan-400 mb-3">{{ p.price | float | money }}</p>
+    <p class="text-xs text-gray-500 mb-3">{{ units_by_package.get(p.id, 0) }} sold · {{ (revenue_by_package.get(p.id, 0) or 0) | float | money }} revenue</p>
+    <div class="flex gap-2 pt-3 border-t border-white/5 flex-wrap">
+      <button onclick='openEditPackage({{ {"id": p.id, "name": p.name, "credits": p.credits, "price": p.price|float, "description": p.description or "", "is_popular": p.is_popular, "sort_order": p.sort_order or 0} | tojson }})' class="text-xs px-2 py-1 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">Edit</button>
+      <form method="POST" action="{{ url_for('admin.toggle_credit_package_active', pkg_id=p.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="text-xs px-2 py-1 rounded border {% if p.active %}border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10{% else %}border-green-500/30 text-green-400 hover:bg-green-500/10{% endif %}">{{ 'Deactivate' if p.active else 'Activate' }}</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.delete_credit_package', pkg_id=p.id) }}" class="inline" onsubmit="return confirm('Delete this package?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Delete</button>
+      </form>
+    </div>
+  </div>{% else %}
+  <p class="text-gray-500 text-sm col-span-full">No credit packages yet — create the first one so users can buy credits.</p>
+  {% endfor %}
+</div>
+
+<div class="glass border border-white/10 rounded-2xl overflow-hidden">
+  <div class="px-5 py-3 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+    <h3 class="text-sm font-semibold text-white">Credit Orders <span class="text-gray-500 font-normal">({{ total_orders }})</span></h3>
+    <form method="GET" class="flex items-center gap-2">
+      <select name="status" onchange="this.form.submit()" class="admin-input text-xs py-1.5">
+        <option value="" {{ 'selected' if not status_filter }}>All statuses</option>
+        <option value="paid" {{ 'selected' if status_filter == 'paid' }}>Paid</option>
+        <option value="pending" {{ 'selected' if status_filter == 'pending' }}>Pending</option>
+        <option value="failed" {{ 'selected' if status_filter == 'failed' }}>Failed</option>
+      </select>
+      <select name="gateway" onchange="this.form.submit()" class="admin-input text-xs py-1.5">
+        <option value="" {{ 'selected' if not gateway_filter }}>All gateways</option>
+        <option value="stripe" {{ 'selected' if gateway_filter == 'stripe' }}>Stripe</option>
+        <option value="paystack" {{ 'selected' if gateway_filter == 'paystack' }}>Paystack</option>
+        <option value="flutterwave" {{ 'selected' if gateway_filter == 'flutterwave' }}>Flutterwave</option>
+        <option value="paypal" {{ 'selected' if gateway_filter == 'paypal' }}>PayPal</option>
+      </select>
+    </form>
+  </div>
+  <table class="w-full text-sm">
+    <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+      <th class="text-left px-5 py-3">User</th>
+      <th class="text-left px-3 py-3">Package</th>
+      <th class="text-left px-3 py-3">Credits</th>
+      <th class="text-left px-3 py-3">Amount</th>
+      <th class="text-left px-3 py-3">Gateway</th>
+      <th class="text-left px-3 py-3">Status</th>
+      <th class="text-left px-3 py-3">Date</th>
+    </tr></thead>
+    <tbody>
+      {% for pu in recent_purchases %}
+      <tr class="border-b border-white/5">
+        <td class="px-5 py-3 text-gray-300">{{ pu.user.email if pu.user else pu.user_id }}</td>
+        <td class="px-3 py-3 text-gray-300">{{ pu.label }}</td>
+        <td class="px-3 py-3 text-gray-300">{{ "{:,}".format(pu.credits) }}</td>
+        <td class="px-3 py-3 text-gray-300">{{ pu.amount | float | money }}</td>
+        <td class="px-3 py-3 text-gray-500">{{ pu.gateway or "—" }}</td>
+        <td class="px-3 py-3">
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full
+            {{ 'bg-green-500/15 text-green-400' if pu.status == 'paid' else ('bg-red-500/15 text-red-400' if pu.status == 'failed' else 'bg-yellow-500/15 text-yellow-400') }}">
+            {{ pu.status|title }}
+          </span>
+        </td>
+        <td class="px-3 py-3 text-gray-500">{{ pu.created_at.strftime('%b %d, %Y %H:%M') if pu.created_at else "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="px-5 py-8 text-center text-gray-500">No orders match this filter.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if total_orders > per_page %}
+  <div class="px-5 py-3 border-t border-white/10 flex items-center justify-between text-xs text-gray-500">
+    <span>Page {{ page }} of {{ ((total_orders - 1) // per_page) + 1 }}</span>
+    <div class="flex gap-2">
+      {% if page > 1 %}<a href="{{ url_for('admin.credit_packages', page=page-1, status=status_filter, gateway=gateway_filter) }}" class="px-3 py-1 rounded border border-white/10 hover:bg-white/5">Previous</a>{% endif %}
+      {% if page * per_page < total_orders %}<a href="{{ url_for('admin.credit_packages', page=page+1, status=status_filter, gateway=gateway_filter) }}" class="px-3 py-1 rounded border border-white/10 hover:bg-white/5">Next</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add package modal -->
+<div id="add-package-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-lg">
+    <div class="flex justify-between items-center mb-5"><h3 class="text-lg font-bold text-white">Add Credit Package</h3><button onclick="toggleModal('add-package-modal')" class="text-gray-400 hover:text-white">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_credit_package') }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Package Name *</label><input name="name" required class="admin-input w-full mt-1" placeholder="Starter"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="admin-label">Credits *</label><input name="credits" type="number" required class="admin-input w-full mt-1" placeholder="10000"/></div>
+        <div><label class="admin-label">Price *</label><input name="price" type="number" step="0.01" required class="admin-input w-full mt-1" placeholder="15000"/></div>
+      </div>
+      <div><label class="admin-label">Description</label><input name="description" class="admin-input w-full mt-1" placeholder="Best for occasional use"/></div>
+      <div><label class="admin-label">Display Order</label><input name="sort_order" type="number" class="admin-input w-full mt-1" value="0"/></div>
+      <div class="flex items-center gap-2"><input type="checkbox" name="is_popular" id="pkgpop" class="accent-cyan-500"/><label for="pkgpop" class="text-sm text-gray-300">Mark as Popular</label></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="toggleModal('add-package-modal')" class="admin-btn-ghost text-sm">Cancel</button><button class="btn-neon text-sm py-2 px-5">Create Package</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit package modal -->
+<div id="edit-package-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-lg">
+    <div class="flex justify-between items-center mb-5"><h3 class="text-lg font-bold text-white">Edit Credit Package</h3><button onclick="toggleModal('edit-package-modal')" class="text-gray-400 hover:text-white">✕</button></div>
+    <form method="POST" id="edit-package-form" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Package Name *</label><input name="name" id="pp-name" required class="admin-input w-full mt-1"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="admin-label">Credits *</label><input name="credits" id="pp-credits" type="number" required class="admin-input w-full mt-1"/></div>
+        <div><label class="admin-label">Price *</label><input name="price" id="pp-price" type="number" step="0.01" required class="admin-input w-full mt-1"/></div>
+      </div>
+      <div><label class="admin-label">Description</label><input name="description" id="pp-description" class="admin-input w-full mt-1"/></div>
+      <div><label class="admin-label">Display Order</label><input name="sort_order" id="pp-sort" type="number" class="admin-input w-full mt-1"/></div>
+      <div class="flex items-center gap-2"><input type="checkbox" name="is_popular" id="pp-popular" class="accent-cyan-500"/><label for="pp-popular" class="text-sm text-gray-300">Mark as Popular</label></div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="toggleModal('edit-package-modal')" class="admin-btn-ghost text-sm">Cancel</button><button class="btn-neon text-sm py-2 px-5">Save Changes</button></div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function openEditPackage(p) {
+  document.getElementById('pp-name').value = p.name;
+  document.getElementById('pp-credits').value = p.credits;
+  document.getElementById('pp-price').value = p.price;
+  document.getElementById('pp-description').value = p.description;
+  document.getElementById('pp-sort').value = p.sort_order;
+  document.getElementById('pp-popular').checked = !!p.is_popular;
+  document.getElementById('edit-package-form').action = '/admin/credit-packages/' + p.id + '/update';
+  toggleModal('edit-package-modal');
+}
+</script>
+{% endblock %}

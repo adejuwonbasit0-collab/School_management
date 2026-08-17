@@ -1,0 +1,812 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Portfolio & About{% endblock %}
+{% block page_subtitle %}Manage your profile, projects, services, skills, experience, education, and testimonials{% endblock %}
+
+{% block content %}
+
+<!-- Tabs -->
+<div id="ptabs">
+  <div class="a-tabs" style="margin-bottom:20px">
+    {% for tid, tlabel in [('profile','Profile & Bio'),('projects','Projects'),('services','Services'),('skills','Skills & Experience'),('testimonials','Testimonials')] %}
+    <button class="a-tab {{ 'active' if loop.first }}" data-tab="{{ tid }}" onclick="switchTab('ptabs','{{ tid }}')">{{ tlabel }}</button>
+    {% endfor %}
+  </div>
+
+  <!-- ── PROFILE TAB ── -->
+  <div id="ptabs-profile" class="a-tab-panel active">
+    <div class="a-panel">
+      <div class="a-panel-header">
+        <div><div class="a-panel-title">Profile & Biography</div><div class="a-panel-sub">This controls the About page and how you appear everywhere on the site</div></div>
+      </div>
+      <form method="POST" action="{{ url_for('admin.save_profile') }}">
+        <div class="a-panel-body responsive-grid-2" style="display:grid;gap:16px">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          {% set p = profile %}
+          {% for fname, flabel in [('full_name','Display Name'),('title','Professional Title'),('subtitle','Subtitle / Tagline'),('profile_image','Profile Photo URL'),('cover_image','Cover Image URL'),('intro_video_url','Intro Video URL (YouTube/Vimeo/direct .mp4)'),('resume_url','Resume/CV URL'),('twitter','Twitter / X URL'),('github','GitHub URL'),('linkedin','LinkedIn URL'),('instagram','Instagram URL')] %}
+          <div>
+            <label class="a-label">{{ flabel }}</label>
+            {% if fname in ('profile_image','cover_image') %}
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <input name="{{ fname }}" id="field-{{ fname }}" value="{{ p[fname] if p and p[fname] else '' }}" class="a-input" style="flex:1;margin-top:0"/>
+              <button type="button" class="media-picker-btn" data-media-target="field-{{ fname }}" style="padding:0 14px;background:rgba(29, 185, 84,0.1);border:1px solid rgba(29, 185, 84,0.25);border-radius:8px;color:#1DB954;font-size:12px;white-space:nowrap;cursor:pointer">📁</button>
+            </div>
+            {% elif fname == 'intro_video_url' %}
+            <input name="{{ fname }}" value="{{ p[fname] if p and p[fname] else '' }}" class="a-input" style="margin-top:6px" placeholder="https://youtube.com/watch?v=... or a direct video link"/>
+            <p style="font-size:11px;color:var(--text-3);margin-top:4px">Shown as a play button over your profile photo on the About/Portfolio page. Leave blank to hide.</p>
+            {% else %}
+            <input name="{{ fname }}" value="{{ p[fname] if p and p[fname] else '' }}" class="a-input" style="margin-top:6px"/>
+            {% endif %}
+          </div>
+          {% endfor %}
+          <div style="grid-column:span 2">
+            <label class="a-label">Short Bio (shown in cards and hero)</label>
+            <textarea name="bio" rows="3" class="a-input" style="margin-top:6px">{{ p.bio if p else '' }}</textarea>
+          </div>
+          <div style="grid-column:span 2">
+            <label class="a-label">Full About Text (Markdown — shown on About page)</label>
+            <textarea name="about" rows="8" class="a-input mono" style="margin-top:6px;font-size:12px">{{ p.about if p else '' }}</textarea>
+          </div>
+        </div>
+        <div class="a-panel-footer" style="display:flex;justify-content:flex-end">
+          <button type="submit" class="a-btn a-btn-primary">Save Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── PROJECTS TAB ── -->
+  <div id="ptabs-projects" class="a-tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-size:13px;color:var(--text-muted)">{{ projects|length }} portfolio projects</div>
+      <button onclick="openModal('add-project-modal')" class="a-btn a-btn-primary">+ Add Project</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+      {% for proj in projects %}
+      <div class="a-panel" style="overflow:hidden">
+        {% if proj.image_url %}
+        <div style="height:160px;overflow:hidden;background:#000">
+          <img src="{{ proj.image_url }}" style="width:100%;height:100%;object-fit:cover;transition:transform .3s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"/>
+        </div>
+        {% else %}
+        <div style="height:120px;background:linear-gradient(135deg,rgba(29, 185, 84,0.1),rgba(242, 201, 76,0.1));display:flex;align-items:center;justify-content:center;font-size:36px">🚀</div>
+        {% endif %}
+        <div style="padding:16px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+            <div style="font-weight:700;font-size:14px;color:var(--text)">{{ proj.title }}</div>
+            {% if proj.featured %}<span class="badge badge-warning">★ Featured</span>{% endif %}
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ proj.description }}</div>
+          {% if proj.tags %}
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+            {% for tag in (proj.tags or [])[:4] %}
+            <span class="badge badge-muted">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+              onclick='editProject({{ {"id": proj.id, "title": proj.title, "description": proj.description or "", "image_url": proj.image_url or "", "client_name": proj.client_name or "", "live_url": proj.live_url or "", "github_url": proj.github_url or "", "tags": (proj.tags or [])|join(", "), "tech_stack": (proj.tech_stack or [])|join(", "), "featured": proj.featured }|tojson }})'>Edit</button>
+            <form method="POST" action="{{ url_for('admin.toggle_project_featured', pid=proj.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-warning a-btn-xs">{{ 'Unfeature' if proj.featured else '★ Feature' }}</button>
+            </form>
+            {% if proj.live_url %}<a href="{{ proj.live_url }}" target="_blank" class="a-btn a-btn-ghost a-btn-xs">Live ↗</a>{% endif %}
+            {% if proj.github_url %}<a href="{{ proj.github_url }}" target="_blank" class="a-btn a-btn-ghost a-btn-xs">GitHub ↗</a>{% endif %}
+            <form method="POST" action="{{ url_for('admin.delete_project', pid=proj.id) }}" style="display:inline;margin-left:auto" onsubmit="return confirm('Delete {{ proj.title }}?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="a-panel" style="grid-column:1/-1">
+        <div class="a-empty">
+          <div class="a-empty-icon">🚀</div>
+          <div class="a-empty-title">No projects yet</div>
+          <div class="a-empty-desc">Add your first portfolio project</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── SERVICES TAB ── -->
+  <div id="ptabs-services" class="a-tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-size:13px;color:var(--text-muted)">{{ services|length }} services</div>
+      <button onclick="openModal('add-service-modal')" class="a-btn a-btn-primary">+ Add Service</button>
+    </div>
+    <div class="a-panel">
+      <div class="a-table-wrap">
+        <table class="a-table">
+          <thead><tr><th>Service</th><th>Price</th><th>Features</th><th>Active</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody>
+            {% for svc in services %}
+            <tr>
+              <td>
+                <div style="font-weight:600;font-size:13px;color:var(--text)">{{ svc.title }}</div>
+                <div class="text-muted" style="max-width:260px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ svc.description }}</div>
+              </td>
+              <td><span style="color:var(--cyan);font-family:'JetBrains Mono',monospace">{{ svc.price or '—' }}</span></td>
+              <td><span class="text-muted">{{ (svc.features or [])|length }} items</span></td>
+              <td>
+                <span class="badge {{ 'badge-success' if svc.active else 'badge-muted' }}">
+                  <span class="badge-dot"></span>{{ 'Active' if svc.active else 'Hidden' }}
+                </span>
+              </td>
+              <td style="text-align:right;white-space:nowrap">
+                <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+                  onclick='editService({{ {"id": svc.id, "title": svc.title, "description": svc.description or "", "price": svc.price or "", "icon": svc.icon or "Code2", "features": (svc.features or [])|join("\n"), "active": svc.active}|tojson }})'>Edit</button>
+                <form method="POST" action="{{ url_for('admin.delete_service', sid=svc.id) }}" style="display:inline" onsubmit="return confirm('Delete {{ svc.title }}?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                  <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5"><div class="a-empty"><div class="a-empty-desc">No services yet</div></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SKILLS TAB ── -->
+  <div id="ptabs-skills" class="a-tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-size:13px;color:var(--text-muted)">{{ skills|length }} skills</div>
+      <button onclick="openModal('add-skill-modal')" class="a-btn a-btn-primary">+ Add Skill</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+      {% for sk in skills %}
+      <div class="a-panel" style="padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:600;font-size:13px;color:var(--text)">{{ sk.name }}</div>
+          <span class="badge badge-muted">{{ sk.category or 'General' }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:6px">
+          <span>{{ sk.level|title }}</span>
+          <span style="color:var(--cyan)">{{ sk.percentage }}%</span>
+        </div>
+        <div class="a-progress">
+          <div class="a-progress-fill" style="width:{{ sk.percentage }}%"></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:12px">
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="flex:1"
+            onclick='editSkill({{ {"id": sk.id, "name": sk.name, "category": sk.category or "", "level": sk.level or "intermediate", "percentage": sk.percentage or 0, "icon": sk.icon or ""}|tojson }})'>Edit</button>
+          <form method="POST" action="{{ url_for('admin.delete_skill', sid=sk.id) }}" onsubmit="return confirm('Delete {{ sk.name }}?')" style="flex:1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-danger a-btn-xs" style="width:100%">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <div style="grid-column:1/-1" class="a-panel"><div class="a-empty"><div class="a-empty-desc">No skills added yet</div></div></div>
+      {% endfor %}
+    </div>
+
+    <!-- Work Experience -->
+    <div style="margin-top:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Work Experience</div>
+        <button onclick="openModal('add-experience-modal')" class="a-btn a-btn-primary a-btn-xs">+ Add Experience</button>
+      </div>
+      <div class="a-panel">
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead><tr><th>Role</th><th>Company</th><th>Period</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody>
+              {% for exp in experiences %}
+              <tr>
+                <td style="font-weight:600">{{ exp.role }}</td>
+                <td class="text-muted">{{ exp.company }}</td>
+                <td><span class="mono text-muted">{{ exp.start_date }} — {{ 'Present' if exp.current else exp.end_date }}</span></td>
+                <td style="text-align:right;white-space:nowrap">
+                  <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+                    onclick='editExperience({{ {"id": exp.id, "company": exp.company or "", "role": exp.role or "", "description": exp.description or "", "start_date": exp.start_date or "", "end_date": exp.end_date or "", "current": exp.current, "logo": exp.logo or ""}|tojson }})'>Edit</button>
+                  <form method="POST" action="{{ url_for('admin.delete_experience', eid=exp.id) }}" style="display:inline" onsubmit="return confirm('Delete this experience entry?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4"><div class="a-empty"><div class="a-empty-desc">No work experience added yet</div></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Education -->
+    <div style="margin-top:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Education</div>
+        <button onclick="openModal('add-education-modal')" class="a-btn a-btn-primary a-btn-xs">+ Add Education</button>
+      </div>
+      <div class="a-panel">
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead><tr><th>Institution</th><th>Degree</th><th>Years</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody>
+              {% for edu in educations %}
+              <tr>
+                <td style="font-weight:600">{{ edu.institution }}</td>
+                <td class="text-muted">{{ edu.degree }}{% if edu.field %} · {{ edu.field }}{% endif %}</td>
+                <td><span class="mono text-muted">{{ edu.start_year }} — {{ edu.end_year }}</span></td>
+                <td style="text-align:right;white-space:nowrap">
+                  <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+                    onclick='editEducation({{ {"id": edu.id, "institution": edu.institution or "", "degree": edu.degree or "", "field": edu.field or "", "start_year": edu.start_year or "", "end_year": edu.end_year or "", "logo": edu.logo or ""}|tojson }})'>Edit</button>
+                  <form method="POST" action="{{ url_for('admin.delete_education', eid=edu.id) }}" style="display:inline" onsubmit="return confirm('Delete this education entry?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4"><div class="a-empty"><div class="a-empty-desc">No education added yet</div></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Certifications -->
+    <div style="margin-top:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Certifications</div>
+        <button onclick="openModal('add-certification-modal')" class="a-btn a-btn-primary a-btn-xs">+ Add Certification</button>
+      </div>
+      <div class="a-panel">
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead><tr><th>Certification</th><th>Issuer</th><th>Date</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody>
+              {% for c in certifications %}
+              <tr>
+                <td style="font-weight:600">{{ c.name }}</td>
+                <td class="text-muted">{{ c.issuer }}</td>
+                <td><span class="mono text-muted">{{ c.issue_date }}</span></td>
+                <td style="text-align:right;white-space:nowrap">
+                  <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+                    onclick='editCertification({{ {"id": c.id, "name": c.name or "", "issuer": c.issuer or "", "issue_date": c.issue_date or "", "url": c.url or "", "badge": c.badge or ""}|tojson }})'>Edit</button>
+                  <form method="POST" action="{{ url_for('admin.delete_certification', cid=c.id) }}" style="display:inline" onsubmit="return confirm('Delete this certification?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4"><div class="a-empty"><div class="a-empty-desc">No certifications added yet</div></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Awards -->
+    <div style="margin-top:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Awards</div>
+        <button onclick="openModal('add-award-modal')" class="a-btn a-btn-primary a-btn-xs">+ Add Award</button>
+      </div>
+      <div class="a-panel">
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead><tr><th>Award</th><th>Issuer</th><th>Year</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody>
+              {% for a in awards %}
+              <tr>
+                <td style="font-weight:600">{{ a.title }}</td>
+                <td class="text-muted">{{ a.issuer }}</td>
+                <td><span class="mono text-muted">{{ a.year }}</span></td>
+                <td style="text-align:right;white-space:nowrap">
+                  <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+                    onclick='editAward({{ {"id": a.id, "title": a.title or "", "issuer": a.issuer or "", "year": a.year or "", "description": a.description or ""}|tojson }})'>Edit</button>
+                  <form method="POST" action="{{ url_for('admin.delete_award', aid=a.id) }}" style="display:inline" onsubmit="return confirm('Delete this award?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4"><div class="a-empty"><div class="a-empty-desc">No awards added yet</div></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TESTIMONIALS TAB ── -->
+  <div id="ptabs-testimonials" class="a-tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-size:13px;color:var(--text-muted)">{{ testimonials|length }} testimonials</div>
+      <button onclick="openModal('add-testimonial-modal')" class="a-btn a-btn-primary">+ Add Testimonial</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+      {% for t in testimonials %}
+      <div class="a-panel" style="padding:20px;position:relative">
+        <div style="display:flex;gap:2px;margin-bottom:10px">
+          {% for _ in range(t.rating) %}<span style="color:#ffd32a;font-size:14px">★</span>{% endfor %}
+          {% for _ in range(5-t.rating) %}<span style="color:var(--border-bright);font-size:14px">★</span>{% endfor %}
+        </div>
+        <p style="font-size:13px;color:var(--text);font-style:italic;line-height:1.65;margin-bottom:14px">"{{ t.content }}"</p>
+        <div style="display:flex;align-items:center;gap:10px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap">
+          {% if t.avatar %}
+          <img src="{{ t.avatar }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover"/>
+          {% else %}
+          <div class="a-avatar-fallback a-avatar-sm">{{ t.name[0] }}</div>
+          {% endif %}
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px;color:var(--text)">{{ t.name }}</div>
+            <div style="font-size:11px;color:var(--text-muted)">{{ t.role }}{% if t.company %}, {{ t.company }}{% endif %}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            {% if t.featured %}<span class="badge badge-info">Featured</span>{% endif %}
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+              onclick='editTestimonial({{ {"id": t.id, "name": t.name or "", "role": t.role or "", "company": t.company or "", "avatar": t.avatar or "", "content": t.content or "", "rating": t.rating or 5, "featured": t.featured}|tojson }})'>Edit</button>
+            <form method="POST" action="{{ url_for('admin.delete_testimonial', tid=t.id) }}" onsubmit="return confirm('Delete?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-danger a-btn-xs">✕</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div style="grid-column:1/-1" class="a-panel"><div class="a-empty"><div class="a-empty-icon">💬</div><div class="a-empty-title">No testimonials yet</div></div></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODALS ═══ -->
+<!-- Add Project -->
+<div id="add-project-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header"><div class="a-modal-title">Add Portfolio Project</div><button class="a-modal-close" onclick="closeModal('add-project-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_project') }}">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2"><label class="a-label">Title *</label><input name="title" required class="a-input" style="margin-top:6px" placeholder="My Awesome Project"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Description</label><textarea name="description" rows="3" class="a-input" style="margin-top:6px" placeholder="What did you build and why?"></textarea></div>
+        <div><label class="a-label">Image URL</label><input name="image_url" type="url" class="a-input" style="margin-top:6px" placeholder="https://…/screenshot.png"/></div>
+        <div><label class="a-label">Client Name</label><input name="client_name" class="a-input" style="margin-top:6px" placeholder="Acme Corp"/></div>
+        <div><label class="a-label">Live URL</label><input name="live_url" type="url" class="a-input" style="margin-top:6px" placeholder="https://myproject.com"/></div>
+        <div><label class="a-label">GitHub URL</label><input name="github_url" type="url" class="a-input" style="margin-top:6px" placeholder="https://github.com/…"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Tags (comma separated)</label><input name="tags" class="a-input" style="margin-top:6px" placeholder="react, python, postgresql, stripe"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Tech Stack (comma separated)</label><input name="tech_stack" class="a-input" style="margin-top:6px" placeholder="React, Flask, PostgreSQL"/></div>
+        <div style="grid-column:span 2">
+          <label class="a-toggle">
+            <input type="checkbox" name="featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Feature on homepage</div></div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('add-project-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Add Project</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Project -->
+<div id="edit-project-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Project</div><button class="a-modal-close" onclick="closeModal('edit-project-modal')">✕</button></div>
+    <form method="POST" id="edit-project-form">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2"><label class="a-label">Title *</label><input name="title" id="ep-title" required class="a-input" style="margin-top:6px"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Description</label><textarea name="description" id="ep-description" rows="3" class="a-input" style="margin-top:6px"></textarea></div>
+        <div><label class="a-label">Image URL</label><input name="image_url" id="ep-image_url" type="url" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Client Name</label><input name="client_name" id="ep-client_name" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Live URL</label><input name="live_url" id="ep-live_url" type="url" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">GitHub URL</label><input name="github_url" id="ep-github_url" type="url" class="a-input" style="margin-top:6px"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Tags (comma separated)</label><input name="tags" id="ep-tags" class="a-input" style="margin-top:6px"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Tech Stack (comma separated)</label><input name="tech_stack" id="ep-tech_stack" class="a-input" style="margin-top:6px"/></div>
+        <div style="grid-column:span 2">
+          <label class="a-toggle">
+            <input type="checkbox" name="featured" id="ep-featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Feature on homepage</div></div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-project-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Testimonial -->
+<div id="add-testimonial-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Add Testimonial</div><button class="a-modal-close" onclick="closeModal('add-testimonial-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_testimonial') }}">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Client Name *</label><input name="name" required class="a-input" style="margin-top:6px" placeholder="Sarah Johnson"/></div>
+        <div><label class="a-label">Role / Title</label><input name="role" class="a-input" style="margin-top:6px" placeholder="Product Manager"/></div>
+        <div><label class="a-label">Company</label><input name="company" class="a-input" style="margin-top:6px" placeholder="TechCorp Inc."/></div>
+        <div><label class="a-label">Avatar URL</label><input name="avatar" type="url" class="a-input" style="margin-top:6px" placeholder="https://…/photo.jpg"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Review *</label><textarea name="content" rows="4" required class="a-input" style="margin-top:6px" placeholder="What did they say about working with you?"></textarea></div>
+        <div>
+          <label class="a-label">Star Rating</label>
+          <select name="rating" class="a-input" style="margin-top:6px">
+            {% for r in [5,4,3,2,1] %}<option value="{{ r }}">{{ r }} Stars</option>{% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:4px">
+          <label class="a-toggle">
+            <input type="checkbox" name="featured" checked/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Show on homepage</div></div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('add-testimonial-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Add Testimonial</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Testimonial -->
+<div id="edit-testimonial-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Testimonial</div><button class="a-modal-close" onclick="closeModal('edit-testimonial-modal')">✕</button></div>
+    <form method="POST" id="edit-testimonial-form">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Client Name *</label><input name="name" id="et-name" required class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Role / Title</label><input name="role" id="et-role" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Company</label><input name="company" id="et-company" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Avatar URL</label><input name="avatar" id="et-avatar" type="url" class="a-input" style="margin-top:6px"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Review *</label><textarea name="content" id="et-content" rows="4" required class="a-input" style="margin-top:6px"></textarea></div>
+        <div>
+          <label class="a-label">Star Rating</label>
+          <select name="rating" id="et-rating" class="a-input" style="margin-top:6px">
+            {% for r in [5,4,3,2,1] %}<option value="{{ r }}">{{ r }} Stars</option>{% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:4px">
+          <label class="a-toggle">
+            <input type="checkbox" name="featured" id="et-featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Show on homepage</div></div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-testimonial-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Service -->
+<div id="add-service-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Add Service</div><button class="a-modal-close" onclick="closeModal('add-service-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_service') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Title *</label><input name="title" required class="a-input" style="margin-top:6px" placeholder="Web Development"/></div>
+        <div><label class="a-label">Description</label><textarea name="description" rows="2" class="a-input" style="margin-top:6px" placeholder="Brief description of the service…"></textarea></div>
+        <div class="responsive-grid-2" style="display:grid;gap:12px">
+          <div><label class="a-label">Starting Price</label><input name="price" class="a-input" style="margin-top:6px" placeholder="$1,500+"/></div>
+          <div><label class="a-label">Icon Name (Lucide)</label><input name="icon" class="a-input" style="margin-top:6px" placeholder="Code2" value="Code2"/></div>
+        </div>
+        <div><label class="a-label">Features (one per line)</label><textarea name="features" rows="5" class="a-input mono" style="margin-top:6px;font-size:12px" placeholder="Custom APIs&#10;Database design&#10;Authentication&#10;Deployment"></textarea></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('add-service-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Add Service</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Service -->
+<div id="edit-service-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Service</div><button class="a-modal-close" onclick="closeModal('edit-service-modal')">✕</button></div>
+    <form method="POST" id="edit-service-form">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Title *</label><input name="title" id="es-title" required class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Description</label><textarea name="description" id="es-description" rows="2" class="a-input" style="margin-top:6px"></textarea></div>
+        <div class="responsive-grid-2" style="display:grid;gap:12px">
+          <div><label class="a-label">Starting Price</label><input name="price" id="es-price" class="a-input" style="margin-top:6px"/></div>
+          <div><label class="a-label">Icon Name (Lucide)</label><input name="icon" id="es-icon" class="a-input" style="margin-top:6px"/></div>
+        </div>
+        <div><label class="a-label">Features (one per line)</label><textarea name="features" id="es-features" rows="5" class="a-input mono" style="margin-top:6px;font-size:12px"></textarea></div>
+        <label class="a-toggle">
+          <input type="checkbox" name="active" id="es-active"/>
+          <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+          <div><div class="a-toggle-label">Active (visible on site)</div></div>
+        </label>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-service-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Skill -->
+<div id="add-skill-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-sm">
+    <div class="a-modal-header"><div class="a-modal-title">Add Skill</div><button class="a-modal-close" onclick="closeModal('add-skill-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_skill') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Skill Name *</label><input name="name" required class="a-input" style="margin-top:6px" placeholder="Python"/></div>
+        <div class="responsive-grid-2" style="display:grid;gap:12px">
+          <div><label class="a-label">Category</label><input name="category" class="a-input" style="margin-top:6px" placeholder="Backend"/></div>
+          <div>
+            <label class="a-label">Level</label>
+            <select name="level" class="a-input" style="margin-top:6px">
+              {% for l in ['beginner','intermediate','advanced','expert'] %}<option value="{{ l }}">{{ l|title }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="a-label">Skill Icon / Image URL</label>
+          <input name="icon" class="a-input" style="margin-top:6px" placeholder="e.g. https://example.com/logo.png or 💻"/>
+        </div>
+        <div>
+          <label class="a-label">Proficiency: <span id="skill-pct-val">85</span>%</label>
+          <input type="range" name="percentage" min="0" max="100" value="85"
+            oninput="document.getElementById('skill-pct-val').textContent=this.value"
+            style="width:100%;accent-color:var(--cyan);margin-top:8px"/>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('add-skill-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Add Skill</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Skill -->
+<div id="edit-skill-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-sm">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Skill</div><button class="a-modal-close" onclick="closeModal('edit-skill-modal')">✕</button></div>
+    <form method="POST" id="edit-skill-form">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Skill Name *</label><input name="name" id="esk-name" required class="a-input" style="margin-top:6px"/></div>
+        <div class="responsive-grid-2" style="display:grid;gap:12px">
+          <div><label class="a-label">Category</label><input name="category" id="esk-category" class="a-input" style="margin-top:6px"/></div>
+          <div>
+            <label class="a-label">Level</label>
+            <select name="level" id="esk-level" class="a-input" style="margin-top:6px">
+              {% for l in ['beginner','intermediate','advanced','expert'] %}<option value="{{ l }}">{{ l|title }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="a-label">Skill Icon / Image URL</label>
+          <input name="icon" id="esk-icon" class="a-input" style="margin-top:6px"/>
+        </div>
+        <div>
+          <label class="a-label">Proficiency: <span id="esk-pct-val">85</span>%</label>
+          <input type="range" name="percentage" id="esk-percentage" min="0" max="100" value="85"
+            oninput="document.getElementById('esk-pct-val').textContent=this.value"
+            style="width:100%;accent-color:var(--cyan);margin-top:8px"/>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-skill-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Experience -->
+{% for mode, mid, action, prefix in [('Add','add-experience-modal', url_for('admin.create_experience'), ''),('Edit','edit-experience-modal', '', 'x')] %}
+<div id="{{ mid }}" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">{{ mode }} Work Experience</div><button class="a-modal-close" onclick="closeModal('{{ mid }}')">✕</button></div>
+    <form method="POST" {% if action %}action="{{ action }}"{% else %}id="edit-experience-form"{% endif %}>
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Role / Title *</label><input name="role" id="e{{ prefix }}-role" required class="a-input" style="margin-top:6px" placeholder="Senior Developer"/></div>
+        <div><label class="a-label">Company *</label><input name="company" id="e{{ prefix }}-company" required class="a-input" style="margin-top:6px" placeholder="Acme Inc."/></div>
+        <div><label class="a-label">Start Date</label><input name="start_date" id="e{{ prefix }}-start_date" class="a-input" style="margin-top:6px" placeholder="Jan 2022"/></div>
+        <div><label class="a-label">End Date</label><input name="end_date" id="e{{ prefix }}-end_date" class="a-input" style="margin-top:6px" placeholder="Present"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Description</label><textarea name="description" id="e{{ prefix }}-description" rows="3" class="a-input" style="margin-top:6px"></textarea></div>
+        <div style="grid-column:span 2"><label class="a-label">Company Logo URL</label><input name="logo" id="e{{ prefix }}-logo" type="url" class="a-input" style="margin-top:6px"/></div>
+        <div style="grid-column:span 2">
+          <label class="a-toggle">
+            <input type="checkbox" name="current" id="e{{ prefix }}-current"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">I currently work here</div></div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('{{ mid }}')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">{{ 'Add Experience' if mode=='Add' else 'Save Changes' }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Add/Edit Education -->
+{% for mode, mid, action, prefix in [('Add','add-education-modal', url_for('admin.create_education'), ''),('Edit','edit-education-modal', '', 'x')] %}
+<div id="{{ mid }}" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">{{ mode }} Education</div><button class="a-modal-close" onclick="closeModal('{{ mid }}')">✕</button></div>
+    <form method="POST" {% if action %}action="{{ action }}"{% else %}id="edit-education-form"{% endif %}>
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2"><label class="a-label">Institution *</label><input name="institution" id="ed{{ prefix }}-institution" required class="a-input" style="margin-top:6px" placeholder="State University"/></div>
+        <div><label class="a-label">Degree</label><input name="degree" id="ed{{ prefix }}-degree" class="a-input" style="margin-top:6px" placeholder="B.Sc."/></div>
+        <div><label class="a-label">Field of Study</label><input name="field" id="ed{{ prefix }}-field" class="a-input" style="margin-top:6px" placeholder="Computer Science"/></div>
+        <div><label class="a-label">Start Year</label><input name="start_year" id="ed{{ prefix }}-start_year" class="a-input" style="margin-top:6px" placeholder="2016"/></div>
+        <div><label class="a-label">End Year</label><input name="end_year" id="ed{{ prefix }}-end_year" class="a-input" style="margin-top:6px" placeholder="2020"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Institution Logo URL</label><input name="logo" id="ed{{ prefix }}-logo" type="url" class="a-input" style="margin-top:6px"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('{{ mid }}')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">{{ 'Add Education' if mode=='Add' else 'Save Changes' }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Add/Edit Certification -->
+{% for mode, mid, action, prefix in [('Add','add-certification-modal', url_for('admin.create_certification'), ''),('Edit','edit-certification-modal', '', 'x')] %}
+<div id="{{ mid }}" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">{{ mode }} Certification</div><button class="a-modal-close" onclick="closeModal('{{ mid }}')">✕</button></div>
+    <form method="POST" {% if action %}action="{{ action }}"{% else %}id="edit-certification-form"{% endif %}>
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2"><label class="a-label">Certification Name *</label><input name="name" id="c{{ prefix }}-name" required class="a-input" style="margin-top:6px" placeholder="AWS Certified Solutions Architect"/></div>
+        <div><label class="a-label">Issuer</label><input name="issuer" id="c{{ prefix }}-issuer" class="a-input" style="margin-top:6px" placeholder="Amazon Web Services"/></div>
+        <div><label class="a-label">Issue Date</label><input name="issue_date" id="c{{ prefix }}-issue_date" class="a-input" style="margin-top:6px" placeholder="Mar 2023"/></div>
+        <div><label class="a-label">Verify URL</label><input name="url" id="c{{ prefix }}-url" type="url" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Badge Image URL</label><input name="badge" id="c{{ prefix }}-badge" type="url" class="a-input" style="margin-top:6px"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('{{ mid }}')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">{{ 'Add Certification' if mode=='Add' else 'Save Changes' }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Add/Edit Award -->
+{% for mode, mid, action, prefix in [('Add','add-award-modal', url_for('admin.create_award'), ''),('Edit','edit-award-modal', '', 'x')] %}
+<div id="{{ mid }}" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">{{ mode }} Award</div><button class="a-modal-close" onclick="closeModal('{{ mid }}')">✕</button></div>
+    <form method="POST" {% if action %}action="{{ action }}"{% else %}id="edit-award-form"{% endif %}>
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2"><label class="a-label">Award Title *</label><input name="title" id="a{{ prefix }}-title" required class="a-input" style="margin-top:6px" placeholder="Best Developer Award"/></div>
+        <div><label class="a-label">Issuer</label><input name="issuer" id="a{{ prefix }}-issuer" class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Year</label><input name="year" id="a{{ prefix }}-year" class="a-input" style="margin-top:6px" placeholder="2023"/></div>
+        <div style="grid-column:span 2"><label class="a-label">Description</label><textarea name="description" id="a{{ prefix }}-description" rows="2" class="a-input" style="margin-top:6px"></textarea></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('{{ mid }}')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">{{ 'Add Award' if mode=='Add' else 'Save Changes' }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<script>
+// All these populate a shared "Edit" modal from the data on the clicked
+// row (passed as a JSON blob via the onclick attribute) rather than
+// building a separate modal per row, which would balloon the page with
+// projects/services/skills/etc that all exist.
+function editProject(d) {
+  document.getElementById('edit-project-form').action = "{{ url_for('admin.edit_project', pid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('ep-title').value = d.title;
+  document.getElementById('ep-description').value = d.description;
+  document.getElementById('ep-image_url').value = d.image_url;
+  document.getElementById('ep-client_name').value = d.client_name;
+  document.getElementById('ep-live_url').value = d.live_url;
+  document.getElementById('ep-github_url').value = d.github_url;
+  document.getElementById('ep-tags').value = d.tags;
+  document.getElementById('ep-tech_stack').value = d.tech_stack;
+  document.getElementById('ep-featured').checked = !!d.featured;
+  openModal('edit-project-modal');
+}
+function editTestimonial(d) {
+  document.getElementById('edit-testimonial-form').action = "{{ url_for('admin.edit_testimonial', tid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('et-name').value = d.name;
+  document.getElementById('et-role').value = d.role;
+  document.getElementById('et-company').value = d.company;
+  document.getElementById('et-avatar').value = d.avatar;
+  document.getElementById('et-content').value = d.content;
+  document.getElementById('et-rating').value = d.rating;
+  document.getElementById('et-featured').checked = !!d.featured;
+  openModal('edit-testimonial-modal');
+}
+function editService(d) {
+  document.getElementById('edit-service-form').action = "{{ url_for('admin.edit_service', sid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('es-title').value = d.title;
+  document.getElementById('es-description').value = d.description;
+  document.getElementById('es-price').value = d.price;
+  document.getElementById('es-icon').value = d.icon;
+  document.getElementById('es-features').value = d.features;
+  document.getElementById('es-active').checked = !!d.active;
+  openModal('edit-service-modal');
+}
+function editSkill(d) {
+  document.getElementById('edit-skill-form').action = "{{ url_for('admin.edit_skill', sid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('esk-name').value = d.name;
+  document.getElementById('esk-category').value = d.category;
+  document.getElementById('esk-level').value = d.level;
+  document.getElementById('esk-percentage').value = d.percentage;
+  document.getElementById('esk-pct-val').textContent = d.percentage;
+  document.getElementById('esk-icon').value = d.icon || '';
+  openModal('edit-skill-modal');
+}
+function editExperience(d) {
+  document.getElementById('edit-experience-form').action = "{{ url_for('admin.edit_experience', eid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('ex-role').value = d.role;
+  document.getElementById('ex-company').value = d.company;
+  document.getElementById('ex-start_date').value = d.start_date;
+  document.getElementById('ex-end_date').value = d.end_date;
+  document.getElementById('ex-description').value = d.description;
+  document.getElementById('ex-logo').value = d.logo;
+  document.getElementById('ex-current').checked = !!d.current;
+  openModal('edit-experience-modal');
+}
+function editEducation(d) {
+  document.getElementById('edit-education-form').action = "{{ url_for('admin.edit_education', eid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('edx-institution').value = d.institution;
+  document.getElementById('edx-degree').value = d.degree;
+  document.getElementById('edx-field').value = d.field;
+  document.getElementById('edx-start_year').value = d.start_year;
+  document.getElementById('edx-end_year').value = d.end_year;
+  document.getElementById('edx-logo').value = d.logo;
+  openModal('edit-education-modal');
+}
+function editCertification(d) {
+  document.getElementById('edit-certification-form').action = "{{ url_for('admin.edit_certification', cid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('cx-name').value = d.name;
+  document.getElementById('cx-issuer').value = d.issuer;
+  document.getElementById('cx-issue_date').value = d.issue_date;
+  document.getElementById('cx-url').value = d.url;
+  document.getElementById('cx-badge').value = d.badge;
+  openModal('edit-certification-modal');
+}
+function editAward(d) {
+  document.getElementById('edit-award-form').action = "{{ url_for('admin.edit_award', aid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('ax-title').value = d.title;
+  document.getElementById('ax-issuer').value = d.issuer;
+  document.getElementById('ax-year').value = d.year;
+  document.getElementById('ax-description').value = d.description;
+  openModal('edit-award-modal');
+}
+</script>
+
+{% endblock %}

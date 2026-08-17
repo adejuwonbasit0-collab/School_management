@@ -1,0 +1,334 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Payment Configuration{% endblock %}
+{% block page_subtitle %}Currency, gateways, and bank transfer details{% endblock %}
+{% block content %}
+{% macro sv(key, default='') %}{{ settings.get(key, default) if settings is defined else default }}{% endmacro %}
+
+{% macro enabled_currencies_block(gateway, technical_ceiling) %}
+{% set base = sv('site_currency') or 'NGN' %}
+{% set admin_enabled = [] %}
+{% set raw = sv(gateway + '_enabled_currencies_json') %}
+{% if raw %}{% set admin_enabled = (raw|from_json) if raw else [] %}{% endif %}
+<div style="margin-top:18px;padding:14px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:12px">
+  <label class="a-label" style="margin-bottom:6px;display:block">Enabled Currencies</label>
+  <p style="font-size:11px;color:var(--text-3);margin-bottom:10px">
+    Only check a currency here once your {{ gateway|title }} account is actually APPROVED to receive it —
+    checking one your account isn't approved for can cause it to silently charge in a different currency
+    than what the customer sees (this is what caused "I asked for $30, it charged ₦30"). {{ base }} is always
+    on since that's what your account definitely settles in.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border-bright);border-radius:8px;opacity:.6">
+      <input type="checkbox" checked disabled/> <span style="font-size:12px;font-weight:600">{{ base }} (base)</span>
+    </label>
+    {% for code in technical_ceiling %}
+    {% if code != base %}
+    <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border-bright);border-radius:8px;cursor:pointer">
+      <input type="checkbox" class="currency-toggle-{{ gateway }}" value="{{ code }}" {% if code in admin_enabled %}checked{% endif %}
+        onchange="saveEnabledCurrencies('{{ gateway }}')"/>
+      <span style="font-size:12px;font-weight:600">{{ code }}</span>
+    </label>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Currency</div>
+    <span id="currency-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <label class="a-label">Site Currency</label>
+    <select class="a-input" style="max-width:280px" onchange="saveSetting('site_currency', this.value, document.getElementById('currency-status'))">
+      {% for code, label in [('NGN','₦ Nigerian Naira'),('USD','$ US Dollar'),('GBP','£ British Pound'),('EUR','€ Euro'),('GHS','GH₵ Ghanaian Cedi'),('KES','KSh Kenyan Shilling'),('ZAR','R South African Rand')] %}
+      <option value="{{ code }}" {% if (sv('site_currency') or 'NGN') == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <p style="font-size:11px;color:var(--text-3);margin-top:8px">Applies to marketplace checkout, hosting plans, and Paystack/Stripe transactions. Prices you enter anywhere in the admin (products, invoices, payment links) are in this currency unless you set a different one on that specific item.</p>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Exchange Rates</div>
+    <span id="rates-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-3);line-height:1.7;margin-bottom:16px">
+      Enter how many units of your Site Currency (<strong id="rates-base-label">{{ sv('site_currency') or 'NGN' }}</strong>) equal 1 unit of each currency below —
+      e.g. if 1 USD = ₦1,500 today, put <strong>1500</strong> in the USD row. These are set by you, not
+      auto-fetched, so they stay exactly what you intend until you change them. A currency left blank won't
+      appear in the site-wide currency switcher, and any existing revenue in it will be counted 1:1
+      (unconverted) in Overview/Analytics until you set a rate.
+    </p>
+    <div id="rates-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px">
+      {% set rate_currencies = [('USD','$ US Dollar'),('EUR','€ Euro'),('GBP','£ British Pound'),('GHS','GH₵ Ghanaian Cedi'),('KES','KSh Kenyan Shilling'),('ZAR','R South African Rand'),('NGN','₦ Nigerian Naira')] %}
+      {% for code, label in rate_currencies %}
+      <div class="rate-row" data-code="{{ code }}" style="{% if code == (sv('site_currency') or 'NGN') %}display:none{% endif %}">
+        <label class="a-label">1 {{ code }} =</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" step="any" min="0" class="a-input rate-input" data-code="{{ code }}"
+                 placeholder="e.g. 1500" style="flex:1"/>
+          <span style="font-size:12px;color:var(--text-3)" class="rate-base-unit">{{ sv('site_currency') or 'NGN' }}</span>
+        </div>
+        <p style="font-size:10px;color:var(--text-3);margin-top:2px">{{ label }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" onclick="saveExchangeRates()" class="a-btn a-btn-primary" style="margin-top:16px">Save Rates</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  let currentRates = {};
+  try { currentRates = JSON.parse({{ (sv('manual_exchange_rates_json') or '{}')|tojson }}); } catch (e) { currentRates = {}; }
+  document.querySelectorAll('.rate-input').forEach(function (input) {
+    const code = input.dataset.code;
+    if (currentRates[code] !== undefined) input.value = currentRates[code];
+  });
+})();
+
+async function saveExchangeRates() {
+  const rates = {};
+  document.querySelectorAll('.rate-input').forEach(function (input) {
+    const v = parseFloat(input.value);
+    if (!isNaN(v) && v > 0) rates[input.dataset.code] = v;
+  });
+  await saveSetting('manual_exchange_rates_json', JSON.stringify(rates), document.getElementById('rates-status'));
+}
+
+// Hide whichever currency is currently the site's base (a rate for your
+// own currency against itself is meaningless), and keep it in sync if the
+// base currency is switched without leaving this page.
+document.querySelector('[onchange*="site_currency"]').addEventListener('change', function () {
+  const base = this.value;
+  document.getElementById('rates-base-label').textContent = base;
+  document.querySelectorAll('.rate-base-unit').forEach(function (el) { el.textContent = base; });
+  document.querySelectorAll('.rate-row').forEach(function (row) {
+    row.style.display = (row.dataset.code === base) ? 'none' : '';
+  });
+});
+</script>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Customer Wallet Engine</div>
+    <span id="wallet-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" onchange="saveSetting('wallet_enabled', this.checked ? 'true' : 'false', document.getElementById('wallet-status'))" {% if sv('wallet_enabled', 'false') == 'true' %}checked{% endif %} style="width:18px;height:18px"/>
+      <div>
+        <span style="font-size:14px;font-weight:600;color:var(--text)">Enable Customer Wallet Feature</span>
+        <p style="font-size:11px;color:var(--text-3);margin-top:2px">When enabled, customers can hold store balances, pay invoices with wallet credit, and view wallet dashboards. When disabled, all wallet UI is hidden from customers.</p>
+      </div>
+    </label>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Payment Gateways</div>
+    <span id="payment-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div style="margin-bottom:20px;padding:14px;background:rgba(29,185,84,0.04);border:1px solid rgba(29,185,84,0.15);border-radius:12px">
+      <label class="a-label" style="margin-bottom:8px;display:block">Enabled Payment Gateways</label>
+      <p style="font-size:11px;color:var(--text-3);margin-bottom:10px">Turn on as many as you want — customers pick one at checkout when more than one is enabled.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        {% set enabled_list = (sv('enabled_gateways') or sv('active_gateway') or 'paystack').split(',') %}
+        {% for gw in ['stripe','paystack','flutterwave','paypal','bank_transfer','crypto'] %}
+        {% set active = gw in enabled_list %}
+        {% set live = true %}
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid {{ 'rgba(29,185,84,0.5)' if active else 'var(--border-bright)' }};border-radius:10px;cursor:pointer;background:{{ 'rgba(29,185,84,0.08)' if active else 'transparent' }}">
+          <input type="checkbox" name="gateway_toggle" value="{{ gw }}" {% if active %}checked{% endif %}
+            onchange="saveEnabledGateways()"/>
+          <span style="font-size:13px;font-weight:600">{{ gw|replace('_',' ')|title }}{% if not live %} <span style="color:var(--text-3);font-weight:400">(checkout not wired up yet)</span>{% endif %}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="gw-tabs">
+      <div class="a-tabs" style="margin-bottom:16px">
+        {% for gw in ['stripe','paystack','flutterwave','paypal','bank_transfer','crypto'] %}
+        <button class="a-tab {{ 'active' if loop.first }}" data-tab="{{ gw }}" onclick="switchTab('gw-tabs','{{ gw }}')">{{ gw|replace('_',' ')|title }}</button>
+        {% endfor %}
+      </div>
+
+      <div id="gw-tabs-stripe" class="a-tab-panel active">
+        <div class="a-grid a-grid-2" style="gap:14px">
+          {% for key, label in [("stripe_public_key","Publishable Key"),("stripe_secret_key","Secret Key"),("stripe_webhook_secret","Webhook Secret")] %}
+          <div><label class="a-label">{{ label }}</label>
+            <input type="password" value="{{ sv(key) }}" class="a-input" placeholder="sk_live_…" autocomplete="off"
+              onblur="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))"/></div>
+          {% endfor %}
+        </div>
+        {{ enabled_currencies_block('stripe', ['USD','EUR','GBP','GHS','ZAR']) }}
+      </div>
+
+      <div id="gw-tabs-paystack" class="a-tab-panel">
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          {% for mode, label in [('test','Test Mode'),('live','Live Mode')] %}
+          <button type="button" onclick="saveSetting('paystack_mode','{{ mode }}',document.getElementById('payment-status')); highlightPaystackMode('{{ mode }}')"
+            id="paystack-mode-{{ mode }}"
+            style="padding:8px 18px;border-radius:9999px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid {{ 'rgba(29,185,84,0.6)' if sv('paystack_mode','test')==mode else 'var(--border-bright)' }};background:{{ 'rgba(29,185,84,0.15)' if sv('paystack_mode','test')==mode else 'transparent' }};color:{{ '#1DB954' if sv('paystack_mode','test')==mode else 'var(--text-2)' }}">{{ label }}</button>
+          {% endfor %}
+        </div>
+        <p style="font-size:11px;color:var(--text-3);margin-bottom:14px">Test mode uses your <code>pk_test_</code>/<code>sk_test_</code> keys and no real money moves — switch to Live only once you've confirmed checkout works end to end.</p>
+        <div class="a-grid a-grid-2" style="gap:14px">
+          <div><label class="a-label">Test Public Key</label>
+            <input type="text" value="{{ sv('paystack_test_public_key') }}" class="a-input" placeholder="pk_test_…" autocomplete="off"
+              onblur="saveSetting('paystack_test_public_key',this.value,document.getElementById('payment-status'))"/></div>
+          <div><label class="a-label">Test Secret Key</label>
+            <input type="password" value="{{ sv('paystack_test_secret_key') }}" class="a-input" placeholder="sk_test_…" autocomplete="off"
+              onblur="saveSetting('paystack_test_secret_key',this.value,document.getElementById('payment-status'))"/></div>
+          <div><label class="a-label">Live Public Key</label>
+            <input type="text" value="{{ sv('paystack_live_public_key') }}" class="a-input" placeholder="pk_live_…" autocomplete="off"
+              onblur="saveSetting('paystack_live_public_key',this.value,document.getElementById('payment-status'))"/></div>
+          <div><label class="a-label">Live Secret Key</label>
+            <input type="password" value="{{ sv('paystack_live_secret_key') }}" class="a-input" placeholder="sk_live_…" autocomplete="off"
+              onblur="saveSetting('paystack_live_secret_key',this.value,document.getElementById('payment-status'))"/></div>
+        </div>
+        {{ enabled_currencies_block('paystack', ['USD','GHS','ZAR','KES']) }}
+      </div>
+
+      <div id="gw-tabs-flutterwave" class="a-tab-panel">
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:14px">Get these from your Flutterwave dashboard under Settings → API Keys.</p>
+        <div class="a-grid a-grid-3" style="gap:14px">
+          {% for key, label in [("flutterwave_public_key","Public Key"),("flutterwave_secret_key","Secret Key"),("flutterwave_encryption_key","Encryption Key")] %}
+          <div><label class="a-label">{{ label }}</label>
+            <input type="password" value="{{ sv(key) }}" class="a-input" autocomplete="off"
+              onblur="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))"/></div>
+          {% endfor %}
+        </div>
+        {{ enabled_currencies_block('flutterwave', ['USD','GBP','EUR','GHS','KES','ZAR']) }}
+      </div>
+
+      <div id="gw-tabs-paypal" class="a-tab-panel">
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:14px">Create these under a PayPal REST app at developer.paypal.com. Use Sandbox credentials while testing, Live credentials to accept real payments.</p>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          {% for mode, label in [('sandbox','Sandbox'),('live','Live')] %}
+          <button type="button" onclick="saveSetting('paypal_mode','{{ mode }}',document.getElementById('payment-status')); highlightPaypalMode('{{ mode }}')"
+            id="paypal-mode-{{ mode }}"
+            style="padding:8px 18px;border-radius:9999px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid {{ 'rgba(29,185,84,0.6)' if sv('paypal_mode','sandbox')==mode else 'var(--border-bright)' }};background:{{ 'rgba(29,185,84,0.15)' if sv('paypal_mode','sandbox')==mode else 'transparent' }};color:{{ '#1DB954' if sv('paypal_mode','sandbox')==mode else 'var(--text-2)' }}">{{ label }}</button>
+          {% endfor %}
+        </div>
+        <div class="a-grid a-grid-2" style="gap:14px">
+          {% for key, label in [("paypal_client_id","Client ID"),("paypal_client_secret","Client Secret")] %}
+          <div><label class="a-label">{{ label }}</label>
+            <input type="password" value="{{ sv(key) }}" class="a-input" autocomplete="off"
+              onblur="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))"/></div>
+          {% endfor %}
+        </div>
+        {{ enabled_currencies_block('paypal', ['USD','EUR','GBP']) }}
+      </div>
+
+      <div id="gw-tabs-crypto" class="a-tab-panel">
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:14px">
+          P2P-style crypto payments — the customer picks a network, sends to your wallet address, then submits their transaction hash for you to verify.
+          Only networks with a wallet address filled in below will be offered at checkout. You approve these the same way as bank transfers, in
+          <a href="{{ url_for('admin.confirm_payments') }}" style="color:#1DB954">Confirm Payments</a>.
+        </p>
+        <div class="a-grid a-grid-2" style="gap:14px">
+          {% for key, label, placeholder in [
+            ("crypto_wallet_btc","Bitcoin (BTC) Address","bc1q..."),
+            ("crypto_wallet_eth","Ethereum (ETH) Address","0x..."),
+            ("crypto_wallet_usdt_trc20","USDT (TRC20) Address","T..."),
+            ("crypto_wallet_usdt_erc20","USDT (ERC20) Address","0x..."),
+            ("crypto_wallet_usdc","USDC Address","0x..."),
+            ("crypto_wallet_bnb","BNB (BEP20) Address","bnb1..."),
+          ] %}
+          <div>
+            <label class="a-label">{{ label }}</label>
+            <div style="display:flex;gap:8px;align-items:flex-start">
+              <input type="text" id="input-{{ key }}" value="{{ sv(key) }}" placeholder="{{ placeholder }}" class="a-input" autocomplete="off" style="flex:1"
+                onblur="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))"/>
+              <button type="button" class="a-btn a-btn-xs" onclick="previewCryptoQr('{{ key }}')">🔲 QR</button>
+            </div>
+            <img id="qr-preview-{{ key }}" class="hidden" style="width:110px;height:110px;margin-top:8px;background:#fff;border-radius:8px;padding:6px;border:1px solid var(--border-bright)"/>
+          </div>
+          {% endfor %}
+        </div>
+        <div style="margin-top:14px">
+          <label class="a-label">Extra Instructions (shown to customer)</label>
+          <textarea class="a-input" rows="2" placeholder="e.g. Send exact amount in USD equivalent, include your invoice number in the memo if supported."
+            onblur="saveSetting('crypto_instructions',this.value,document.getElementById('payment-status'))">{{ sv('crypto_instructions') }}</textarea>
+        </div>
+      </div>
+
+      <div id="gw-tabs-bank_transfer" class="a-tab-panel">
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:14px">
+          Manual payments — the customer sees these details at checkout, sends the transfer themselves, then submits a reference.
+          You approve or reject it in <a href="{{ url_for('admin.confirm_payments') }}" style="color:#1DB954">Confirm Payments</a>.
+        </p>
+        <div class="a-grid a-grid-2" style="gap:14px">
+          {% for key, label, placeholder in [
+            ("bank_name","Bank Name","First Bank of Nigeria"),
+            ("bank_account_name","Account Name","Bazillin Studio"),
+            ("bank_account_number","Account Number","0123456789"),
+            ("bank_routing_swift","Routing / SWIFT / Sort Code","Optional for local NGN transfers"),
+          ] %}
+          <div><label class="a-label">{{ label }}</label>
+            <input type="text" value="{{ sv(key) }}" placeholder="{{ placeholder }}" class="a-input"
+              onblur="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))"/></div>
+          {% endfor %}
+        </div>
+        <div style="margin-top:14px">
+          <label class="a-label">Extra Instructions (shown to customer)</label>
+          <textarea class="a-input" rows="2" onblur="saveSetting('bank_instructions',this.value,document.getElementById('payment-status'))">{{ sv('bank_instructions') }}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function saveEnabledGateways() {
+  const checked = Array.from(document.querySelectorAll('input[name="gateway_toggle"]:checked')).map(el => el.value);
+  saveSetting('enabled_gateways', checked.join(','), document.getElementById('payment-status'));
+}
+function saveEnabledCurrencies(gateway) {
+  const checked = Array.from(document.querySelectorAll('.currency-toggle-' + gateway + ':checked')).map(el => el.value);
+  saveSetting(gateway + '_enabled_currencies_json', JSON.stringify(checked), document.getElementById('payment-status'));
+}
+function highlightPaystackMode(mode) {
+  ['test','live'].forEach(m => {
+    const btn = document.getElementById('paystack-mode-' + m);
+    if (m === mode) { btn.style.borderColor = 'rgba(29,185,84,0.6)'; btn.style.background = 'rgba(29,185,84,0.15)'; btn.style.color = '#1DB954'; }
+    else { btn.style.borderColor = 'var(--border-bright)'; btn.style.background = 'transparent'; btn.style.color = 'var(--text-2)'; }
+  });
+}
+function highlightPaypalMode(mode) {
+  ['sandbox','live'].forEach(m => {
+    const btn = document.getElementById('paypal-mode-' + m);
+    if (!btn) return;
+    if (m === mode) { btn.style.borderColor = 'rgba(29,185,84,0.6)'; btn.style.background = 'rgba(29,185,84,0.15)'; btn.style.color = '#1DB954'; }
+    else { btn.style.borderColor = 'var(--border-bright)'; btn.style.background = 'transparent'; btn.style.color = 'var(--text-2)'; }
+  });
+}
+async function previewCryptoQr(key) {
+  const input = document.getElementById('input-' + key);
+  const img = document.getElementById('qr-preview-' + key);
+  const address = (input.value || '').trim();
+  if (!address) { showToast('Paste an address first', 'error'); return; }
+  try {
+    const res = await fetch('{{ url_for("admin.crypto_qr_preview") }}', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify({ address })
+    });
+    const d = await res.json();
+    if (d.data_uri) {
+      img.src = d.data_uri;
+      img.classList.remove('hidden');
+    } else {
+      showToast(d.error || 'Could not generate QR', 'error');
+    }
+  } catch (e) { showToast('Network error', 'error'); }
+}
+</script>
+{% endblock %}

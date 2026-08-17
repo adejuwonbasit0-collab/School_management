@@ -1,0 +1,46 @@
+{% extends "public_base.html" %}
+{% block title %}QR Code Generator — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+.tool-shell { max-width:680px;margin:0 auto;padding:48px 20px;text-align:center }
+#qrBox { display:inline-block;background:#fff;padding:20px;border-radius:14px;margin:24px 0 }
+.opt-row { display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:16px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+  <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">QR Code Generator</h1>
+  <p style="color:var(--c-text-2);margin-bottom:24px">Turn any text, URL, or string into a downloadable QR code instantly.</p>
+
+  <input id="text" class="admin-input" placeholder="https://example.com or any text…" style="width:100%;max-width:480px" value="https://bazillin.studio">
+  <div class="opt-row" style="margin-top:14px">
+    <label style="font-size:12px;color:#9fb3d1">Size: <select id="size" class="admin-input" style="width:90px"><option value="180">180</option><option value="240" selected>240</option><option value="320">320</option><option value="400">400</option></select></label>
+    <button class="btn-neon" id="genBtn">Generate</button>
+    <button class="btn-ghost-neon" id="dlBtn">Download PNG</button>
+  </div>
+
+  <div id="qrBox"></div>
+</div>
+<script>
+let qrInstance = null;
+function generate() {
+  const text = document.getElementById('text').value || 'https://example.com';
+  const size = parseInt(document.getElementById('size').value);
+  const box = document.getElementById('qrBox');
+  box.innerHTML = '';
+  qrInstance = new QRCode(box, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.H });
+}
+document.getElementById('genBtn').addEventListener('click', generate);
+document.getElementById('dlBtn').addEventListener('click', () => {
+  const img = document.querySelector('#qrBox img') || document.querySelector('#qrBox canvas');
+  if (!img) return;
+  const link = document.createElement('a');
+  link.download = 'qrcode.png';
+  link.href = img.src || img.toDataURL('image/png');
+  link.click();
+});
+generate();
+</script>
+{% endblock %}

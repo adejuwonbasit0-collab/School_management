@@ -1,0 +1,142 @@
+{% extends "admin/base.html" %}
+{% block page_title %}AI Console{% endblock %}
+{% block page_subtitle %}Chat directly with your configured AI — separate from the public-facing dev tools{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:240px 1fr;gap:20px;height:calc(100vh - 180px);min-height:500px">
+
+  <!-- Thread sidebar -->
+  <div class="a-panel" style="display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px;border-bottom:1px solid var(--border)">
+      <form method="POST" action="{{ url_for('admin.ai_console_new_thread') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="a-btn a-btn-primary a-btn-sm" style="width:100%">+ New Conversation</button>
+      </form>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:8px">
+      {% for t in threads %}
+      <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
+        <a href="{{ url_for('admin.ai_console', thread_id=t.id) }}"
+           style="flex:1;display:block;padding:9px 10px;border-radius:8px;font-size:13px;color:{% if active_thread and t.id == active_thread.id %}#fff{% else %}var(--text-2){% endif %};
+             background:{% if active_thread and t.id == active_thread.id %}rgba(255,255,255,0.06){% else %}transparent{% endif %};
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none">
+          {{ t.title }}
+        </a>
+        <form method="POST" action="{{ url_for('admin.ai_console_delete_thread', thread_id=t.id) }}" onsubmit="return confirm('Delete this conversation?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button style="background:none;border:none;color:var(--text-3);font-size:14px;cursor:pointer;padding:4px">×</button>
+        </form>
+      </div>
+      {% else %}
+      <p style="padding:14px;font-size:12px;color:var(--text-3)">No conversations yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Chat panel -->
+  <div class="a-panel" style="display:flex;flex-direction:column;overflow:hidden">
+    <div id="console-messages" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px">
+      {% if active_thread %}
+        {% for m in active_thread.messages %}
+        <div class="console-msg console-msg-{{ m.role }}">
+          <div class="console-msg-role">{{ 'You' if m.role == 'user' else '🧠 AI' }}</div>
+          <div class="console-msg-body">{{ m.content }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div style="margin:auto;text-align:center;color:var(--text-3);font-size:13px;max-width:360px">
+        <p style="font-size:32px;margin-bottom:10px">🧠</p>
+        <p>Ask anything — draft a message, plan a feature, ask about your site's current numbers, or just think out loud.</p>
+      </div>
+      {% endif %}
+    </div>
+    <div style="border-top:1px solid var(--border);padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <a href="{{ url_for('admin.prompt_library') }}" class="a-btn a-btn-xs">📚 Prompt Library</a>
+        {% if prompt_categories %}
+        <span style="font-size:11px;color:var(--text-3)">{{ prompt_categories|length }} categories available</span>
+        {% endif %}
+      </div>
+      <form id="console-form" style="display:flex;gap:10px" onsubmit="return sendConsoleMessage(event)">
+        <input type="hidden" id="console-thread-id" value="{{ active_thread.id if active_thread else '' }}"/>
+        <textarea id="console-input" rows="1" placeholder="Message the console…" class="a-input" style="flex:1;resize:none"
+          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();document.getElementById('console-form').requestSubmit();}">{{ prefill_prompt }}</textarea>
+        <button type="submit" id="console-send-btn" class="a-btn a-btn-primary" style="white-space:nowrap">Send</button>
+      </form>
+      <p id="console-error" style="font-size:12px;color:var(--red,#f87171);margin-top:8px"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+{% if prefill_prompt %}
+document.getElementById('console-input').focus();
+{% endif %}
+</script>
+
+<style>
+.console-msg { max-width:80%; }
+.console-msg-user { align-self:flex-end; margin-left:auto; }
+.console-msg-assistant { align-self:flex-start; }
+.console-msg-role { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:4px; }
+.console-msg-user .console-msg-role { text-align:right; }
+.console-msg-body { padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+.console-msg-user .console-msg-body { background:linear-gradient(90deg,#00f5ff22,#bf00ff22); border:1px solid rgba(0,245,255,0.2); color:#fff; }
+.console-msg-assistant .console-msg-body { background:rgba(255,255,255,0.03); border:1px solid var(--border); color:var(--text-2); }
+</style>
+
+<script>
+async function sendConsoleMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('console-input');
+  const message = input.value.trim();
+  if (!message) return false;
+  const threadIdEl = document.getElementById('console-thread-id');
+  const messagesEl = document.getElementById('console-messages');
+  const errorEl = document.getElementById('console-error');
+  const sendBtn = document.getElementById('console-send-btn');
+
+  // Clear the empty-state placeholder if this is the first message
+  if (messagesEl.querySelector('p')) messagesEl.innerHTML = '';
+
+  messagesEl.insertAdjacentHTML('beforeend', `
+    <div class="console-msg console-msg-user">
+      <div class="console-msg-role">You</div>
+      <div class="console-msg-body">${message.replace(/</g,'&lt;')}</div>
+    </div>`);
+  input.value = '';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  errorEl.textContent = '';
+  sendBtn.disabled = true;
+  sendBtn.textContent = '…';
+
+  try {
+    const res = await fetch('{{ url_for("admin.ai_console_send") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({ thread_id: threadIdEl.value || null, message })
+    });
+    const d = await res.json();
+    if (d.error) {
+      errorEl.textContent = d.error;
+    } else {
+      threadIdEl.value = d.thread_id;
+      messagesEl.insertAdjacentHTML('beforeend', `
+        <div class="console-msg console-msg-assistant">
+          <div class="console-msg-role">🧠 AI</div>
+          <div class="console-msg-body">${d.response.replace(/</g,'&lt;')}</div>
+        </div>`);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      // If this was a brand-new thread, reload so it shows up in the sidebar with its title
+      if (!window.location.search.includes('thread_id=' + d.thread_id)) {
+        window.location.href = '{{ url_for("admin.ai_console") }}?thread_id=' + d.thread_id;
+      }
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error — try again.';
+  }
+  sendBtn.disabled = false;
+  sendBtn.textContent = 'Send';
+  return false;
+}
+</script>
+{% endblock %}

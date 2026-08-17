@@ -1,0 +1,87 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block title %}{{ other_user.name or other_user.email }} — Messages{% endblock %}
+{% block extra_head %}
+<style>
+.msg-row { display:flex;margin-bottom:10px }
+.msg-row.mine { justify-content:flex-end }
+.bubble { max-width:70%;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4 }
+.bubble.theirs { background:rgba(255,255,255,0.06);color:#e8edf8;border-bottom-left-radius:4px }
+.bubble.mine { background:linear-gradient(135deg,#1DB954,#0090ff);color:#04060d;font-weight:500;border-bottom-right-radius:4px }
+.bubble .time { display:block;font-size:10px;opacity:0.6;margin-top:4px }
+#thread-scroll { max-height:60vh;overflow-y:auto;padding:8px 4px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+  <a href="{{ url_for('comms.messages') }}" class="text-xs text-gray-500 hover:text-gray-300">← All Messages</a>
+  <h1 class="text-xl font-bold font-display text-white mt-2 mb-6">{{ other_user.name or other_user.email }}</h1>
+
+  <div class="glass border border-white/10 rounded-2xl p-4">
+    <div id="thread-scroll">
+      <div id="msg-list">
+        {% for m in msgs %}
+        <div class="msg-row {{ 'mine' if m.sender_id == current_user.id else '' }}" data-id="{{ m.id }}">
+          <div class="bubble {{ 'mine' if m.sender_id == current_user.id else 'theirs' }}">
+            {{ m.content }}
+            <span class="time">{{ m.created_at.strftime('%H:%M') }}</span>
+          </div>
+        </div>{% endfor %}
+      </div>
+    </div>
+    <form id="send-form" class="flex gap-2 mt-4 pt-4 border-t border-white/10">
+      <input id="content-input" class="admin-input flex-1" placeholder="Type a message…" autocomplete="off">
+      <button type="submit" class="btn-neon px-5">Send</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const threadId = {{ thread_id|tojson }};
+const myId = {{ current_user.id|tojson }};
+const otherId = {{ other_user.id|tojson }};
+let lastId = {{ (msgs[-1].id if msgs else 0)|tojson }};
+const scrollBox = document.getElementById('thread-scroll');
+const msgList = document.getElementById('msg-list');
+scrollBox.scrollTop = scrollBox.scrollHeight;
+
+function appendMessage(m) {
+  const row = document.createElement('div');
+  row.className = 'msg-row ' + (m.is_mine ? 'mine' : '');
+  row.dataset.id = m.id;
+  row.innerHTML = `<div class="bubble ${m.is_mine ? 'mine' : 'theirs'}">${m.content.replace(/</g,'&lt;')}<span class="time">${m.created_at}</span></div>`;
+  msgList.appendChild(row);
+  scrollBox.scrollTop = scrollBox.scrollHeight;
+}
+
+document.getElementById('send-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = document.getElementById('content-input');
+  const content = input.value.trim();
+  if (!content) return;
+  input.value = '';
+  const res = await fetch('{{ url_for("comms.send_message") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+    body: JSON.stringify({ receiver_id: otherId, content })
+  });
+  const data = await res.json();
+  if (data.success) {
+    appendMessage({ id: data.id, content, is_mine: true, created_at: data.created_at });
+    lastId = data.id;
+  }
+});
+
+async function poll() {
+  try {
+    const res = await fetch(`{{ url_for('comms.poll_thread', thread_id=thread_id) }}?since=${lastId}`);
+    const data = await res.json();
+    for (const m of data.messages) {
+      if (!m.is_mine) appendMessage(m);  // mine already appended on send
+      lastId = Math.max(lastId, m.id);
+    }
+  } catch (e) { /* silent retry */ }
+}
+setInterval(poll, 4000);
+</script>
+{% endblock %}

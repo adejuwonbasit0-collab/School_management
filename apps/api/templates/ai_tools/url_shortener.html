@@ -1,0 +1,86 @@
+{% extends "public_base.html" %}
+{% block title %}URL Shortener — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:700px;margin:0 auto;padding:48px 20px }
+.link-row { display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 16px;margin-bottom:8px }
+.link-row .target { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--c-text-2) }
+.link-row .short { font-family:monospace;color:var(--c-accent);font-size:13px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">URL Shortener</h1>
+    <p style="color:var(--c-text-2)">Real, database-backed short links with click tracking.{% if not current_user.is_authenticated %} Sign in to see your link history.{% endif %}</p>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-bottom:16px">
+    <input id="url-input" class="admin-input" style="flex:1" placeholder="https://example.com/a-very-long-url">
+    <button class="btn-neon" id="shorten-btn">Shorten</button>
+  </div>
+  <p id="status" style="text-align:center;color:var(--c-text-2);font-size:13px"></p>
+  <div id="result"></div>
+
+  {% if current_user.is_authenticated %}
+  <h3 style="font-size:14px;color:#9fb3d1;margin:32px 0 12px">Your Links</h3>
+  <div id="my-links"><p style="color:var(--c-text-2);font-size:13px">Loading…</p></div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+
+async function shorten() {
+  const input = document.getElementById('url-input');
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+  const url = input.value.trim();
+  if (!url) { status.textContent = 'Enter a URL first.'; return; }
+  status.textContent = 'Shortening…';
+  try {
+    const res = await fetch('{{ url_for("ai_browser.api_shorten") }}', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = 'Error: ' + data.error; return; }
+    status.textContent = '';
+    result.innerHTML = `
+      <div class="link-row">
+        <span class="short">${data.short_url}</span>
+        <button onclick="navigator.clipboard.writeText('${data.short_url}')" style="padding:6px 12px;background:rgba(var(--c-accent-rgb),0.1);border:1px solid rgba(var(--c-accent-rgb),0.25);border-radius:6px;color:var(--c-accent);font-size:12px;cursor:pointer">Copy</button>
+      </div>`;
+    input.value = '';
+    if (typeof loadMyLinks === 'function') loadMyLinks();
+  } catch (e) { status.textContent = 'Error: ' + e.message; }
+}
+document.getElementById('shorten-btn').addEventListener('click', shorten);
+document.getElementById('url-input').addEventListener('keydown', e => { if (e.key === 'Enter') shorten(); });
+
+{% if current_user.is_authenticated %}
+async function loadMyLinks() {
+  const box = document.getElementById('my-links');
+  try {
+    const res = await fetch('{{ url_for("ai_browser.api_my_links") }}');
+    const data = await res.json();
+    if (!data.links.length) { box.innerHTML = '<p style="color:var(--c-text-2);font-size:13px">No links yet.</p>'; return; }
+    box.innerHTML = data.links.map(l => `
+      <div class="link-row">
+        <span class="short">${l.short_url}</span>
+        <span class="target">${l.target_url}</span>
+        <span style="font-size:11px;color:var(--c-text-2)">${l.click_count} clicks</span>
+        <button onclick="deleteLink(${l.id})" style="background:none;border:none;color:#ff5b7e;cursor:pointer;font-size:14px">✕</button>
+      </div>`).join('');
+  } catch (e) { box.innerHTML = '<p style="color:#ff5b7e;font-size:13px">Failed to load links.</p>'; }
+}
+async function deleteLink(id) {
+  const url = '{{ url_for("ai_browser.api_delete_short_link", link_id=999999) }}'.replace('999999', id);
+  await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } });
+  loadMyLinks();
+}
+loadMyLinks();
+{% endif %}
+</script>
+{% endblock %}

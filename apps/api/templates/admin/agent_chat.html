@@ -1,0 +1,101 @@
+{% extends "admin/base.html" %}
+{% block page_title %}{{ agent.avatar_emoji }} {{ agent.name }}{% endblock %}
+{% block page_subtitle %}{{ agent.role or 'General' }}{% if agent.department %} · {{ agent.department }}{% endif %}{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-rows:auto 1fr;gap:14px;height:calc(100vh - 180px);min-height:500px">
+
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <a href="{{ url_for('admin.agents') }}" class="a-btn a-btn-xs">← All Agents</a>
+    <form method="POST" action="{{ url_for('admin.agent_clear_history', agent_id=agent.id) }}" onsubmit="return confirm('Clear this conversation? This can\'t be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="a-btn a-btn-xs">Clear Conversation</button>
+    </form>
+  </div>
+
+  <div class="a-panel" style="display:flex;flex-direction:column;overflow:hidden">
+    <div id="console-messages" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px">
+      {% if agent.messages %}
+        {% for m in agent.messages %}
+        <div class="console-msg console-msg-{{ m.role }}">
+          <div class="console-msg-role">{{ 'You' if m.role == 'user' else agent.avatar_emoji + ' ' + agent.name }}</div>
+          <div class="console-msg-body">{{ m.content }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div style="margin:auto;text-align:center;color:var(--text-3);font-size:13px;max-width:360px">
+        <p style="font-size:32px;margin-bottom:10px">{{ agent.avatar_emoji }}</p>
+        <p>Say hello to {{ agent.name }} — {{ agent.instructions[:100] }}{% if agent.instructions|length > 100 %}…{% endif %}</p>
+      </div>
+      {% endif %}
+    </div>
+    <div style="border-top:1px solid var(--border);padding:14px">
+      <form id="console-form" style="display:flex;gap:10px" onsubmit="return sendAgentMessage(event)">
+        <textarea id="console-input" rows="1" placeholder="Message {{ agent.name }}…" class="a-input" style="flex:1;resize:none"
+          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();document.getElementById('console-form').requestSubmit();}"></textarea>
+        <button type="submit" id="console-send-btn" class="a-btn a-btn-primary" style="white-space:nowrap">Send</button>
+      </form>
+      <p id="console-error" style="font-size:12px;color:var(--red,#f87171);margin-top:8px"></p>
+    </div>
+  </div>
+</div>
+
+<style>
+.console-msg { max-width:80%; }
+.console-msg-user { align-self:flex-end; margin-left:auto; }
+.console-msg-assistant { align-self:flex-start; }
+.console-msg-role { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:4px; }
+.console-msg-user .console-msg-role { text-align:right; }
+.console-msg-body { padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+.console-msg-user .console-msg-body { background:linear-gradient(90deg,#00f5ff22,#bf00ff22); border:1px solid rgba(0,245,255,0.2); color:#fff; }
+.console-msg-assistant .console-msg-body { background:rgba(255,255,255,0.03); border:1px solid var(--border); color:var(--text-2); }
+</style>
+
+<script>
+async function sendAgentMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('console-input');
+  const message = input.value.trim();
+  if (!message) return false;
+  const messagesEl = document.getElementById('console-messages');
+  const errorEl = document.getElementById('console-error');
+  const sendBtn = document.getElementById('console-send-btn');
+
+  if (messagesEl.querySelector('p')) messagesEl.innerHTML = '';
+
+  messagesEl.insertAdjacentHTML('beforeend', `
+    <div class="console-msg console-msg-user">
+      <div class="console-msg-role">You</div>
+      <div class="console-msg-body">${message.replace(/</g,'&lt;')}</div>
+    </div>`);
+  input.value = '';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  errorEl.textContent = '';
+  sendBtn.disabled = true;
+  sendBtn.textContent = '…';
+
+  try {
+    const res = await fetch('{{ url_for("admin.agent_send", agent_id=agent.id) }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({ message })
+    });
+    const d = await res.json();
+    if (d.error) {
+      errorEl.textContent = d.error;
+    } else {
+      messagesEl.insertAdjacentHTML('beforeend', `
+        <div class="console-msg console-msg-assistant">
+          <div class="console-msg-role">{{ agent.avatar_emoji }} {{ agent.name }}</div>
+          <div class="console-msg-body">${d.response.replace(/</g,'&lt;')}</div>
+        </div>`);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error — try again.';
+  }
+  sendBtn.disabled = false;
+  sendBtn.textContent = 'Send';
+  return false;
+}
+</script>
+{% endblock %}

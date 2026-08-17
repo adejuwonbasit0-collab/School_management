@@ -1,0 +1,769 @@
+{% extends 'dashboard/base_dashboard.html' %}
+{% set page_title = "Payment Links" %}
+{% set page_subtitle = "Create shareable payment pages" %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Summary Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 transition-transform hover:scale-105 duration-300">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm text-gray-400">Total Links</h3>
+        <div class="p-2 bg-[#1DB954]/20 text-[#1DB954] rounded-lg">
+          <i data-lucide="link" class="w-5 h-5"></i>
+        </div>
+      </div>
+      <p class="text-3xl font-display font-bold text-white">{{ links|length }}</p>
+    </div>
+    
+    <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 transition-transform hover:scale-105 duration-300">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm text-gray-400">Active Links</h3>
+        <div class="p-2 bg-blue-500/20 text-blue-500 rounded-lg">
+          <i data-lucide="check-circle" class="w-5 h-5"></i>
+        </div>
+      </div>
+      <p class="text-3xl font-display font-bold text-white">
+        {{ links|selectattr('active', 'equalto', true)|list|length }}
+      </p>
+    </div>
+    
+    <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 transition-transform hover:scale-105 duration-300">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm text-gray-400">Total Collected</h3>
+        <div class="p-2 bg-[#F2C94C]/20 text-[#F2C94C] rounded-lg">
+          <i data-lucide="dollar-sign" class="w-5 h-5"></i>
+        </div>
+      </div>
+      <p class="text-3xl font-display font-bold text-white">
+        ${{ links|map(attribute='total_collected')|sum|round(2) }}
+      </p>
+    </div>
+
+    <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 transition-transform hover:scale-105 duration-300">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm text-gray-400">Total Views</h3>
+        <div class="p-2 bg-purple-500/20 text-purple-500 rounded-lg">
+          <i data-lucide="eye" class="w-5 h-5"></i>
+        </div>
+      </div>
+      <p class="text-3xl font-display font-bold text-white">
+        {{ links|map(attribute='view_count')|sum }}
+      </p>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden">
+    <!-- Header -->
+    <div class="p-6 border-b border-white/10 flex justify-between items-center flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <h2 class="text-xl font-display font-semibold text-white">Your Payment Links</h2>
+        <div class="flex bg-white/5 rounded-lg p-1 text-xs">
+          <a href="{{ url_for('dashboard.payment_links') }}" class="px-3 py-1.5 rounded-md font-medium transition-colors {{ 'bg-[#1DB954] text-white' if not show_archived else 'text-gray-400 hover:text-white' }}">Active</a>
+          <a href="{{ url_for('dashboard.payment_links', archived=1) }}" class="px-3 py-1.5 rounded-md font-medium transition-colors {{ 'bg-[#1DB954] text-white' if show_archived else 'text-gray-400 hover:text-white' }}">Archived {% if archived_count %}({{ archived_count }}){% endif %}</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="{{ url_for('dashboard.payment_gateways') }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm">
+          <i data-lucide="credit-card" class="w-4 h-4"></i>
+          Payment Gateways
+        </a>
+        <button onclick="openModal('create-link-modal')" class="px-4 py-2 bg-[#1DB954] text-white rounded-lg font-medium hover:bg-[#1ed760] transition-colors flex items-center gap-2">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          Create Link
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-white/5 border-b border-white/10 text-left text-sm text-gray-400">
+            <th class="px-6 py-4 font-medium">Title</th>
+            <th class="px-6 py-4 font-medium">Amount</th>
+            <th class="px-6 py-4 font-medium">Status</th>
+            <th class="px-6 py-4 font-medium">Performance</th>
+            <th class="px-6 py-4 font-medium">Created</th>
+            <th class="px-6 py-4 font-medium text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/10">
+          {% for link in links %}
+          <tr class="hover:bg-white/5 transition-colors group">
+            <td class="px-6 py-4">
+              <div class="flex flex-col">
+                <span class="text-white font-medium">{{ link.title }}</span>
+                <span class="text-sm text-gray-500">/pay/{{ link.slug }}</span>
+              </div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="text-white font-mono">{{ link.amount }} {{ link.currency|upper }}</span>
+            </td>
+            <td class="px-6 py-4">
+              <button onclick="toggleActive({{ link.id }}, {{ 'false' if link.active else 'true' }})" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-colors {{ 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/20 hover:bg-[#1DB954]/20' if link.active else 'bg-gray-500/10 text-gray-400 border-gray-500/20 hover:bg-gray-500/30' }}">
+                <span class="w-1.5 h-1.5 rounded-full mr-1.5 {{ 'bg-[#1DB954]' if link.active else 'bg-gray-400' }}"></span>
+                {{ 'Active' if link.active else 'Inactive' }}
+              </button>
+            </td>
+            <td class="px-6 py-4">
+              <div class="flex flex-col gap-1 text-sm">
+                <span class="text-gray-300 flex items-center gap-1.5"><i data-lucide="eye" class="w-3.5 h-3.5"></i> {{ link.view_count }} views</span>
+                <span class="text-[#1DB954] flex items-center gap-1.5"><i data-lucide="dollar-sign" class="w-3.5 h-3.5"></i> {{ link.payment_count }} payments</span>
+              </div>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-400">
+              {{ link.created_at.strftime('%Y-%m-%d') }}
+            </td>
+            <td class="px-6 py-4 text-right">
+              <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="copyUrl('{{ url_for('dashboard.pay_link_view', slug=link.slug, _external=True) }}')" class="p-2 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors tooltip" data-tip="Copy Link">
+                  <i data-lucide="copy" class="w-4 h-4"></i>
+                </button>
+                <button onclick="shareLink('{{ url_for('dashboard.pay_link_view', slug=link.slug, _external=True) }}', 'whatsapp')" class="p-2 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors tooltip" data-tip="Share on WhatsApp">
+                  <i data-lucide="message-circle" class="w-4 h-4"></i>
+                </button>
+                <a href="{{ url_for('dashboard.payment_links_analytics_page', link_id=link.id) }}" class="p-2 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors tooltip inline-flex" data-tip="Analytics & Orders">
+                  <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                </a>
+                <button type="button" onclick="openQrModal({{ link.id }}, '{{ url_for('dashboard.pay_link_view', slug=link.slug, _external=True) }}', {{ link.title|tojson|forceescape }})" class="p-2 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors tooltip inline-flex" data-tip="QR Code">
+                  <i data-lucide="qr-code" class="w-4 h-4"></i>
+                </button>
+                <button onclick="duplicateLink({{ link.id }})" class="p-2 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors tooltip" data-tip="Duplicate">
+                  <i data-lucide="copy-plus" class="w-4 h-4"></i>
+                </button>
+                <button onclick="openEditModal({{ link.id }})" class="p-2 text-gray-400 hover:text-[#1DB954] bg-white/5 hover:bg-[#1DB954]/10 rounded-lg transition-colors tooltip" data-tip="Edit">
+                  <i data-lucide="edit-2" class="w-4 h-4"></i>
+                </button>
+                {% if show_archived %}
+                <button onclick="unarchiveLink({{ link.id }})" class="p-2 text-gray-400 hover:text-[#1DB954] bg-white/5 hover:bg-[#1DB954]/10 rounded-lg transition-colors tooltip" data-tip="Restore">
+                  <i data-lucide="archive-restore" class="w-4 h-4"></i>
+                </button>
+                {% else %}
+                <button onclick="archiveLink({{ link.id }})" class="p-2 text-gray-400 hover:text-yellow-500 bg-white/5 hover:bg-yellow-500/10 rounded-lg transition-colors tooltip" data-tip="Archive">
+                  <i data-lucide="archive" class="w-4 h-4"></i>
+                </button>
+                {% endif %}
+                <button onclick="deleteLink({{ link.id }})" class="p-2 text-gray-400 hover:text-red-500 bg-white/5 hover:bg-red-500/10 rounded-lg transition-colors tooltip" data-tip="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="px-6 py-12 text-center text-gray-400">
+              <div class="flex flex-col items-center justify-center">
+                <i data-lucide="link-2-off" class="w-12 h-12 text-white/20 mb-3"></i>
+                <p>No payment links created yet.</p>
+                <button onclick="openModal('create-link-modal')" class="mt-4 text-[#1DB954] hover:underline">Create your first link</button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div id="create-link-modal" class="fixed inset-0 z-[110] hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeModal('create-link-modal')"></div>
+  <div class="fixed inset-0 z-10 flex items-center justify-center overflow-y-auto p-4 sm:p-0">
+    <div class="relative bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all my-8">
+      <form id="link-form" onsubmit="handleFormSubmit(event)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" id="link-id" name="id" value="">
+        
+        <div class="px-7 py-5 border-b border-white/10 flex items-center justify-between">
+          <h3 class="text-lg font-display font-medium text-white" id="modal-title">Create Payment Link</h3>
+          <button type="button" onclick="closeModal('create-link-modal')" class="text-gray-400 hover:text-white transition-colors">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+        
+        <div class="px-7 pt-5 border-b border-white/10">
+          <div class="flex items-center justify-between mb-1">
+            <span id="wizardStepLabel" class="text-xs font-semibold text-[#1DB954]">Step 1 of 5 — Product Info</span>
+          </div>
+          <div class="flex gap-1.5">
+            <div class="wizard-dot flex-1 h-1 rounded-full bg-[#1DB954]" data-step="basic"></div>
+            <div class="wizard-dot flex-1 h-1 rounded-full bg-white/10" data-step="type"></div>
+            <div class="wizard-dot flex-1 h-1 rounded-full bg-white/10" data-step="offers"></div>
+            <div class="wizard-dot flex-1 h-1 rounded-full bg-white/10" data-step="thankyou"></div>
+            <div class="wizard-dot flex-1 h-1 rounded-full bg-white/10" data-step="advanced"></div>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-2 pb-3">A guided setup — fill in each step, then Next. You can go back anytime.</p>
+        </div>
+
+        <div class="p-7 space-y-5 max-h-[55vh] overflow-y-auto">
+
+          <div id="linkTab-basic" class="link-tab-pane space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Title</label>
+            <input type="text" id="link-title" name="title" required class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] transition-all" placeholder="e.g. Logo Design Retainer">
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Amount</label>
+              <input type="number" step="0.01" id="link-amount" name="amount" required class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] transition-all" placeholder="0.00">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Currency</label>
+              <select id="link-currency" name="currency" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] transition-all">
+                <option value="NGN">NGN</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="KES">KES</option>
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Description (Optional)</label>
+            <textarea id="link-description" name="description" rows="3" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] transition-all" placeholder="Describe what this payment is for..."></textarea>
+          </div>
+          </div>
+
+          <div id="linkTab-type" class="link-tab-pane space-y-5 hidden">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Link Type</label>
+              <select id="link-type" onchange="toggleAmountRangeFields()" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]">
+                <option value="single">Single Product / Fixed Price</option>
+                <option value="donation">Donation (buyer chooses amount)</option>
+                <option value="custom_amount">Custom Amount (buyer enters amount in a range)</option>
+              </select>
+              <p class="text-xs text-gray-500 mt-1">Donation and Custom Amount let the buyer type their own amount on the checkout page instead of the fixed Amount above.</p>
+            </div>
+            <div id="link-amount-range" class="grid grid-cols-2 gap-4 hidden">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Minimum Amount</label>
+                <input type="number" step="0.01" id="link-min-amount" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="1.00">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Maximum Amount (optional)</label>
+                <input type="number" step="0.01" id="link-max-amount" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="No limit">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Purchase Limit (optional)</label>
+              <input type="number" id="link-purchase-limit" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="e.g. 50 — link stops accepting payments after this many sales">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Expiration Date (optional)</label>
+              <input type="datetime-local" id="link-expiry" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]">
+            </div>
+          </div>
+
+          <div id="linkTab-offers" class="link-tab-pane space-y-5 hidden">
+            <div class="pb-2 border-b border-white/10">
+              <label class="flex items-center gap-2 mb-3">
+                <input type="checkbox" id="bump-enabled" class="accent-[#1DB954]">
+                <span class="text-sm font-medium text-gray-300">Add an Order Bump</span>
+              </label>
+              <p class="text-xs text-gray-500 mb-3">A one-click optional add-on the buyer can include before paying — a classic "add this too?" upsell.</p>
+              <div id="bump-fields" class="space-y-3 hidden">
+                <input type="text" id="bump-name" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]" placeholder="Add-on name, e.g. Priority Support">
+                <input type="number" step="0.01" id="bump-price" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]" placeholder="Add-on price">
+                <textarea id="bump-description" rows="2" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]" placeholder="Short description shown to the buyer"></textarea>
+              </div>
+            </div>
+            <div class="pt-2">
+              <label class="flex items-center gap-2 mb-3">
+                <input type="checkbox" id="coupon-enabled" class="accent-[#1DB954]">
+                <span class="text-sm font-medium text-gray-300">Add a Coupon Code</span>
+              </label>
+              <div id="coupon-fields" class="space-y-3 hidden">
+                <input type="text" id="coupon-code" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954] uppercase" placeholder="e.g. SAVE20">
+                <div class="grid grid-cols-2 gap-3">
+                  <select id="coupon-type" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                    <option value="percent">Percent off</option>
+                    <option value="fixed">Fixed amount off</option>
+                  </select>
+                  <input type="number" step="0.01" id="coupon-value" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]" placeholder="Value">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <input type="number" id="coupon-limit" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]" placeholder="Usage limit (optional)">
+                  <input type="datetime-local" id="coupon-expiry" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#1DB954]">
+                </div>
+                <p id="coupon-uses-note" class="text-xs text-gray-600 hidden"></p>
+              </div>
+            </div>
+          </div>
+
+          <div id="linkTab-thankyou" class="link-tab-pane space-y-4 hidden">
+            <p class="text-xs text-gray-500">Shown to the buyer right after a successful payment (unless a Redirect URL is set under Advanced).</p>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Header</label>
+              <input type="text" id="ty-header" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="Payment received!">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Message</label>
+              <textarea id="ty-message" rows="2" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="Thank you for your payment..."></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Primary Button Text</label>
+                <input type="text" id="ty-btn-text" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="Back to site">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Primary Button URL</label>
+                <input type="url" id="ty-btn-url" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Download URL (for digital products)</label>
+              <input type="url" id="ty-download-url" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Coupon Code (shown after payment)</label>
+                <input type="text" id="ty-coupon" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1.5">Support Email</label>
+                <input type="email" id="ty-support-email" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]">
+              </div>
+            </div>
+          </div>
+
+          <div id="linkTab-advanced" class="link-tab-pane space-y-5 hidden">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Success Redirect URL (Optional)</label>
+            <input type="url" id="link-redirect" name="redirect_url" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] transition-all" placeholder="https://yourwebsite.com/thank-you">
+            <p class="text-xs text-gray-600 mt-1">If set, buyers are sent here instead of the Thank You page above.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Password Protection (Optional)</label>
+            <input type="text" id="link-password" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#1DB954]" placeholder="Leave blank for no password">
+          </div>
+
+          <div class="pt-2 border-t border-white/10">
+            <label class="flex items-center gap-2 mb-2">
+              <input type="checkbox" id="link-collect-info" checked class="accent-[#1DB954]">
+              <span class="text-sm font-medium text-gray-300">Collect buyer's name &amp; email before payment</span>
+            </label>
+            <p class="text-xs text-gray-500">Turn this off for a pure "just pay" link — no name/email fields shown, buyer goes straight to the payment button.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">About You / Your Business (Optional)</label>
+            <textarea id="link-seller-bio" rows="2" class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-[#1DB954]" placeholder="A short line shown on the checkout page — who you are, what you offer."></textarea>
+          </div>
+
+          <div class="pt-2 border-t border-white/10">
+            <label class="block text-sm font-medium text-gray-300 mb-1">Your Payment Gateways</label>
+            <p class="text-xs text-gray-500 mb-3">Payments go straight into YOUR OWN connected gateway account, managed from <a href="{{ url_for('dashboard.payment_gateways') }}" class="text-[#1DB954] hover:underline">Payment Gateways</a>. Choose which of your connected gateways appear on this specific link:</p>
+            <div id="linkGatewayCheckboxes" class="space-y-2 text-sm text-gray-300"></div>
+          </div>
+          </div>
+        </div>
+        
+        <div class="px-7 py-5 border-t border-white/10 bg-white/5 flex justify-between gap-3">
+          <button type="button" id="wizardBackBtn" onclick="wizardBack()" class="px-4 py-2.5 text-gray-300 hover:text-white transition-colors">Back</button>
+          <div class="flex gap-3">
+            <button type="button" onclick="closeModal('create-link-modal')" class="px-4 py-2.5 text-gray-500 hover:text-white transition-colors">Cancel</button>
+            <button type="button" id="wizardNextBtn" onclick="wizardNext()" class="px-5 py-2.5 bg-[#1DB954] text-white rounded-lg font-medium hover:bg-[#1ed760] transition-colors">Next</button>
+            <button type="submit" id="wizardSaveBtn" class="px-5 py-2.5 bg-[#1DB954] text-white rounded-lg font-medium hover:bg-[#1ed760] transition-colors hidden">Save Link</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- QR Code Modal -->
+<div id="qr-modal" class="fixed inset-0 z-[200] hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeModal('qr-modal')"></div>
+  <div class="fixed inset-0 z-10 flex items-center justify-center overflow-y-auto p-4 sm:p-0">
+    <div class="relative bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+      <button type="button" onclick="closeModal('qr-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <h3 id="qr-title" class="text-lg font-display font-medium text-white mb-4"></h3>
+      <div class="bg-white rounded-xl p-4 inline-block mb-4">
+        <img id="qr-image" src="" alt="QR code" class="w-48 h-48">
+      </div>
+      <div class="flex items-center gap-2 mb-4">
+        <input id="qr-url-input" type="text" readonly class="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-gray-300 text-xs">
+        <button onclick="copyUrl(document.getElementById('qr-url-input').value)" class="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-white transition-colors">
+          <i data-lucide="copy" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <a id="qr-download" href="" download="payment-link-qr.png" class="block w-full mb-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg font-medium transition-colors text-sm">
+        Download QR Code
+      </a>
+      <p class="text-xs text-gray-500 mt-3">Scan or share this code — it opens the exact checkout page above.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  window.__paymentLinks = [
+    {% for link in links %}
+    {% set s = link.settings or {} %}
+    {% set ty = s.get('thank_you') or {} %}
+    { id: {{ link.id }}, title: {{ link.title|tojson }}, amount: {{ link.amount|float }},
+      currency: {{ (link.currency or 'NGN')|tojson }}, description: {{ (link.description or '')|tojson }},
+      redirect_url: {{ (s.get('redirect_url') or '')|tojson }},
+      link_type: {{ (s.get('link_type') or 'single')|tojson }},
+      min_amount: {{ (s.get('min_amount') or '')|tojson }},
+      max_amount: {{ (s.get('max_amount') or '')|tojson }},
+      purchase_limit: {{ (s.get('purchase_limit') or '')|tojson }},
+      expiry: {{ (s.get('expiry') or '')|tojson }},
+      password: {{ (s.get('password') or '')|tojson }},
+      collect_payer_info: {{ (s.get('collect_payer_info', True))|tojson }},
+      seller_bio: {{ (s.get('seller_bio') or '')|tojson }},
+      enabled_gateways: {{ (s.get('enabled_gateways') or [])|tojson }},
+      thank_you: { header: {{ (ty.get('header') or '')|tojson }}, message: {{ (ty.get('message') or '')|tojson }},
+                   primary_button_text: {{ (ty.get('primary_button_text') or '')|tojson }},
+                   primary_button_url: {{ (ty.get('primary_button_url') or '')|tojson }},
+                   download_url: {{ (ty.get('download_url') or '')|tojson }},
+                   coupon_code: {{ (ty.get('coupon_code') or '')|tojson }},
+                   support_email: {{ (ty.get('support_email') or '')|tojson }} },
+      order_bump: {{ (s.get('order_bump') or {})|tojson }},
+      coupon: {{ (s.get('coupon') or {})|tojson }} }{{ ',' if not loop.last }}
+    {% endfor %}
+  ];
+  window.__connectedGateways = {{ connected_gateways|tojson }};
+  // Setup CSRF token for fetch requests
+  const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrfToken
+  };
+
+  const WIZARD_STEPS = ['basic', 'type', 'offers', 'thankyou', 'advanced'];
+  const WIZARD_LABELS = {basic: 'Product Info', type: 'Type & Limits', offers: 'Coupons & Add-ons', thankyou: 'Thank You Page', advanced: 'Advanced'};
+  let wizardStepIndex = 0;
+
+  function switchLinkTab(tab) {
+    const idx = WIZARD_STEPS.indexOf(tab);
+    if (idx === -1) return;
+    wizardStepIndex = idx;
+    renderWizardStep();
+  }
+
+  function renderWizardStep() {
+    const tab = WIZARD_STEPS[wizardStepIndex];
+    document.querySelectorAll('.link-tab-pane').forEach(p => p.classList.add('hidden'));
+    document.getElementById(`linkTab-${tab}`).classList.remove('hidden');
+    document.querySelectorAll('.wizard-dot').forEach((d, i) => {
+      d.classList.toggle('bg-[#1DB954]', i <= wizardStepIndex);
+      d.classList.toggle('bg-white/10', i > wizardStepIndex);
+    });
+    document.getElementById('wizardStepLabel').textContent = `Step ${wizardStepIndex + 1} of ${WIZARD_STEPS.length} — ${WIZARD_LABELS[tab]}`;
+    document.getElementById('wizardBackBtn').style.visibility = wizardStepIndex === 0 ? 'hidden' : 'visible';
+    const isLast = wizardStepIndex === WIZARD_STEPS.length - 1;
+    document.getElementById('wizardNextBtn').classList.toggle('hidden', isLast);
+    document.getElementById('wizardSaveBtn').classList.toggle('hidden', !isLast);
+  }
+
+  function wizardNext() {
+    if (wizardStepIndex === 0) {
+      const title = document.getElementById('link-title').value.trim();
+      const amount = document.getElementById('link-amount').value;
+      const type = document.getElementById('link-type') ? document.getElementById('link-type').value : 'single';
+      if (!title) { showToast('Give this payment link a title first', 'error'); return; }
+      if (type === 'single' && !amount) { showToast('Enter an amount first', 'error'); return; }
+    }
+    if (wizardStepIndex < WIZARD_STEPS.length - 1) { wizardStepIndex++; renderWizardStep(); }
+  }
+
+  function wizardBack() {
+    if (wizardStepIndex > 0) { wizardStepIndex--; renderWizardStep(); }
+  }
+
+  function toggleAmountRangeFields() {
+    const type = document.getElementById('link-type').value;
+    const box = document.getElementById('link-amount-range');
+    const fixedAmount = document.getElementById('link-amount');
+    if (type === 'donation' || type === 'custom_amount') {
+      box.classList.remove('hidden');
+      fixedAmount.removeAttribute('required');
+    } else {
+      box.classList.add('hidden');
+      fixedAmount.setAttribute('required', 'required');
+    }
+  }
+
+  document.getElementById('bump-enabled')?.addEventListener('change', function() {
+    document.getElementById('bump-fields').classList.toggle('hidden', !this.checked);
+  });
+  document.getElementById('coupon-enabled')?.addEventListener('change', function() {
+    document.getElementById('coupon-fields').classList.toggle('hidden', !this.checked);
+  });
+
+  function renderGatewayCheckboxes(selected) {
+    const connected = window.__connectedGateways || [];
+    const box = document.getElementById('linkGatewayCheckboxes');
+    if (!connected.length) {
+      box.innerHTML = `<p class="text-xs text-gray-500">No gateways connected yet — <a href="{{ url_for('dashboard.payment_gateways') }}" class="text-[#1DB954] hover:underline">connect one first</a>.</p>`;
+      return;
+    }
+    const sel = selected && selected.length ? selected : connected; // default: all connected shown
+    box.innerHTML = connected.map(g => `
+      <label class="flex items-center gap-2">
+        <input type="checkbox" class="link-gateway-cb" value="${g}" ${sel.includes(g) ? 'checked' : ''}>
+        <span class="capitalize">${g}</span>
+      </label>
+    `).join('');
+  }
+
+  function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+    // Reset form for new link
+    if(id === 'create-link-modal' && !document.getElementById('link-id').value) {
+      document.getElementById('link-form').reset();
+      document.getElementById('modal-title').textContent = 'Create Payment Link';
+      document.getElementById('bump-fields').classList.add('hidden');
+      document.getElementById('coupon-fields').classList.add('hidden');
+      switchLinkTab('basic');
+      document.getElementById('link-type').value = 'single';
+      toggleAmountRangeFields();
+      renderGatewayCheckboxes([]);
+    }
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+    setTimeout(() => {
+        document.getElementById('link-form').reset();
+        document.getElementById('link-id').value = '';
+    }, 300);
+  }
+
+  function showToast(message, type = 'success') {
+    // Basic toast implementation
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg text-white text-sm font-medium shadow-lg transform transition-all duration-300 translate-y-full opacity-0 z-50 flex items-center gap-2 ${type === 'success' ? 'bg-[#1DB954]' : 'bg-red-500'}`;
+    toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-4 h-4"></i> ${message}`;
+    document.body.appendChild(toast);
+    lucide.createIcons();
+    
+    setTimeout(() => {
+      toast.classList.remove('translate-y-full', 'opacity-0');
+    }, 10);
+
+    setTimeout(() => {
+      toast.classList.add('translate-y-full', 'opacity-0');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  function openQrModal(id, url, title) {
+    document.getElementById('qr-title').textContent = title;
+    document.getElementById('qr-url-input').value = url;
+    const src = `/dashboard/payment-links/${id}/qr.png`;
+    document.getElementById('qr-image').src = src;
+    document.getElementById('qr-download').href = src;
+    openModal('qr-modal');
+  }
+
+  async function copyUrl(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Payment link copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      showToast('Failed to copy link', 'error');
+    }
+  }
+
+  function openEditModal(id) {
+    const link = (window.__paymentLinks || []).find(l => String(l.id) === String(id));
+    document.getElementById('link-id').value = id;
+    document.getElementById('modal-title').textContent = 'Edit Payment Link';
+    switchLinkTab('basic');
+    if (link) {
+      document.getElementById('link-title').value = link.title || '';
+      document.getElementById('link-amount').value = link.amount || '';
+      document.getElementById('link-currency').value = link.currency || 'NGN';
+      document.getElementById('link-description').value = link.description || '';
+      document.getElementById('link-redirect').value = link.redirect_url || '';
+      document.getElementById('link-type').value = link.link_type || 'single';
+      document.getElementById('link-min-amount').value = link.min_amount || '';
+      document.getElementById('link-max-amount').value = link.max_amount || '';
+      document.getElementById('link-purchase-limit').value = link.purchase_limit || '';
+      document.getElementById('link-expiry').value = link.expiry ? link.expiry.slice(0, 16) : '';
+      document.getElementById('link-password').value = link.password || '';
+      document.getElementById('link-collect-info').checked = link.collect_payer_info !== false;
+      document.getElementById('link-seller-bio').value = link.seller_bio || '';
+      const ty = link.thank_you || {};
+      document.getElementById('ty-header').value = ty.header || '';
+      document.getElementById('ty-message').value = ty.message || '';
+      document.getElementById('ty-btn-text').value = ty.primary_button_text || '';
+      document.getElementById('ty-btn-url').value = ty.primary_button_url || '';
+      document.getElementById('ty-download-url').value = ty.download_url || '';
+      document.getElementById('ty-coupon').value = ty.coupon_code || '';
+      document.getElementById('ty-support-email').value = ty.support_email || '';
+      const bump = link.order_bump || {};
+      document.getElementById('bump-enabled').checked = !!bump.enabled;
+      document.getElementById('bump-fields').classList.toggle('hidden', !bump.enabled);
+      document.getElementById('bump-name').value = bump.name || '';
+      document.getElementById('bump-price').value = bump.price || '';
+      document.getElementById('bump-description').value = bump.description || '';
+      const coupon = link.coupon || {};
+      document.getElementById('coupon-enabled').checked = !!coupon.code;
+      document.getElementById('coupon-fields').classList.toggle('hidden', !coupon.code);
+      document.getElementById('coupon-code').value = coupon.code || '';
+      document.getElementById('coupon-type').value = coupon.type || 'percent';
+      document.getElementById('coupon-value').value = coupon.value || '';
+      document.getElementById('coupon-limit').value = coupon.usage_limit || '';
+      document.getElementById('coupon-expiry').value = coupon.expiry ? coupon.expiry.slice(0, 16) : '';
+      const usesNote = document.getElementById('coupon-uses-note');
+      if (coupon.uses) {
+        usesNote.textContent = `Used ${coupon.uses} time${coupon.uses === 1 ? '' : 's'} so far.`;
+        usesNote.classList.remove('hidden');
+      } else {
+        usesNote.classList.add('hidden');
+      }
+      toggleAmountRangeFields();
+      renderGatewayCheckboxes(link.enabled_gateways || []);
+    }
+    openModal('create-link-modal');
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+    const id = data.id;
+
+    const enabledGateways = Array.from(document.querySelectorAll('.link-gateway-cb:checked')).map(cb => cb.value);
+    const bumpEnabled = document.getElementById('bump-enabled').checked;
+    const couponEnabled = document.getElementById('coupon-enabled').checked;
+    data.settings = {
+      link_type: document.getElementById('link-type').value,
+      min_amount: document.getElementById('link-min-amount').value || null,
+      max_amount: document.getElementById('link-max-amount').value || null,
+      purchase_limit: document.getElementById('link-purchase-limit').value || null,
+      expiry: document.getElementById('link-expiry').value || null,
+      password: document.getElementById('link-password').value || null,
+      collect_payer_info: document.getElementById('link-collect-info').checked,
+      seller_bio: document.getElementById('link-seller-bio').value || null,
+      enabled_gateways: enabledGateways,
+      thank_you: {
+        header: document.getElementById('ty-header').value,
+        message: document.getElementById('ty-message').value,
+        primary_button_text: document.getElementById('ty-btn-text').value,
+        primary_button_url: document.getElementById('ty-btn-url').value,
+        download_url: document.getElementById('ty-download-url').value,
+        coupon_code: document.getElementById('ty-coupon').value,
+        support_email: document.getElementById('ty-support-email').value,
+      },
+      order_bump: bumpEnabled ? {
+        enabled: true,
+        name: document.getElementById('bump-name').value,
+        price: document.getElementById('bump-price').value || 0,
+        description: document.getElementById('bump-description').value,
+      } : { enabled: false },
+      coupon: couponEnabled ? {
+        code: document.getElementById('coupon-code').value.trim().toUpperCase(),
+        type: document.getElementById('coupon-type').value,
+        value: document.getElementById('coupon-value').value || 0,
+        usage_limit: document.getElementById('coupon-limit').value || null,
+        expiry: document.getElementById('coupon-expiry').value || null,
+      } : {},
+    };
+
+    try {
+      const res = await fetch('/dashboard/payment-links/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Network response was not ok');
+      showToast(id ? 'Link updated successfully!' : 'Link created successfully!');
+      closeModal('create-link-modal');
+      setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+      showToast(error.message || 'An error occurred. Please try again.', 'error');
+    }
+  }
+
+  function duplicateLink(id) {
+    fetch(`/dashboard/payment-links/${id}/duplicate`, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } })
+      .then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) return showToast(data.error || 'Could not duplicate link', 'error');
+        showToast('Link duplicated');
+        setTimeout(() => window.location.reload(), 600);
+      });
+  }
+
+  function archiveLink(id) {
+    if (!confirm('Archive this link? It will stop accepting payments and disappear from your active list, but its history stays intact.')) return;
+    fetch(`/dashboard/payment-links/${id}/archive`, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } })
+      .then(res => res.json())
+      .then(() => { showToast('Link archived'); setTimeout(() => window.location.reload(), 600); });
+  }
+
+  function unarchiveLink(id) {
+    fetch(`/dashboard/payment-links/${id}/unarchive`, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } })
+      .then(res => res.json())
+      .then(() => { showToast('Link restored'); setTimeout(() => window.location.reload(), 600); });
+  }
+
+  function shareLink(url, platform) {
+    const text = encodeURIComponent('Check this out:');
+    const u = encodeURIComponent(url);
+    const shareUrls = {
+      whatsapp: `https://wa.me/?text=${text}%20${u}`,
+      twitter: `https://twitter.com/intent/tweet?text=${text}&url=${u}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+      telegram: `https://t.me/share/url?url=${u}&text=${text}`,
+    };
+    if (shareUrls[platform]) window.open(shareUrls[platform], '_blank', 'width=600,height=400');
+  }
+
+  function viewOrders(id) {
+    fetch(`/dashboard/payment-links/${id}/orders`)
+      .then(res => res.json())
+      .then(data => {
+        const orders = data.orders || [];
+        if (!orders.length) { showToast('No orders yet for this link'); return; }
+        const summary = orders.slice(0, 5).map(o => `${o.buyer_name} (${o.buyer_email}) — ${o.amount} ${o.currency} — ${o.status}`).join('\n');
+        alert(`Recent orders:\n\n${summary}${orders.length > 5 ? `\n\n+${orders.length - 5} more` : ''}`);
+      });
+  }
+
+  async function deleteLink(id) {
+    if(!confirm('Are you sure you want to delete this payment link? This action cannot be undone.')) return;
+
+    try {
+      const res = await fetch(`/dashboard/payment-links/${id}/delete`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCsrf() }
+      });
+      if(!res.ok) throw new Error('Network response was not ok');
+      showToast('Payment link deleted.');
+      setTimeout(() => window.location.reload(), 600);
+    } catch (error) {
+      showToast('Failed to delete link.', 'error');
+    }
+  }
+
+  async function toggleActive(id, newState) {
+    try {
+      const res = await fetch('/dashboard/payment-links/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ id, active: newState })
+      });
+      if(!res.ok) throw new Error('Network response was not ok');
+      showToast(newState ? 'Link activated.' : 'Link deactivated.');
+      setTimeout(() => window.location.reload(), 600);
+    } catch (error) {
+       showToast('Failed to update status.', 'error');
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "public_base.html" %}
+{% block title %}Hash Generator — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:760px;margin:0 auto;padding:48px 20px }
+.hash-row { display:flex;gap:10px;align-items:center;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 16px;margin-bottom:8px }
+.hash-row .label { width:90px;font-size:12px;font-weight:700;color:var(--c-accent) }
+.hash-row .value { font-family:monospace;font-size:13px;color:#cfe6ff;word-break:break-all;flex:1 }
+textarea.admin-input { width:100%;min-height:120px;font-family:monospace }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Hash Generator</h1>
+    <p style="color:var(--c-text-2)">SHA-1 / SHA-256 / SHA-384 / SHA-512 — computed locally via Web Crypto, nothing leaves your browser.</p>
+  </div>
+
+  <textarea id="input" class="admin-input" placeholder="Type or paste text to hash…"></textarea>
+  <div style="margin:16px 0"><button class="btn-neon" id="hashBtn">Generate Hashes</button></div>
+  <div id="output"></div>
+</div>
+
+<script>
+async function hashText(algo, text) {
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest(algo, enc);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+document.getElementById('hashBtn').addEventListener('click', async () => {
+  const text = document.getElementById('input').value;
+  const algos = [['SHA-1','SHA-1'],['SHA-256','SHA-256'],['SHA-384','SHA-384'],['SHA-512','SHA-512']];
+  const out = document.getElementById('output');
+  out.innerHTML = '';
+  for (const [label, algo] of algos) {
+    const digest = await hashText(algo, text);
+    const row = document.createElement('div');
+    row.className = 'hash-row';
+    row.innerHTML = `<span class="label">${label}</span><span class="value">${digest}</span><button class="btn-ghost-neon" style="padding:4px 10px;font-size:11px" onclick="navigator.clipboard.writeText('${digest}')">Copy</button>`;
+    out.appendChild(row);
+  }
+});
+</script>
+{% endblock %}

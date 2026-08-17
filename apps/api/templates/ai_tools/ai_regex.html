@@ -1,0 +1,79 @@
+{% extends "public_base.html" %}
+{% block title %}Regex Tester — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:820px;margin:0 auto;padding:48px 20px }
+textarea.admin-input { width:100%;min-height:160px;font-family:monospace;font-size:13px }
+.opt-row { display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap }
+mark { background:rgba(var(--c-accent-rgb),0.35);color:#fff;border-radius:3px;padding:0 1px }
+#highlighted { white-space:pre-wrap;word-break:break-word;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;font-family:monospace;font-size:13px;min-height:120px }
+.match-list { font-family:monospace;font-size:12px;color:#9fb3d1;margin-top:10px }
+.err { color:#ff5b7e;font-size:12px;margin-top:6px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Regex Tester</h1>
+    <p style="color:var(--c-text-2)">Test JavaScript-flavor regular expressions live, with match highlighting.</p>
+  </div>
+
+  <div class="opt-row">
+    <input id="pattern" class="admin-input" style="flex:1;font-family:monospace" placeholder="Regex pattern, e.g. \b\w+@\w+\.\w+\b">
+    <input id="flags" class="admin-input" style="width:90px" placeholder="flags" value="g">
+  </div>
+  <div id="error" class="err"></div>
+
+  <textarea id="testStr" class="admin-input" placeholder="Test string…">Contact us at hello@bazillin.studio or support@example.com.</textarea>
+
+  <h3 style="font-size:13px;color:#9fb3d1;margin:16px 0 6px">Highlighted Matches</h3>
+  <div id="highlighted"></div>
+  <div class="match-list" id="matchList"></div>
+</div>
+<script>
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function run() {
+  const pattern = document.getElementById('pattern').value;
+  const flags = document.getElementById('flags').value;
+  const str = document.getElementById('testStr').value;
+  const errEl = document.getElementById('error');
+  const out = document.getElementById('highlighted');
+  const list = document.getElementById('matchList');
+  errEl.textContent = '';
+  if (!pattern) { out.innerHTML = escapeHtml(str); list.textContent = ''; return; }
+  let re;
+  try {
+    re = new RegExp(pattern, flags.includes('g') ? flags : flags + 'g');
+  } catch (e) {
+    errEl.textContent = 'Invalid regex: ' + e.message;
+    out.innerHTML = escapeHtml(str);
+    list.textContent = '';
+    return;
+  }
+  let html = '';
+  let lastIndex = 0;
+  let m;
+  const matches = [];
+  re.lastIndex = 0;
+  while ((m = re.exec(str)) !== null) {
+    html += escapeHtml(str.slice(lastIndex, m.index));
+    html += '<mark>' + escapeHtml(m[0]) + '</mark>';
+    lastIndex = m.index + m[0].length;
+    matches.push(m[0]);
+    if (m[0] === '') { re.lastIndex++; }
+    if (matches.length > 500) break;
+  }
+  html += escapeHtml(str.slice(lastIndex));
+  out.innerHTML = html || escapeHtml(str);
+  list.textContent = matches.length ? `${matches.length} match(es): ${matches.join(', ')}` : 'No matches';
+}
+document.getElementById('pattern').addEventListener('input', run);
+document.getElementById('flags').addEventListener('input', run);
+document.getElementById('testStr').addEventListener('input', run);
+document.getElementById('pattern').value = '\\b\\w+@\\w+\\.\\w+\\b';
+run();
+</script>
+{% endblock %}

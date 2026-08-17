@@ -1,0 +1,84 @@
+{% extends "public_base.html" %}
+{% block title %}AI Code Review — {{ site_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-12">
+  <div class="flex items-center justify-between mb-8">
+    <div><h1 class="text-3xl font-bold font-display gradient-text">AI Code Review</h1><p class="text-gray-400 text-sm mt-1">Get expert feedback on bugs, security, performance and style</p></div>
+    <a href="{{ url_for('ai.index') }}" class="admin-btn-ghost text-sm">← AI Hub</a>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="space-y-4">
+      <div class="glass-card rounded-2xl p-5">
+        <div class="flex gap-3 mb-4">
+          <div class="flex-1"><label class="admin-label">Language</label>
+            <select id="lang-select" class="admin-input w-full mt-1">
+              {% for l in ['Python','JavaScript','TypeScript','Go','Rust','Java','C++','PHP','Ruby','Swift','Kotlin','SQL','Bash','HTML/CSS'] %}
+              <option>{{ l }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="flex-1"><label class="admin-label">Focus</label>
+            <select id="focus-select" class="admin-input w-full mt-1">
+              <option>All Issues</option>
+              <option>Security Only</option>
+              <option>Performance Only</option>
+              <option>Style & Best Practices</option>
+              <option>Bug Detection</option>
+            </select>
+          </div>
+        </div>
+        <label class="admin-label">Paste Your Code</label>
+        <textarea id="code-input" rows="16" class="input-field font-mono text-xs mt-1 resize-none w-full" placeholder="Paste the code you want reviewed here…"></textarea>
+        <button onclick="reviewCode()" id="review-btn" class="w-full btn-neon mt-4 justify-center py-3">🔍 Review Code</button>
+      </div>
+    </div>
+    <div>
+      <div id="review-placeholder" class="glass-card rounded-2xl p-8 text-center h-full flex flex-col items-center justify-center">
+        <div class="text-5xl mb-4">🔍</div>
+        <p class="text-gray-400">Paste your code and click "Review Code" to get AI feedback</p>
+      </div>
+      <div id="review-result" class="hidden space-y-4">
+        <div id="review-loading" class="hidden glass-card rounded-2xl p-8 text-center">
+          <div class="w-12 h-12 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mx-auto mb-4"></div>
+          <p class="text-gray-400">Reviewing your code…</p>
+        </div>
+        <div id="review-content" class="hidden glass-card rounded-2xl p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-white">Review Results</h3>
+            <button onclick="copyReview()" class="admin-btn-ghost text-xs">Copy</button>
+          </div>
+          <div id="review-output" class="prose text-sm max-h-[600px] overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function reviewCode() {
+  const code = document.getElementById('code-input').value.trim();
+  if (!code) return showToast('Please paste some code first', 'error');
+  {% if not current_user.is_authenticated %}return showToast('Please sign in to use AI tools', 'error');{% endif %}
+  const lang = document.getElementById('lang-select').value;
+  const focus = document.getElementById('focus-select').value;
+  document.getElementById('review-placeholder').classList.add('hidden');
+  document.getElementById('review-result').classList.remove('hidden');
+  document.getElementById('review-loading').classList.remove('hidden');
+  document.getElementById('review-content').classList.add('hidden');
+  document.getElementById('review-btn').disabled = true;
+  try {
+    const res = await fetch('{{ url_for("ai.api_code_review") }}', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify({ code, language: lang, focus })
+    });
+    const data = await res.json();
+    document.getElementById('review-loading').classList.add('hidden');
+    if (data.error) { showToast(data.error,'error'); document.getElementById('review-placeholder').classList.remove('hidden'); document.getElementById('review-result').classList.add('hidden'); }
+    else { document.getElementById('review-content').classList.remove('hidden'); document.getElementById('review-output').innerHTML = marked.parse(data.response); }
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+  document.getElementById('review-btn').disabled = false;
+}
+function copyReview() { navigator.clipboard.writeText(document.getElementById('review-output').textContent); showToast('Copied!','success'); }
+</script>
+{% endblock %}

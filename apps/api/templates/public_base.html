@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+{{ super() }}
+<!-- AOS -->
+<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+{% endblock %}
+
+{% block body %}
+<div class="relative z-10">
+  {% include "partials/navbar.html" %}
+  {% if session.get('preview_user_id') %}
+  <div style="position:fixed;bottom:0;left:0;right:0;z-index:60;background:#F2C94C;color:#1a1a1a;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:13px;font-weight:600;box-shadow:0 -4px 20px rgba(0,0,0,0.3)">
+    <span>👁 Previewing dashboard as another user — read only, their real account is untouched.</span>
+    <a href="{{ url_for('cms.exit_preview') }}" style="background:#1a1a1a;color:#fff;padding:6px 16px;border-radius:8px;text-decoration:none;font-weight:700">Exit Preview</a>
+  </div>
+  <div style="height:52px"></div>
+  {% endif %}
+  <main>{% block content %}{% endblock %}</main>
+  {% if not request.endpoint or not (request.endpoint.startswith('cms.dashboard') or request.endpoint.startswith('dashboard.')) %}
+  {% include "partials/footer.html" %}
+  {% endif %}
+  {% include "partials/popup_loader.html" %}
+</div>
+
+<!-- AOS + Lucide -->
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    AOS.init({ duration: 800, easing: 'ease-out', once: true, offset: 100 });
+    lucide.createIcons();
+  });
+</script>
+{% endblock %}

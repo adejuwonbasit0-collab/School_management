@@ -1,0 +1,668 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block page_title %}AI Chatbot{% endblock %}
+{% block page_subtitle %}Your AI-powered website chat widget{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-6 relative z-10">
+
+    <!-- Left Sidebar: Agent Summary -->
+    <div class="xl:col-span-1 space-y-4">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white">Your Agent</h3>
+        </div>
+
+        {% if agent %}
+        <div class="glass-panel p-4 rounded-xl border border-[#1DB954] bg-[#1DB954]/5">
+            <div class="flex justify-between items-start mb-2">
+                <h4 class="font-bold text-white">{{ agent.name }}</h4>
+                <div class="w-2 h-2 rounded-full {{ 'bg-green-500 shadow-[0_0_8px_#22c55e]' if agent.active else 'bg-gray-500' }}"></div>
+            </div>
+            <div class="flex items-center space-x-2 text-xs text-gray-400">
+                <span class="px-2 py-0.5 rounded bg-white/10">AI Chatbot</span>
+                <span>{{ agent.message_count|default(0) }} msgs</span>
+            </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-xl border border-white/10 bg-white/5">
+            <div class="flex items-center gap-2 mb-1">
+                <i data-lucide="zap" class="w-4 h-4 text-[#F2C94C]"></i>
+                <p class="text-sm text-white font-semibold">{{ "{:,}".format(credit_balance) }} Credits</p>
+            </div>
+            <p class="text-[11px] text-gray-500 mb-3">1 credit per AI reply — shared with WhatsApp Bot's own usage</p>
+            <a href="{{ url_for('dashboard.credits_home') }}" class="block text-center text-xs px-3 py-1.5 bg-[#1DB954]/15 hover:bg-[#1DB954]/25 text-[#1DB954] rounded-lg font-medium transition-colors">Buy Credits</a>
+        </div>
+
+        {% if credit_balance <= 0 %}
+        <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-red-400 shrink-0"></i>
+            <p class="text-[11px] text-red-300">Credits Exhausted — your agent tells visitors it's unavailable until you top up.</p>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="glass-panel p-6 rounded-xl border border-white/10 bg-white/5 text-center">
+            <div class="w-12 h-12 mx-auto rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center mb-3">
+                <i data-lucide="bot" class="w-6 h-6"></i>
+            </div>
+            <p class="text-sm text-gray-400">No agent yet — create one to get started.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right: Agent Workspace -->
+    <div class="xl:col-span-3 space-y-6">
+    {% if not agent %}
+        <div class="glass-panel p-10 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-12 h-12 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center">
+                    <i data-lucide="bot" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">Create your AI Agent</h2>
+                    <p class="text-sm text-gray-400">Set it up now — you can add its knowledge base and fine-tune everything after.</p>
+                </div>
+            </div>
+
+            <form id="createAgentForm" class="space-y-4 mt-6 max-w-lg">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Agent Name</label>
+                    <input type="text" id="newAgentName" placeholder="e.g. Jane's Boutique Assistant" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#1DB954]"/>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Business Name (optional)</label>
+                    <input type="text" id="newAgentBusiness" placeholder="e.g. Jane's Boutique" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#1DB954]"/>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Greeting Message</label>
+                    <input type="text" id="newAgentGreeting" placeholder="Hi! How can I help you today?" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#1DB954]"/>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Personality</label>
+                    <select id="newAgentPersonality" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#1DB954] appearance-none">
+                        {% for key, desc in personalities.items() %}
+                        <option value="{{ key }}" {{ 'selected' if key == 'friendly' }}>{{ key|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <p id="createAgentError" class="text-sm text-red-400 hidden"></p>
+                <button type="submit" id="createAgentBtn" class="bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold py-2 px-6 rounded-lg transition-colors">Create My AI Agent</button>
+            </form>
+
+            <div class="border-t border-white/10 mt-6 pt-5">
+                <p class="text-xs text-gray-500 mb-2">Prefer we build it for you instead?</p>
+                <a href="{{ url_for('comms.thread', thread_id=([1, current_user.id]|sort|join('-'))) }}" class="inline-flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors">
+                    <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Message us for white-glove setup
+                </a>
+            </div>
+        </div>
+
+        <script>
+            document.getElementById('createAgentForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const errEl = document.getElementById('createAgentError');
+                const btn = document.getElementById('createAgentBtn');
+                errEl.classList.add('hidden');
+                btn.disabled = true;
+                btn.textContent = 'Creating...';
+                try {
+                    const res = await fetch('{{ url_for("dashboard.ai_chatbot_create") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                        body: JSON.stringify({
+                            name: document.getElementById('newAgentName').value,
+                            business_name: document.getElementById('newAgentBusiness').value,
+                            greeting: document.getElementById('newAgentGreeting').value,
+                            personality: document.getElementById('newAgentPersonality').value,
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Could not create your agent.');
+                    window.location.reload();
+                } catch (err) {
+                    errEl.textContent = err.message;
+                    errEl.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.textContent = 'Create My AI Agent';
+                }
+            });
+        </script>
+    {% else %}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Left column -->
+            <div class="space-y-6">
+                <!-- Configuration Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <form method="POST" action="{{ url_for('dashboard.ai_chatbot_save') }}" id="agentForm" class="space-y-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-bold text-white">Configuration</h3>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="active" name="active" {{ 'checked' if agent.active }} class="w-4 h-4 accent-[#1DB954]"/>
+                                <label for="active" class="text-sm font-medium text-gray-300">Active</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400 mb-1">Agent Name</label>
+                            <input type="text" name="name" value="{{ agent.name }}" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#1DB954]"/>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400 mb-1">Greeting Message</label>
+                            <textarea name="greeting" rows="2" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#1DB954]">{{ agent.greeting or '' }}</textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400 mb-1">Prompt / Instructions</label>
+                            <textarea name="ai_instructions" rows="6" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white font-mono text-sm focus:outline-none focus:border-[#1DB954]">{{ agent.ai_instructions or '' }}</textarea>
+                            <p class="text-xs text-gray-500 mt-1">Day-to-day knowledge (FAQs, business info) is managed below — this box is just tone/personality.</p>
+                        </div>
+                        <button type="submit" class="w-full bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold py-2 rounded-xl transition-colors">Save Changes</button>
+                    </form>
+                </div>
+
+                <!-- Knowledge Base Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <div class="flex items-center space-x-2 mb-1">
+                        <i data-lucide="book-open" class="w-5 h-5 text-[#8B5CF6]"></i>
+                        <h3 class="text-lg font-bold text-white">Knowledge Base</h3>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-4">What your agent knows about your business — grounds its replies so it doesn't invent prices, products, or policies.</p>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-400 mb-1">Business info (About Us, pricing, hours, policies...)</label>
+                        <textarea id="knowledgeTextField" name="knowledge_text" form="agentForm" rows="4" placeholder="e.g. We're open Mon-Sat 9am-6pm. Standard delivery takes 2-3 business days." class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954] resize-none">{{ agent.knowledge_text or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-400 mb-1">When information isn't available, reply with:</label>
+                        <input type="text" id="unknownReplyField" name="unknown_reply" form="agentForm" value="{{ agent.unknown_reply or '' }}" placeholder="Sorry, I don't have that information. Please contact our support team." class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-[#1DB954]"/>
+                    </div>
+
+                    <div class="flex justify-between items-center mb-3">
+                        <label class="block text-sm font-medium text-gray-400">FAQs</label>
+                        <button type="button" id="addFaqBtn" class="text-xs bg-white/10 hover:bg-white/20 text-white py-1 px-3 rounded flex items-center space-x-1">
+                            <i data-lucide="plus" class="w-3 h-3"></i> <span>Add FAQ</span>
+                        </button>
+                    </div>
+                    <div id="faqList" class="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-2"></div>
+                    <input type="hidden" name="faqs_json" id="faqsJson" form="agentForm" value="{{ (agent.faqs or [])|tojson }}"/>
+                </div>
+
+                <!-- Website & Documents Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <div class="flex items-center space-x-2 mb-1">
+                        <i data-lucide="globe" class="w-5 h-5 text-[#F2C94C]"></i>
+                        <h3 class="text-lg font-bold text-white">Website &amp; Documents</h3>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-4">Index a page from your website or upload a document — your agent will search it when answering.</p>
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="kbUrlInput" placeholder="https://yourbusiness.com/about" class="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#1DB954]">
+                        <button type="button" id="kbAddUrlBtn" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg whitespace-nowrap">Add Page</button>
+                    </div>
+                    <div class="mb-3">
+                        <button type="button" id="kbUploadBtn" class="text-xs bg-white/10 hover:bg-white/20 text-white py-1.5 px-3 rounded-lg flex items-center gap-1.5">
+                            <i data-lucide="upload" class="w-3.5 h-3.5"></i> <span id="kbUploadLabel">Upload PDF / DOCX / TXT</span>
+                        </button>
+                        <input type="file" id="kbFileInput" accept=".pdf,.docx,.txt,.csv" class="hidden"/>
+                    </div>
+                    <p id="kbError" class="text-xs text-red-400 mb-2 hidden"></p>
+                    <div id="kbSourceList" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1"></div>
+                </div>
+            </div>
+
+            <!-- Right column -->
+            <div class="space-y-6">
+                <!-- Deploy & Widget Code Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                        <i data-lucide="share-2" class="w-4 h-4 text-[#1DB954]"></i>
+                        Deploy & Widget Code
+                    </h3>
+                    <div class="space-y-3">
+                        <button type="button" onclick="navigator.clipboard.writeText('&lt;script src=&quot;{{ url_for('admin.chatbot_widget_js', bot_id=agent.id, _external=True) }}&quot;&gt;&lt;/script&gt;'); this.textContent='Copied!'" class="w-full bg-white/5 hover:bg-white/10 text-white font-medium py-2 rounded-xl text-xs border border-white/10 transition-colors">
+                            Copy Embed Code
+                        </button>
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('dashboard.chatbot_embed', bot_id=agent.id) }}" target="_blank" class="flex-1 bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-[#1DB954] font-bold py-2 rounded-xl text-center block text-xs border border-[#1DB954]/10 transition-colors">
+                                Open Standalone Link
+                            </a>
+                            <button type="button" onclick="navigator.clipboard.writeText('{{ url_for('dashboard.chatbot_embed', bot_id=agent.id, _external=True) }}'); this.textContent='Copied!'" class="flex-1 bg-white/5 hover:bg-white/10 text-white font-medium py-2 rounded-xl text-xs border border-white/10 transition-colors">
+                                Copy Standalone Link
+                            </button>
+                        </div>
+                        <a href="{{ url_for('dashboard.chatbot_wordpress_plugin', bot_id=agent.id) }}" class="w-full bg-white/5 hover:bg-white/10 text-white font-medium py-2 rounded-xl text-xs border border-white/10 transition-colors flex items-center justify-center gap-1.5">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i> Download WordPress Plugin
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Analytics Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
+                        <i data-lucide="bar-chart-3" class="w-5 h-5 text-[#1DB954]"></i> Analytics
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3 mb-5">
+                        <div class="bg-black/30 rounded-xl p-3 border border-white/5">
+                            <p class="text-2xl font-bold text-white" id="analyticsConversations">0</p>
+                            <p class="text-[11px] text-gray-500">Conversations</p>
+                        </div>
+                        <div class="bg-black/30 rounded-xl p-3 border border-white/5">
+                            <p class="text-2xl font-bold text-white" id="analyticsMessages">0</p>
+                            <p class="text-[11px] text-gray-500">Messages</p>
+                        </div>
+                    </div>
+                    <p class="text-xs font-semibold text-gray-400 mb-2">Messages — Last 14 Days</p>
+                    <div class="flex items-end gap-1 h-24" id="analyticsTrend"></div>
+                    <p id="analyticsEmpty" class="text-xs text-gray-500 text-center py-4 hidden">No activity yet — this fills in once real visitors start chatting.</p>
+                </div>
+
+                <!-- Appearance Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5 mb-4">
+                        <i data-lucide="palette" class="w-3.5 h-3.5"></i> Appearance
+                    </h4>
+
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-12 h-12 rounded-lg bg-black/30 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                            <img id="agentLogoPreview" src="{{ agent.logo_url or '' }}" class="w-full h-full object-cover {{ 'hidden' if not agent.logo_url }}">
+                            <i data-lucide="image" id="agentLogoPlaceholder" class="w-4 h-4 text-gray-500 {{ 'hidden' if agent.logo_url }}"></i>
+                        </div>
+                        <button type="button" id="agentLogoBtn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium text-white">Upload Logo</button>
+                        <input type="file" id="agentLogoInput" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" class="hidden">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <div>
+                            <label class="block text-[10px] text-gray-500 mb-1 uppercase">Position</label>
+                            <select id="wPosition" class="w-full bg-black/30 border border-white/10 rounded-lg p-1.5 text-xs text-white">
+                                <option value="bottom-right">Bottom Right</option>
+                                <option value="bottom-left">Bottom Left</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-500 mb-1 uppercase">Animation</label>
+                            <select id="wAnimation" class="w-full bg-black/30 border border-white/10 rounded-lg p-1.5 text-xs text-white">
+                                <option value="none">None</option>
+                                <option value="pulse">Pulse</option>
+                                <option value="bounce">Bounce</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-500 mb-1 uppercase">Icon</label>
+                            <select id="wIcon" class="w-full bg-black/30 border border-white/10 rounded-lg p-1.5 text-xs text-white">
+                                <option value="chat">Chat Bubble</option>
+                                <option value="bot">Bot</option>
+                                <option value="headset">Headset</option>
+                                <option value="message-circle">Message Circle</option>
+                                <option value="sparkles">Sparkles</option>
+                                <option value="logo">My Logo</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-500 mb-1 uppercase">Brand Color</label>
+                            <input type="color" id="wColor" class="w-full h-[30px] bg-black/30 border border-white/10 rounded-lg p-0.5">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="block text-[10px] text-gray-500 mb-1 uppercase">Button Label</label>
+                        <input type="text" id="wButtonText" placeholder="Chat with us" class="w-full bg-black/30 border border-white/10 rounded-lg p-1.5 text-xs text-white">
+                    </div>
+
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-400 mb-4">
+                        <label class="flex items-center gap-1.5"><input type="checkbox" id="wShowLabel" class="accent-[#1DB954]"> Show label</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" id="wDesktop" class="accent-[#1DB954]"> Show on desktop</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" id="wMobile" class="accent-[#1DB954]"> Show on mobile</label>
+                    </div>
+
+                    <button type="button" id="saveAppearanceBtn" class="w-full bg-white/10 hover:bg-white/20 text-white font-medium py-2 rounded-xl text-xs transition-colors">Save Appearance</button>
+                    <p id="appearanceMsg" class="text-xs text-center hidden mt-2"></p>
+                </div>
+
+                <!-- Conversation History Panel -->
+                <div class="glass-panel p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i data-lucide="history" class="w-5 h-5 text-[#1DB954]"></i> Conversation History
+                        </h3>
+                        <button type="button" id="refreshHistoryBtn" class="text-xs text-gray-400 hover:text-white flex items-center gap-1">
+                            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+                        </button>
+                    </div>
+                    <div id="conversationList" class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+                    <div id="conversationDetail" class="hidden">
+                        <button type="button" id="backToListBtn" class="text-xs text-gray-400 hover:text-white flex items-center gap-1 mb-3">
+                            <i data-lucide="arrow-left" class="w-3 h-3"></i> Back to all conversations
+                        </button>
+                        <div id="conversationMessages" class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+                    </div>
+                </div>
+
+                <!-- Test Chat Panel -->
+                <div class="glass-panel rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl flex flex-col h-[420px] overflow-hidden">
+                    <div class="bg-white/5 p-4 border-b border-white/10 rounded-t-2xl">
+                        <h3 class="text-sm font-bold text-white">Test Your Agent</h3>
+                        <p class="text-xs text-gray-500">Uses your currently SAVED instructions and knowledge base.</p>
+                    </div>
+                    <div id="testChatHistory" class="flex-1 p-4 overflow-y-auto space-y-3 text-sm"></div>
+                    <form id="testChatForm" class="p-3 bg-white/5 border-t border-white/10 flex items-center gap-2">
+                        <input type="text" id="testChatInput" placeholder="Type a message..." class="flex-1 bg-black/30 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#1DB954]"/>
+                        <button type="submit" class="p-2 bg-[#1DB954] text-black rounded-full hover:bg-[#1ed760] transition-colors"><i data-lucide="send" class="w-4 h-4"></i></button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+  <script>
+    // AGENT_ID is now defined once at the top, so it's available everywhere.
+    const AGENT_ID = {{ agent.id }};
+
+    // ── Analytics ──────────────────────────────────────────────────
+    (function() {
+      fetch(`/dashboard/chatbot/${AGENT_ID}/analytics`)
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('analyticsConversations').textContent = data.total_conversations || 0;
+          document.getElementById('analyticsMessages').textContent = data.total_messages || 0;
+          const trendEl = document.getElementById('analyticsTrend');
+          if (!data.total_messages) {
+            document.getElementById('analyticsEmpty').classList.remove('hidden');
+            return;
+          }
+          (data.trend || []).forEach(d => {
+            const bar = document.createElement('div');
+            bar.className = 'flex-1 flex flex-col items-center justify-end h-full group relative';
+            bar.innerHTML = `
+              <div class="w-full bg-[#1DB954]/80 hover:bg-[#1DB954] rounded-t transition-colors" style="height: ${d.pct}%; min-height: ${d.value === 0 ? '2px' : '4px'}"></div>
+              <div class="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity bg-black border border-white/10 text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap">${d.value}</div>
+            `;
+            trendEl.appendChild(bar);
+          });
+        }).catch(() => {});
+    })();
+
+    (function() {
+      const faqList = document.getElementById('faqList');
+      const faqsJsonInput = document.getElementById('faqsJson');
+      let faqs = [];
+      try { faqs = JSON.parse(faqsJsonInput.value || '[]'); } catch (e) { faqs = []; }
+
+      function renderFaqs() {
+        faqList.innerHTML = '';
+        faqs.forEach((faq, i) => {
+          const row = document.createElement('div');
+          row.className = 'bg-black/30 p-3 rounded-lg border border-white/5 space-y-2 relative';
+          row.innerHTML = `
+            <button type="button" data-i="${i}" class="removeFaqBtn absolute top-2 right-2 text-gray-500 hover:text-red-400 text-xs">✕</button>
+            <input type="text" data-i="${i}" data-field="question" value="${(faq.question||'').replace(/"/g,'&quot;')}" placeholder="Question" class="faqInput w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-xs text-white"/>
+            <textarea data-i="${i}" data-field="answer" rows="2" placeholder="Answer" class="faqInput w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-xs text-white resize-none">${faq.answer||''}</textarea>
+          `;
+          faqList.appendChild(row);
+        });
+        faqsJsonInput.value = JSON.stringify(faqs);
+        faqList.querySelectorAll('.removeFaqBtn').forEach(btn => {
+          btn.addEventListener('click', () => { faqs.splice(parseInt(btn.dataset.i), 1); renderFaqs(); });
+        });
+        faqList.querySelectorAll('.faqInput').forEach(inp => {
+          inp.addEventListener('input', () => {
+            faqs[parseInt(inp.dataset.i)][inp.dataset.field] = inp.value;
+            faqsJsonInput.value = JSON.stringify(faqs);
+          });
+        });
+      }
+      document.getElementById('addFaqBtn').addEventListener('click', () => {
+        faqs.push({ question: '', answer: '' });
+        renderFaqs();
+      });
+      renderFaqs();
+
+      // ── Appearance ──────────────────────────────────────────────
+      (function() {
+        const csrf = '{{ csrf_token() }}';
+        fetch(`/dashboard/chatbot/${AGENT_ID}/widget-settings`)
+          .then(r => r.json())
+          .then(cfg => {
+            document.getElementById('wPosition').value = cfg.position || 'bottom-right';
+            document.getElementById('wAnimation').value = cfg.animation || 'none';
+            document.getElementById('wIcon').value = cfg.icon || 'chat';
+            document.getElementById('wColor').value = cfg.button_color || '#1DB954';
+            document.getElementById('wButtonText').value = cfg.button_text || 'Chat with us';
+            document.getElementById('wShowLabel').checked = !!cfg.show_label;
+            document.getElementById('wDesktop').checked = cfg.desktop_visible !== false;
+            document.getElementById('wMobile').checked = cfg.mobile_visible !== false;
+          }).catch(() => {});
+
+        document.getElementById('agentLogoBtn').addEventListener('click', () => document.getElementById('agentLogoInput').click());
+        document.getElementById('agentLogoInput').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append('logo', file);
+          const btn = document.getElementById('agentLogoBtn');
+          btn.textContent = 'Uploading...';
+          try {
+            const res = await fetch(`/dashboard/chatbot/${AGENT_ID}/upload-logo`, {
+              method: 'POST', headers: { 'X-CSRFToken': csrf }, body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Upload failed.');
+            const img = document.getElementById('agentLogoPreview');
+            img.src = data.url;
+            img.classList.remove('hidden');
+            document.getElementById('agentLogoPlaceholder').classList.add('hidden');
+          } catch (err) {
+            alert(err.message);
+          } finally {
+            btn.textContent = 'Upload Logo';
+            e.target.value = '';
+          }
+        });
+
+        document.getElementById('saveAppearanceBtn').addEventListener('click', async () => {
+          const msgEl = document.getElementById('appearanceMsg');
+          try {
+            const res = await fetch(`/dashboard/chatbot/${AGENT_ID}/widget-settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+              body: JSON.stringify({
+                position: document.getElementById('wPosition').value,
+                animation: document.getElementById('wAnimation').value,
+                icon: document.getElementById('wIcon').value,
+                button_color: document.getElementById('wColor').value,
+                button_text: document.getElementById('wButtonText').value,
+                show_label: document.getElementById('wShowLabel').checked,
+                desktop_visible: document.getElementById('wDesktop').checked,
+                mobile_visible: document.getElementById('wMobile').checked,
+              })
+            });
+            if (!res.ok) throw new Error('Could not save.');
+            msgEl.textContent = 'Appearance saved.';
+            msgEl.className = 'text-xs text-center text-[#1DB954]';
+          } catch (err) {
+            msgEl.textContent = err.message;
+            msgEl.className = 'text-xs text-center text-red-400';
+          }
+        });
+      })();
+
+      // ── Website & Documents ──────────────────────────────────────
+      const kbErrorEl = document.getElementById('kbError');
+      const kbListEl = document.getElementById('kbSourceList');
+      const csrf = '{{ csrf_token() }}';
+
+      function showKbError(msg) {
+        kbErrorEl.textContent = msg;
+        kbErrorEl.classList.toggle('hidden', !msg);
+      }
+
+      function iconFor(type) { return type === 'url' ? 'globe' : 'file-text'; }
+
+      function renderSources(sources) {
+        kbListEl.innerHTML = '';
+        (sources || []).forEach(src => {
+          const row = document.createElement('div');
+          row.className = 'bg-black/30 p-2.5 rounded-lg border border-white/5 flex items-center justify-between gap-2';
+          row.innerHTML = `
+            <div class="flex items-center gap-2 min-w-0">
+              <i data-lucide="${iconFor(src.type)}" class="w-4 h-4 text-gray-500 shrink-0"></i>
+              <span class="text-xs text-white truncate">${src.title.replace(/</g,'&lt;')}</span>
+            </div>
+            <button type="button" data-id="${src.id}" class="kbRemoveBtn text-gray-500 hover:text-red-400 shrink-0"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+          `;
+          kbListEl.appendChild(row);
+        });
+        if (!sources || sources.length === 0) {
+          kbListEl.innerHTML = '<div class="text-center text-gray-500 text-xs py-3">No pages or documents indexed yet.</div>';
+        }
+        kbListEl.querySelectorAll('.kbRemoveBtn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const res = await fetch(`/dashboard/chatbot-knowledge/${AGENT_ID}/remove/${btn.dataset.id}`, {
+              method: 'POST', headers: { 'X-CSRFToken': csrf }
+            });
+            const data = await res.json();
+            if (res.ok) renderSources(data.sources);
+          });
+        });
+        if (window.lucide) lucide.createIcons();
+      }
+
+      // Initial load
+      fetch(`/dashboard/chatbot-knowledge/${AGENT_ID}/sources`)
+        .then(r => r.json()).then(d => renderSources(d.sources)).catch(() => {});
+
+      document.getElementById('kbAddUrlBtn').addEventListener('click', async () => {
+        const input = document.getElementById('kbUrlInput');
+        const url = input.value.trim();
+        if (!url) return;
+        showKbError('');
+        const btn = document.getElementById('kbAddUrlBtn');
+        btn.textContent = 'Fetching...'; btn.disabled = true;
+        try {
+          const res = await fetch(`/dashboard/chatbot-knowledge/${AGENT_ID}/add-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            body: JSON.stringify({ url })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Could not index that page.');
+          renderSources(data.sources);
+          input.value = '';
+        } catch (e) {
+          showKbError(e.message);
+        } finally {
+          btn.textContent = 'Add Page'; btn.disabled = false;
+        }
+      });
+
+      document.getElementById('kbUploadBtn').addEventListener('click', () => document.getElementById('kbFileInput').click());
+      document.getElementById('kbFileInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        showKbError('');
+        const label = document.getElementById('kbUploadLabel');
+        label.textContent = 'Uploading...';
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch(`/dashboard/chatbot-knowledge/${AGENT_ID}/add-file`, {
+            method: 'POST', headers: { 'X-CSRFToken': csrf }, body: formData
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Could not process that file.');
+          renderSources(data.sources);
+        } catch (e2) {
+          showKbError(e2.message);
+        } finally {
+          label.textContent = 'Upload PDF / DOCX / TXT';
+          e.target.value = '';
+        }
+      });
+
+      // ── Conversation History ────────────────────────────────────
+      (function() {
+        const listEl = document.getElementById('conversationList');
+        const detailWrap = document.getElementById('conversationDetail');
+        const messagesEl = document.getElementById('conversationMessages');
+
+        function loadList() {
+          fetch(`/dashboard/chatbot/${AGENT_ID}/conversations`)
+            .then(r => r.json())
+            .then(data => {
+              listEl.innerHTML = '';
+              if (!data.conversations || data.conversations.length === 0) {
+                listEl.innerHTML = '<div class="text-center text-gray-500 text-sm py-6">No conversations yet — once real visitors chat with your agent, they\'ll show up here.</div>';
+                return;
+              }
+              data.conversations.forEach(c => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'w-full text-left bg-black/30 hover:bg-black/50 p-3 rounded-lg border border-white/5 transition-colors block';
+                const when = c.last_at ? new Date(c.last_at).toLocaleString() : '';
+                btn.innerHTML = `
+                  <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs text-gray-400">${when}</span>
+                    <span class="text-[10px] text-gray-500">${c.message_count} msgs</span>
+                  </div>
+                  <p class="text-xs text-white truncate">${(c.last_message || '').replace(/</g,'&lt;')}</p>
+                `;
+                btn.addEventListener('click', () => loadDetail(c.session_id));
+                listEl.appendChild(btn);
+              });
+            }).catch(() => {});
+        }
+
+        function loadDetail(sessionId) {
+          fetch(`/dashboard/chatbot/${AGENT_ID}/conversations/${sessionId}`)
+            .then(r => r.json())
+            .then(data => {
+              messagesEl.innerHTML = '';
+              (data.messages || []).forEach(m => {
+                const row = document.createElement('div');
+                row.className = 'flex ' + (m.sender === 'user' ? 'justify-end' : 'justify-start');
+                row.innerHTML = `<div class="max-w-[80%] rounded-xl px-3 py-2 text-xs ${m.sender === 'user' ? 'bg-[#1DB954] text-black' : 'bg-white/10 text-white border border-white/5'}">${m.text.replace(/</g,'&lt;')}</div>`;
+                messagesEl.appendChild(row);
+              });
+              listEl.classList.add('hidden');
+              detailWrap.classList.remove('hidden');
+            }).catch(() => {});
+        }
+
+        document.getElementById('backToListBtn').addEventListener('click', () => {
+          detailWrap.classList.add('hidden');
+          listEl.classList.remove('hidden');
+        });
+        document.getElementById('refreshHistoryBtn').addEventListener('click', loadList);
+        loadList();
+      })();
+
+      const historyEl = document.getElementById('testChatHistory');
+      function addMsg(sender, text) {
+        const div = document.createElement('div');
+        div.className = sender === 'user' ? 'flex justify-end' : 'flex justify-start';
+        div.innerHTML = `<div class="max-w-[80%] rounded-2xl px-4 py-2 ${sender === 'user' ? 'bg-[#1DB954] text-black' : 'bg-white/10 text-white border border-white/5'}">${text.replace(/</g,'&lt;')}</div>`;
+        historyEl.appendChild(div);
+        historyEl.scrollTop = historyEl.scrollHeight;
+      }
+      document.getElementById('testChatForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('testChatInput');
+        const msg = input.value.trim();
+        if (!msg) return;
+        addMsg('user', msg);
+        input.value = '';
+        try {
+          const res = await fetch('{{ url_for("dashboard.ai_chatbot_test") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: JSON.stringify({ message: msg })
+          });
+          const data = await res.json();
+          addMsg('bot', data.reply || data.error || "Couldn't reach the AI right now.");
+        } catch (err) {
+          addMsg('bot', "Couldn't reach the AI right now — try again.");
+        }
+      });
+    })();
+  </script>
+{% endif %}
+    </div>
+</div>
+{% endblock %}

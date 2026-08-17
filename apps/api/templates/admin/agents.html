@@ -1,0 +1,161 @@
+{% extends "admin/base.html" %}
+{% block page_title %}AI Agent Studio{% endblock %}
+{% block page_subtitle %}Named AI personas that can actually take action on the site — create a to-do, draft a blog post, create an automation, and more{% endblock %}
+{% block content %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">New Agent</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.agent_create') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-4" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Avatar</label>
+          <input type="text" name="avatar_emoji" value="🤖" maxlength="8" class="a-input" style="margin-top:6px;text-align:center"/>
+        </div>
+        <div>
+          <label class="a-label">Name</label>
+          <input type="text" name="name" required class="a-input" style="margin-top:6px" placeholder="e.g. Sam"/>
+        </div>
+        <div>
+          <label class="a-label">Role</label>
+          <input type="text" name="role" class="a-input" style="margin-top:6px" placeholder="e.g. Marketing Manager"/>
+        </div>
+        <div>
+          <label class="a-label">Department (optional)</label>
+          <input type="text" name="department" class="a-input" style="margin-top:6px" placeholder="e.g. Marketing"/>
+        </div>
+      </div>
+      <label class="a-label">Instructions — who they are, their goals, how they should behave</label>
+      <textarea name="instructions" rows="3" required class="a-input" style="margin-top:6px"
+        placeholder="You're upbeat and data-driven. Your job is to keep the blog and social content flowing — suggest post ideas, draft posts when asked, and check in on what's performing well."></textarea>
+      <div style="margin-top:14px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" name="customer_facing" id="customer_facing" value="1" style="width:16px;height:16px"/>
+        <label for="customer_facing" style="font-size:12px;color:var(--text-2)">Give this agent a public chat widget visitors can use (conversation only — it can't take actions there)</label>
+      </div>
+      <input type="text" name="public_greeting" class="a-input" style="margin-top:8px" placeholder="Public greeting (optional) — e.g. Hi! Ask me anything about our services."/>
+      <div style="margin-top:14px">
+        <button type="submit" class="a-btn a-btn-primary">Create Agent</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Agents ({{ agents|length }})</div></div>
+  <div class="a-panel-body">
+    {% if not agents %}
+    <p style="color:var(--text-3);font-size:13px">No agents yet — create your first one above.</p>
+    {% endif %}
+    <div class="a-grid a-grid-3" style="gap:14px">
+      {% for a in agents %}
+      <div style="border:1px solid var(--border-1,rgba(255,255,255,0.08));border-radius:10px;padding:16px;{{ '' if a.active else 'opacity:0.5' }}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:24px">{{ a.avatar_emoji }}</span>
+          <div>
+            <div style="font-weight:600;font-size:14px">{{ a.name }}</div>
+            <div style="font-size:11px;color:var(--text-3)">{{ a.role or 'General' }}{% if a.department %} · {{ a.department }}{% endif %}</div>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text-2);margin-bottom:12px;max-height:60px;overflow:hidden">{{ a.instructions[:140] }}{% if a.instructions|length > 140 %}…{% endif %}</p>
+        {% if a.customer_facing %}
+        <p style="font-size:11px;margin-bottom:10px">
+          <a href="{{ url_for('cms.agent_widget', agent_id=a.id) }}" target="_blank" style="color:#38bdf8">🌐 Public chat link</a>
+          &nbsp;·&nbsp;
+          <a href="#" onclick="document.getElementById('embed-modal-{{ a.id }}').style.display='flex'; return false;" style="color:#38bdf8">🔗 Embed on another site</a>
+        </p>
+        {% endif %}
+        <p style="font-size:11px;color:var(--text-3);margin-bottom:10px">
+          {% if a.tools_permissions %}🔒 {{ a.tools_permissions|length }} tool(s) allowed{% else %}🔓 all tools allowed{% endif %}
+          · {{ a.model_name or 'default model' }} · temp {{ a.temperature if a.temperature is not none else 0.7 }}
+        </p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <a href="{{ url_for('admin.agent_chat', agent_id=a.id) }}" class="a-btn a-btn-xs a-btn-primary">💬 Chat</a>
+          <button type="button" class="a-btn a-btn-xs" onclick="document.getElementById('cfg-modal-{{ a.id }}').style.display='flex'">⚙️ Configure</button>
+          <form method="POST" action="{{ url_for('admin.agent_toggle', agent_id=a.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-xs">{{ 'Pause' if a.active else 'Activate' }}</button>
+          </form>
+          <form method="POST" action="{{ url_for('admin.agent_delete', agent_id=a.id) }}" onsubmit="return confirm('Delete {{ a.name }}? This clears their conversation history too.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-xs" style="color:#f87171">Delete</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="cfg-modal-{{ a.id }}" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+        <div class="a-panel" style="max-width:480px;width:92%;max-height:85vh;overflow:auto">
+          <div class="a-panel-header"><div class="a-panel-title">Configure {{ a.name }}</div></div>
+          <div class="a-panel-body">
+            <form method="POST" action="{{ url_for('admin.agent_update', agent_id=a.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <label class="a-label">Allowed tools — leave all unchecked for no restriction (every tool)</label>
+              <div style="max-height:220px;overflow:auto;border:1px solid var(--border-1,rgba(255,255,255,0.08));border-radius:8px;padding:10px;margin:6px 0 14px">
+                {% for tname, tdesc in tool_choices %}
+                <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+                  <input type="checkbox" name="tools_permissions" value="{{ tname }}"
+                         id="tp-{{ a.id }}-{{ tname }}" style="margin-top:3px"
+                         {{ 'checked' if a.tools_permissions and tname in a.tools_permissions else '' }}/>
+                  <label for="tp-{{ a.id }}-{{ tname }}" style="font-size:12px">
+                    <strong>{{ tname }}</strong><br><span style="color:var(--text-3)">{{ tdesc }}</span>
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+              <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+                <div>
+                  <label class="a-label">Model (blank = global default)</label>
+                  <input type="text" name="model_name" class="a-input" style="margin-top:6px"
+                         value="{{ a.model_name or '' }}" placeholder="e.g. claude-sonnet-5"/>
+                </div>
+                <div>
+                  <label class="a-label">Temperature (0.0–1.0)</label>
+                  <input type="number" name="temperature" class="a-input" style="margin-top:6px"
+                         min="0" max="1" step="0.1" value="{{ a.temperature if a.temperature is not none else 0.7 }}"/>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="document.getElementById('cfg-modal-{{ a.id }}').style.display='none'">Cancel</button>
+                <button type="submit" class="a-btn a-btn-primary a-btn-xs">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {% if a.customer_facing %}
+      <div id="embed-modal-{{ a.id }}" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+        <div class="a-panel" style="max-width:560px;width:92%;max-height:85vh;overflow:auto">
+          <div class="a-panel-header"><div class="a-panel-title">Embed {{ a.name }} on another site</div></div>
+          <div class="a-panel-body">
+            <p style="font-size:12px;color:var(--text-3);margin-bottom:10px">
+              Paste this snippet before <code>&lt;/body&gt;</code> on ANY site (yours or a client's) — it adds a
+              floating chat bubble that opens this agent. It's conversation-only there too, same as the public
+              link — no real actions, safe to hand out.
+            </p>
+            <textarea id="embed-code-{{ a.id }}" readonly rows="10" class="a-input" style="font-family:monospace;font-size:11px" onclick="this.select()">{% filter trim %}
+<script>
+(function(){
+  var d=document,btn=d.createElement('button'),frame=d.createElement('iframe'),open=false;
+  btn.innerHTML='{{ a.avatar_emoji }}';
+  btn.style.cssText='position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#2563eb;border:none;font-size:26px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.3);z-index:999999';
+  frame.src='{{ url_for("cms.agent_embed", agent_id=a.id, _external=True) }}';
+  frame.style.cssText='display:none;position:fixed;bottom:86px;right:20px;width:360px;height:520px;max-width:92vw;max-height:70vh;border:none;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:999999';
+  btn.onclick=function(){open=!open;frame.style.display=open?'block':'none';};
+  d.body.appendChild(frame);d.body.appendChild(btn);
+})();
+</script>
+{% endfilter %}</textarea>
+            <button type="button" class="a-btn a-btn-xs" style="margin-top:10px" onclick="navigator.clipboard.writeText(document.getElementById('embed-code-{{ a.id }}').value); this.textContent='Copied!'; setTimeout(()=>this.textContent='📋 Copy code',1500)">📋 Copy code</button>
+            <div style="display:flex;justify-content:flex-end;margin-top:14px">
+              <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="document.getElementById('embed-modal-{{ a.id }}').style.display='none'">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

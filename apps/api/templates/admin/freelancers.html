@@ -1,0 +1,142 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Freelancers & Jobs{% endblock %}
+{% block page_subtitle %}Manage freelancer verification and job listings{% endblock %}
+
+{% block topbar_actions %}
+<button onclick="openModal('fl-settings-modal')" class="topbar-btn">
+  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+  Platform Settings
+</button>
+{% endblock %}
+
+{% block content %}
+<div id="fl-tabs">
+  <div class="a-tabs" style="margin-bottom:20px">
+    <button class="a-tab active" data-tab="profiles" onclick="switchTab('fl-tabs','profiles')">Freelancer Profiles ({{ profiles|length }})</button>
+    <button class="a-tab" data-tab="jobs" onclick="switchTab('fl-tabs','jobs')">Job Postings ({{ jobs|length }})</button>
+  </div>
+
+  <!-- Profiles -->
+  <div id="fl-tabs-profiles" class="a-tab-panel active">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+      {% for fp in profiles %}
+      <div class="a-panel" style="padding:18px">
+        <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px">
+          <div class="a-avatar-fallback a-avatar-md">{{ (fp.user.name or fp.user.email or 'F')[0]|upper }}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px;color:var(--text)">{{ fp.user.name or '—' }}</div>
+            <div style="font-size:12px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ fp.title or 'No title set' }}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">{{ fp.user.email }}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+          {% if fp.verified %}
+          <span class="badge badge-success"><span class="badge-dot"></span>Verified</span>
+          {% elif fp.verification_submitted %}
+          <span class="badge badge-warning"><span class="badge-dot"></span>Pending Review</span>
+          {% else %}
+          <span class="badge badge-muted">Unverified</span>{% endif %}
+          {% if fp.featured %}<span class="badge badge-info">★ Featured</span>{% endif %}
+          {% if fp.hourly_rate %}<span class="badge badge-purple">{{ fp.hourly_rate|int | money }}/hr</span>{% endif %}
+        </div>
+        {% if fp.skills %}
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px">
+          {% for s in (fp.skills or [])[:4] %}
+          <span style="font-size:10px;padding:2px 7px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:5px;color:var(--text-muted)">{{ s }}</span>{% endfor %}
+        </div>{% endif %}
+        <div style="display:flex;gap:7px">
+          <form method="POST" action="{{ url_for('admin.verify_freelancer', fid=fp.id) }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn {{ 'a-btn-warning' if fp.verified else 'a-btn-success' }} a-btn-sm">
+              {{ 'Revoke' if fp.verified else 'Approve ✓' }}
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('admin.feature_freelancer', fid=fp.id) }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-ghost a-btn-sm">{{ 'Unfeature' if fp.featured else '★ Feature' }}</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <div style="grid-column:1/-1">
+        <div class="a-empty"><div class="a-empty-icon">🤝</div><div class="a-empty-title">No freelancer profiles yet</div></div>
+      </div>{% endfor %}
+    </div>
+  </div>
+
+  <!-- Jobs -->
+  <div id="fl-tabs-jobs" class="a-tab-panel">
+    <div class="a-panel">
+      <div class="a-table-wrap">
+        <table class="a-table">
+          <thead><tr><th>Job</th><th>Client</th><th>Budget</th><th>Proposals</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody>
+            {% for j in jobs %}
+            <tr>
+              <td>
+                <div style="font-weight:600;font-size:13px;color:var(--text)">{{ j.title }}</div>
+                <div class="text-muted">{{ j.category }} · {{ j.created_at | timeago }}</div>
+              </td>
+              <td><span class="text-muted">{{ j.client.name if j.client else '—' }}</span></td>
+              <td>
+                {% if j.budget_max %}<span class="mono" style="color:var(--green)">{{ (j.budget_min|int if j.budget_min else 0) | money }}–{{ j.budget_max|int | money }}</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td><span class="badge badge-info">{{ j.proposals.count() }}</span></td>
+              <td>
+                <span class="badge {{ 'badge-success' if j.status=='open' else 'badge-muted' }}">
+                  <span class="badge-dot"></span>{{ j.status|title }}
+                </span>
+              </td>
+              <td style="text-align:right">
+                {% if j.status == 'open' %}
+                <form method="POST" action="{{ url_for('admin.close_job', jid=j.id) }}" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                  <button type="submit" class="a-btn a-btn-danger a-btn-xs">Close</button>
+                </form>{% endif %}
+              </td>
+            </tr>{% else %}
+            <tr><td colspan="6"><div class="a-empty"><div class="a-empty-desc">No job postings yet</div></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Platform Settings Modal -->
+<div id="fl-settings-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Freelance Platform Settings</div>
+      <button class="a-modal-close" onclick="closeModal('fl-settings-modal')">✕</button>
+    </div>
+    <div class="a-modal-body" style="display:flex;flex-direction:column;gap:16px">
+      {% set toggles = [
+        ("freelancer_mode_enabled", "Freelancer Registration",  "Allow new freelancers to register"),
+        ("client_mode_enabled",     "Client Registration",      "Allow new clients to register and post jobs"),
+      ] %}
+      {% for key, label, desc in toggles %}
+      {% set is_on = fl_settings.get(key, 'true')|lower in ('true','1','yes') %}
+      <div style="display:flex;align-items:flex-start;gap:14px;padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px">
+        <label class="a-toggle" style="flex-shrink:0;margin-top:2px">
+          <input type="checkbox" {% if is_on %}checked{% endif %}
+            onchange="saveSetting('{{ key }}', this.checked?'true':'false')"/>
+          <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+        </label>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">{{ label }}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">{{ desc }}</div>
+        </div>
+      </div>{% endfor %}
+      <div style="padding:14px;background:rgba(255,211,42,0.05);border:1px solid rgba(255,211,42,0.15);border-radius:10px;font-size:12px;color:#ffd32a">
+        ⚠ Disabling freelancer registration will prevent new freelancers from signing up, but existing accounts are unaffected.
+      </div>
+    </div>
+    <div class="a-modal-footer">
+      <button onclick="closeModal('fl-settings-modal')" class="a-btn a-btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

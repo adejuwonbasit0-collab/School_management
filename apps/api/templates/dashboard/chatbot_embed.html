@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ bot.name }} — Powered by Bazillin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: #050505;
+            color: #e5e7eb;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.03);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 99px;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+    <!-- Chat Header -->
+    <div class="px-4 py-3 bg-white/5 border-b border-white/10 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden" style="background: {{ brand_color }};">
+                {% if bot.logo_url %}
+                <img src="{{ bot.logo_url }}" alt="" class="w-full h-full object-cover">
+                {% else %}
+                <i data-lucide="bot" class="w-5 h-5 text-black"></i>
+                {% endif %}
+            </div>
+            <div>
+                <h4 class="font-bold text-sm text-white">{{ bot.name }}</h4>
+                <div class="flex items-center space-x-1">
+                    <span class="w-2 h-2 rounded-full animate-pulse" style="background: {{ brand_color }};"></span>
+                    <span class="text-[10px] text-gray-400">Ask us anything</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages Container -->
+    <div id="messages-container" class="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-4">
+        <!-- Greeting -->
+        <div class="flex justify-start">
+            <div class="max-w-[85%] bg-white/10 border border-white/5 text-white rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm shadow-md">
+                <p>{{ bot.greeting or "Hello! How can I help you today?" }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Dots -->
+    <div id="typing-indicator" class="px-4 py-2 hidden">
+        <div class="flex justify-start">
+            <div class="bg-white/10 border border-white/5 rounded-2xl rounded-tl-sm px-4 py-2">
+                <div class="flex space-x-1">
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Footer -->
+    <div class="p-3 bg-white/5 border-t border-white/10">
+        <form id="chat-form" class="flex items-center space-x-2">
+            <input type="text" id="message-input" required class="flex-1 bg-black/50 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#1DB954]" placeholder="Type your message...">
+            <button type="submit" class="p-2.5 bg-[#1DB954] text-black rounded-full hover:bg-[#1ed760] transition-colors">
+                <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const container = document.getElementById("messages-container");
+        const indicator = document.getElementById("typing-indicator");
+        const form = document.getElementById("chat-form");
+        const input = document.getElementById("message-input");
+
+        // Client-side transcript + AI-turn tracking — used to (a) build
+        // the WhatsApp handoff message with real conversation context,
+        // and (b) tell the server how many AI-generated replies this
+        // visitor has already had, so it can hand off after the limit
+        // instead of acting like a full, unlimited AI chatbot. AI
+        // Chatbot (the separate product) isn't limited this way — see
+        // chatbot_reply()'s is_ai_chatbot_product check server-side.
+        let history = [];
+        let aiTurnsUsed = 0;
+        let handedOff = false;
+
+        // Persisted per-bot so a returning visitor's messages land in the
+        // same conversation in the dashboard's History view, instead of
+        // fragmenting into a new "session" every page load.
+        const SESSION_KEY = "bzn_chat_session_{{ bot.id }}";
+        let sessionId = localStorage.getItem(SESSION_KEY);
+        if (!sessionId) {
+            sessionId = "s_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+            localStorage.setItem(SESSION_KEY, sessionId);
+        }
+
+        function appendMessage(text, sender) {
+            const div = document.createElement("div");
+            div.className = "flex " + (sender === "user" ? "justify-end" : "justify-start");
+            
+            const inner = document.createElement("div");
+            inner.className = "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-md " + 
+                (sender === "user" ? "bg-[#1DB954] text-black rounded-tr-sm" : "bg-white/10 text-white border border-white/5 rounded-tl-sm");
+            
+            const p = document.createElement("p");
+            p.className = "whitespace-pre-wrap";
+            p.textContent = text;
+            
+            inner.appendChild(p);
+            div.appendChild(inner);
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendWhatsAppHandoff(url) {
+            const div = document.createElement("div");
+            div.className = "flex justify-start";
+            const inner = document.createElement("a");
+            inner.href = url;
+            inner.target = "_blank";
+            inner.rel = "noopener";
+            inner.className = "inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold text-sm rounded-full px-4 py-2.5 shadow-md";
+            inner.textContent = "Continue on WhatsApp →";
+            div.appendChild(inner);
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            handedOff = true;
+            input.disabled = true;
+            input.placeholder = "Continue this chat on WhatsApp";
+        }
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            if (handedOff) return;
+            const text = input.value.trim();
+            if (!text) return;
+            
+            input.value = "";
+            appendMessage(text, "user");
+            
+            indicator.classList.remove("hidden");
+            container.scrollTop = container.scrollHeight;
+            
+            try {
+                const response = await fetch("/admin/chatbot/{{ bot.id }}/reply", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ message: text, history: history, ai_turns_used: aiTurnsUsed, session_id: sessionId })
+                });
+                const data = await response.json();
+                indicator.classList.add("hidden");
+                
+                if (data.reply) {
+                    appendMessage(data.reply, "bot");
+                    history.push({ sender: "user", text: text });
+                    history.push({ sender: "bot", text: data.reply });
+                    if (data.source === "ai") {
+                        aiTurnsUsed += 1;
+                    }
+                    if (data.source === "handoff" && data.whatsapp_url) {
+                        appendWhatsAppHandoff(data.whatsapp_url);
+                    }
+                } else {
+                    appendMessage("Sorry, I encountered an error processing that message.", "bot");
+                }
+            } catch (err) {
+                indicator.classList.add("hidden");
+                appendMessage("Failed to send message.", "bot");
+            }
+        });
+    </script>
+</body>
+</html>

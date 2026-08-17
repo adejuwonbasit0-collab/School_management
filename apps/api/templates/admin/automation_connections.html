@@ -1,0 +1,146 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Connections{% endblock %}
+{% block page_subtitle %}Automation Studio — saved, encrypted connections your workflow nodes can use{% endblock %}
+
+{% block content %}
+{% set active_tab = 'connections' %}
+{% include "admin/partials/automation_tabs.html" with context %}
+
+<div class="a-panel" style="margin-bottom:16px">
+  <div class="a-panel-body" style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <p style="font-size:12px;color:var(--text-muted);margin:0">
+      Secrets are encrypted at rest and never shown again after saving. A node in the Automation
+      canvas can reference any connection here by its <strong>Connection</strong> dropdown instead of
+      having a raw token pasted into its config.
+    </p>
+    <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="openModal('new-connection-modal')" style="white-space:nowrap">+ New Connection</button>
+  </div>
+</div>
+
+{% if not credentials %}
+<div class="a-panel">
+  <div class="a-panel-body" style="padding:40px 20px;text-align:center;color:var(--text-muted)">
+    <p style="margin-bottom:12px">No connections saved yet.</p>
+    <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="openModal('new-connection-modal')">+ New Connection</button>
+  </div>
+</div>
+{% else %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+  {% for c in credentials %}
+  {% set usage = c.usage_count() %}
+  <div class="a-panel">
+    <div class="a-panel-body" style="padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text-muted);flex-shrink:0">
+          {{ c.provider[:2]|upper }}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;color:var(--text)">{{ c.name }}</div>
+          <div class="text-muted" style="font-size:11px">{{ (providers|selectattr('key','equalto',c.provider)|first).label if (providers|selectattr('key','equalto',c.provider)|list) else c.provider }}</div>
+        </div>
+        {% if not c.active %}<span class="badge badge-muted">Disabled</span>{% endif %}
+      </div>
+
+      <div style="font-size:12px;margin-bottom:12px">
+        {% if c.last_test_ok is none %}
+          <span style="color:var(--text-muted)">○ Not verified automatically — {{ c.last_test_message or 'this provider has no automatic check yet' }}</span>
+        {% elif c.last_test_ok %}
+          <span style="color:#1DB954">✓ Connected — {{ c.last_test_message }}</span>
+        {% else %}
+          <span style="color:#f87171">✕ Last test failed — {{ c.last_test_message }}</span>
+        {% endif %}
+      </div>
+
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">
+        Used by {{ usage }} workflow node{{ '' if usage == 1 else 's' }}
+        {% if c.last_tested_at %} · Last tested {{ c.last_tested_at.strftime('%b %d, %H:%M') }}{% endif %}
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <form method="POST" action="{{ url_for('admin.automation_connections_test', cid=c.id) }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="a-btn a-btn-ghost a-btn-sm">Test</button>
+        </form>
+        <button type="button" class="a-btn a-btn-ghost a-btn-sm" onclick="openModal('rename-{{ c.id }}')">Rename</button>
+        <form method="POST" action="{{ url_for('admin.automation_connections_toggle', cid=c.id) }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="a-btn a-btn-ghost a-btn-sm">{{ 'Enable' if not c.active else 'Disable' }}</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin.automation_connections_delete', cid=c.id) }}" style="display:inline" onsubmit="return confirm('Delete this connection?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="a-btn a-btn-ghost a-btn-sm" style="color:#f87171">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="rename-{{ c.id }}" class="a-modal-overlay">
+    <div class="a-modal">
+      <div class="a-modal-header">
+        <div class="a-modal-title">Rename connection</div>
+        <button class="a-modal-close" onclick="closeModal('rename-{{ c.id }}')">✕</button>
+      </div>
+      <form method="POST" action="{{ url_for('admin.automation_connections_rename', cid=c.id) }}">
+        <div class="a-modal-body">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <label class="a-label">Name</label>
+          <input name="name" class="a-input" value="{{ c.name }}"/>
+        </div>
+        <div class="a-modal-footer">
+          <button type="button" class="a-btn a-btn-ghost" onclick="closeModal('rename-{{ c.id }}')">Cancel</button>
+          <button type="submit" class="a-btn a-btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div id="new-connection-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header">
+      <div class="a-modal-title">New Connection</div>
+      <button class="a-modal-close" onclick="closeModal('new-connection-modal')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin.automation_connections_create') }}">
+      <div class="a-modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <label class="a-label">Provider</label>
+        <select name="provider" id="new-conn-provider" class="a-input" onchange="renderProviderFields()" style="margin-bottom:14px">
+          <option value="">Select a provider…</option>
+          {% for p in providers %}
+          <option value="{{ p.key }}">{{ p.label }}{{ '' if p.test_supported else ' (manual verification)' }}</option>
+          {% endfor %}
+        </select>
+
+        <label class="a-label">Connection name</label>
+        <input name="name" class="a-input" placeholder="e.g. My Business Slack" style="margin-bottom:14px"/>
+
+        <div id="provider-fields"></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" class="a-btn a-btn-ghost" onclick="closeModal('new-connection-modal')">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save &amp; Test Connection</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const PROVIDERS = {{ providers | tojson }};
+function renderProviderFields() {
+  const key = document.getElementById('new-conn-provider').value;
+  const wrap = document.getElementById('provider-fields');
+  const p = PROVIDERS.find(x => x.key === key);
+  if (!p) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = p.fields.map(f => `
+    <label class="a-label">${f.label}</label>
+    <input name="field_${f.key}" type="${f.secret ? 'password' : 'text'}" class="a-input" style="margin-bottom:10px" required/>
+  `).join('') + (p.test_supported
+    ? '<p style="font-size:11px;color:var(--text-muted)">Saving will make a real, read-only test call to confirm this works.</p>'
+    : '<p style="font-size:11px;color:var(--text-muted)">This provider doesn\'t have an automatic check yet — it\'ll be validated the first time a workflow uses it.</p>');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}{{ page_title|default('Dashboard') }} — Admin · {{ site_name }}{% endblock %}</title>
+<meta name="csrf-token" content="{{ csrf_token() }}"/>
+
+<!-- PWA & Mobile Web App Settings -->
+<link rel="manifest" href="/manifest.json"/>
+<meta name="theme-color" content="#0a0a0a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Bazillin Admin"/>
+<link rel="apple-touch-icon" href="/static/uploads/icon-192.png"/>
+
+<script>
+  // Global CSRF helper — reads the token from the meta tag above.
+  function getCsrf() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+  }
+
+  // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then((reg) => console.log('PWA Service Worker registered:', reg.scope))
+        .catch((err) => console.error('PWA Service Worker registration failed:', err));
+    });
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}"/>
+{% block extra_head %}{% endblock %}
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Several admin pages rely on Alpine's x-data/@click directives, but the
+     Alpine.js library itself was never loaded here — every button on those
+     pages silently did nothing until this was added. -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<!-- Several admin pages (Website Builder among them) use Lucide's
+     data-lucide="..." icon placeholders and call lucide.createIcons()
+     directly, but the Lucide library itself was never loaded in the admin
+     layout (only in the dashboard/public layouts) — so every such icon
+     stayed invisible, and any code that called lucide.createIcons() before
+     its own try/catch (like Website Builder's Generate button) threw a
+     ReferenceError and aborted immediately, before ever making its fetch
+     call. -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
+        body: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
+      colors: {
+        background: '#0a0a0a',
+        foreground: '#FFFFFF',
+        primary: '#1DB954',
+        secondary: '#F2C94C',
+        muted: '#B3B3B3',
+        surface: '#121212',
+        cyan: { 50:'#E6F9EC',100:'#C0F0D0',200:'#94E0B0',300:'#5ECF90',400:'#2ECC71',500:'#1DB954',600:'#189C46',700:'#147D38',800:'#10612C',900:'#0C4A22',950:'#062712' },
+        purple: { 50:'#FFF9E6',100:'#FFEFB8',200:'#FFE180',300:'#FFD24D',400:'#F7C948',500:'#F2C94C',600:'#D9AE2E',700:'#B38A1F',800:'#8C6A17',900:'#6B5010',950:'#3D2C08' },
+      },
+    }
+  }
+}
+</script>
+</head>
+<body class="admin-body">
+<div class="site-glow-bg" style="opacity:.6"></div>
+
+<!-- Flash messages -->
+<div class="a-flash-container" id="flash-container">
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for cat, msg in messages %}
+<div class="a-flash {{ 'success' if cat=='success' else 'error' if cat=='danger' else 'warning' if cat=='warning' else 'info' }}">
+  <span>{{ '✓' if cat=='success' else '✕' if cat=='danger' else '⚠' if cat=='warning' else 'ℹ' }}</span>
+  <span style="flex:1">{{ msg }}</span>
+  <button class="a-flash-close" onclick="this.closest('.a-flash').remove()">✕</button>
+</div>
+{% endfor %}
+{% endwith %}
+</div>
+
+<div class="admin-shell">
+
+  <!-- Sidebar mobile overlay — must live inside .admin-shell so its z-index
+       is compared against the sidebar's within the same stacking context.
+       (It previously sat outside .admin-shell as a root-level sibling,
+       which meant its z-index:99 always beat the sidebar's z-index:100,
+       since that 100 was scoped inside .admin-shell's own z-index:1
+       context and could never "escape" to outrank a root-level sibling.) -->
+  <div id="sidebar-overlay" class="admin-sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside id="sidebar" class="admin-sidebar">
+    <!-- Logo -->
+    <div class="admin-sidebar-logo">
+      <a href="{{ url_for('admin.dashboard') }}" class="admin-logo-mark">B</a>
+      <div>
+        <div class="admin-logo-text">{{ site_name }}</div>
+        <div class="admin-logo-sub">Admin Control</div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="sidebar-nav">
+
+      <div class="sidebar-section-label">Dashboard</div>
+      {% set dash_links = [
+        ('admin.dashboard',  'Overview',       'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'),
+        ('admin.guide',      '📘 Site Guide',  'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'),
+        ('admin.analytics',  'Analytics',      'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
+        ('admin.rich_notes', '📝 Notebook Workspace', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'),
+        ('admin.ai_developer_tool', '🛠️ AI Developer Tool', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z'),
+        ('admin.ai_console', '🧠 AI Console', 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z'),
+        ('admin.agents', '👥 AI Agents', 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.65'),
+        ('admin.knowledge_base', '📚 Knowledge Base', 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'),
+        ('admin.partners', '🤝 Partners', 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857m0 0a5.002 5.002 0 00-9.288 0M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'),
+        ('admin.inactive_clients', '💤 Inactive Clients', 'M13 10V3L4 14h7v7l9-11h-7z'),
+        ('admin.security_center', '🛡️ Security Center', 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'),
+      ] %}
+      {% for ep, label, path in dash_links %}
+      <a href="{{ url_for(ep) }}" class="sidebar-link {{ 'active' if request.endpoint == ep }}">
+        <svg class="s-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="{{ path }}"/></svg>
+        {{ label }}
+      </a>{% endfor %}
+
+      {% macro nav_group(name, title, links) %}
+      {% set has_active = links | selectattr(0, 'equalto', request.endpoint) | list | length > 0 %}
+      <div class="sidebar-group" data-group="{{ name }}">
+        <button type="button" class="sidebar-group-header" onclick="toggleSidebarGroup('{{ name }}')">
+          <span>{{ title }}</span>
+          <svg id="chevron-{{ name }}" class="sidebar-group-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="width:14px;height:14px;transition:transform .15s"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="sidebar-group-links" id="group-{{ name }}" data-has-active="{{ 'true' if has_active else 'false' }}">
+          {% for ep, label, path in links %}
+          <a href="{{ url_for(ep) }}" class="sidebar-link sidebar-link-nested {{ 'active' if request.endpoint == ep }}">
+            <svg class="s-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="{{ path }}"/></svg>
+            {{ label }}
+          </a>{% endfor %}
+        </div>
+      </div>
+      {% endmacro %}
+
+      {{ nav_group('growth', 'Growth & Marketing', [
+        ('admin.creative_studios_hub', 'Creative Studios', 'M12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22Z'),
+        ('admin.newsletter',  'Newsletter',         'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'),
+        ('admin.email_sequences', 'Email Sequences', 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'),
+        ('admin.site_popups', 'Site Popups', 'M4 6h16M4 12h16M4 18h7'),
+        ('admin.leads',       'Leads & Cold Email', 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'),
+        ('admin.referrals',   'Referrals', 'M13.828 10.172a4 4 0 010 5.656l-1.5 1.5a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l1.5-1.5a4 4 0 015.656 5.656l-1.5 1.5'),
+        ('admin.trends',      'Trends',             'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6'),
+      ]) }}
+
+      {{ nav_group('automation', 'Automation & Bots', [
+        ('admin.todos', 'To-Do',                    'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'),
+        ('admin.ai_chatbot_agents', '💬 AI Chatbot Agents',  'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z'),
+        ('admin.automation_connections', '🔌 Connections',  'M13 10V3L4 14h7v7l9-11h-7z'),
+      ]) }}
+
+      {{ nav_group('clients', 'Clients & Projects', [
+        ('admin.project_requests', 'Project Requests',    'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'),
+        ('admin.admin_projects',   'Client Projects',     'M13 10V3L4 14h7v7l9-11h-7z'),
+        ('admin.freelancers', 'Freelancers',        'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'),
+        ('admin.confirm_payments', 'Confirm Payments', 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'),
+      ]) }}
+
+      {{ nav_group('store', 'Store & Content', [
+        ('admin.customer_tools', '🚀 Customer Tools', 'M13 10V3L4 14h7v7l9-11h-7z'),
+        ('admin.products', 'Products',      'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'),
+        ('admin.addons_list', 'Premium Modules', 'M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l-.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z'),
+        ('admin.payment_links', 'Payment Links', 'M13.828 10.172a4 4 0 010 5.656l-4 4a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l4-4a4 4 0 015.656 5.656l-1.5 1.5'),
+        ('admin.orders',   'Orders',        'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'),
+        ('admin.blog',     'Blog Posts',    'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'),
+        ('admin.media',    'Media Library', 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'),
+        ('admin.portfolio',   'Portfolio & About',  'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'),
+        ('admin.admin_components', 'UI Components', 'M4 6h16M4 12h16M4 18h7'),
+        ('admin.hosting',     'Hosting',            'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01'),
+        ('admin.credit_packages', 'Credit Packages', 'M13 10V3L4 14h7v7l9-11h-7z'),
+      ]) }}
+
+      {{ nav_group('people', 'People & Support', [
+        ('admin.users',    'Users',         'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'),
+        ('admin.roles',    'Roles & Perms', 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z'),
+        ('admin.support',          'Support Tickets',     'M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z'),
+        ('admin.faq',              'FAQ / Chat Widget',   'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'),
+      ]) }}
+
+      {{ nav_group('config', 'Finance & Settings', [
+        ('admin.financials', 'Financials', 'M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m-3 9v-3m9-9a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2h9z'),
+        ('admin.wallets', 'Wallets', 'M21 12V7H5a2 2 0 010-4h14v4M3 5v14a2 2 0 002 2h16v-5M18 12a2 2 0 100 4 2 2 0 000-4z'),
+        ('admin.withdrawals', 'Withdrawals', 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m9-8a9 9 0 11-18 0 9 9 0 0118 0z'),
+        ('admin.payment_config', 'Payment Config', 'M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'),
+        ('admin.settings',       'Site Settings',    'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z'),
+        ('admin.cms',            'CMS / Content',    'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'),
+        ('admin.email_templates','Email Templates',  'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'),
+        ('admin.seo_settings', 'SEO',          'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'),
+        ('admin.security_settings', 'Security',    'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z'),
+        ('admin.health',     'System Health',  'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z'),
+        ('admin.audit',      'Audit Log',      'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'),
+      ]) }}
+
+    </nav>
+
+    <script>
+      function toggleSidebarGroup(name) {
+        const linksEl = document.getElementById('group-' + name);
+        const chevron = document.getElementById('chevron-' + name);
+        const isOpen = linksEl.style.display !== 'none';
+        linksEl.style.display = isOpen ? 'none' : 'block';
+        chevron.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
+        localStorage.setItem('sidebar_group_' + name, isOpen ? 'closed' : 'open');
+      }
+      document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.sidebar-group').forEach(function(group) {
+          const name = group.getAttribute('data-group');
+          const linksEl = document.getElementById('group-' + name);
+          const chevron = document.getElementById('chevron-' + name);
+          const hasActive = linksEl.getAttribute('data-has-active') === 'true';
+          const stored = localStorage.getItem('sidebar_group_' + name);
+          // Default: collapsed, unless this group contains the current page,
+          // or the person previously left it open themselves.
+          const open = hasActive || stored === 'open';
+          linksEl.style.display = open ? 'block' : 'none';
+          chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+        });
+      });
+    </script>
+
+    <!-- Footer -->
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar a-avatar-sm">{{ (current_user.name or current_user.email or 'A')[0]|upper }}</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name">{{ current_user.name or 'Admin' }}</div>
+          <div class="sidebar-user-role">{{ current_user.email }}</div>
+        </div>
+      </div>
+      <div class="sidebar-actions">
+        <a href="{{ url_for('cms.home') }}" target="_blank" class="sidebar-action-btn">View Site</a>
+        <a href="{{ url_for('auth.logout') }}" class="sidebar-action-btn danger">Logout</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <div class="admin-main">
+
+    <!-- Topbar -->
+    <header class="admin-topbar">
+      <div class="topbar-left">
+        <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Menu">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <div>
+          <div class="topbar-page-title">{% block page_title %}Dashboard{% endblock %}</div>
+          <div class="topbar-breadcrumb">{% block page_subtitle %}{% endblock %}</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        {% block topbar_actions %}{% endblock %}
+        <div class="relative" id="admin-currency-wrap">
+          <button id="admin-currency-btn" onclick="toggleAdminCurrencyDropdown()" class="topbar-btn" style="display:flex;align-items:center;gap:4px;font-weight:700">
+            {{ active_display_currency }}
+            <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div id="admin-currency-dropdown" class="hidden" style="position:absolute;right:0;margin-top:8px;width:200px;background:#121212;border:1px solid rgba(255,255,255,.1);border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.6);z-index:50;overflow:hidden">
+            <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.08);font-size:11px;color:#7A7A7A">View admin stats in</div>
+            {% for code, info in currency_switcher_options %}
+            <a href="#" onclick="setAdminCurrency(event,'{{ code }}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-size:13px;text-decoration:none;{% if code == active_display_currency %}color:#1DB954;font-weight:700;{% else %}color:#ccc;{% endif %}">
+              <span>{{ info.symbol }} {{ code }}</span>
+              <span style="font-size:10px;color:#7A7A7A">{{ info.name }}</span>
+            </a>
+            {% endfor %}
+            {% if currency_switcher_options|length <= 1 %}
+            <a href="{{ url_for('admin.payment_config') }}" style="display:block;padding:10px 14px;font-size:12px;color:#7A7A7A">Set exchange rates to add more →</a>
+            {% endif %}
+          </div>
+        </div>
+        <div class="relative" id="admin-notif-wrap">
+          <button id="admin-notif-bell" onclick="toggleAdminNotifDropdown()" class="topbar-btn relative" aria-label="Notifications">
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            <span id="admin-notif-badge" class="hidden" style="position:absolute;top:-2px;right:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:9999px;background:#1DB954;color:#000;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center"></span>
+          </button>
+          <div id="admin-notif-dropdown" class="hidden" style="position:absolute;right:0;margin-top:8px;width:320px;max-height:400px;overflow-y:auto;background:#121212;border:1px solid rgba(255,255,255,.1);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.6);z-index:50">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)">
+              <span style="font-size:13px;font-weight:700;color:#fff">Notifications</span>
+              <button onclick="markAllAdminNotifsRead()" style="font-size:11px;color:#1DB954;background:none;border:none;cursor:pointer">Mark all read</button>
+            </div>
+            <div id="admin-notif-list"><p style="font-size:13px;color:#7A7A7A;text-align:center;padding:28px 0">Loading…</p></div>
+          </div>
+        </div>
+        <a href="{{ url_for('cms.home') }}" target="_blank" class="topbar-btn hide-mobile">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          View Site
+        </a>
+      </div>
+    </header>
+
+    <script>
+    function toggleAdminCurrencyDropdown() {
+      document.getElementById('admin-currency-dropdown').classList.toggle('hidden');
+    }
+    document.addEventListener('click', function (e) {
+      const wrap = document.getElementById('admin-currency-wrap');
+      if (wrap && !wrap.contains(e.target)) document.getElementById('admin-currency-dropdown').classList.add('hidden');
+    });
+    function setAdminCurrency(e, code) {
+      e.preventDefault();
+      window.location.href = '/set-currency/' + code + '?next=' + encodeURIComponent(window.location.href);
+    }
+    </script>
+
+    <script>
+    function toggleAdminNotifDropdown() {
+      const dd = document.getElementById('admin-notif-dropdown');
+      const opening = dd.classList.contains('hidden');
+      dd.classList.toggle('hidden');
+      if (opening) loadAdminNotifications();
+    }
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('admin-notif-wrap');
+      if (wrap && !wrap.contains(e.target)) document.getElementById('admin-notif-dropdown').classList.add('hidden');
+    });
+    async function loadAdminNotifications() {
+      try {
+        const res = await fetch('/api/notifications');
+        const data = await res.json();
+        const badge = document.getElementById('admin-notif-badge');
+        if (data.unread_count > 0) { badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count; badge.classList.remove('hidden'); }
+        else { badge.classList.add('hidden'); }
+        const list = document.getElementById('admin-notif-list');
+        if (!data.notifications.length) { list.innerHTML = '<p style="font-size:13px;color:#7A7A7A;text-align:center;padding:28px 0">No notifications yet.</p>'; return; }
+        list.innerHTML = data.notifications.map(n => `
+          <a href="${n.link || '#'}" onclick="fetch('/notifications/read/${n.id}',{method:'POST',headers:{'X-CSRFToken':getCsrf()}})" style="display:block;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);text-decoration:none;${n.read ? 'opacity:.6' : ''}">
+            <p style="font-size:13px;color:#fff;font-weight:600;margin:0">${n.title || 'Notification'}</p>
+            <p style="font-size:12px;color:#B3B3B3;margin:2px 0 0">${n.body || ''}</p>
+            <p style="font-size:11px;color:#5C5C60;margin:4px 0 0">${n.created_at}</p>
+          </a>`).join('');
+      } catch (e) {}
+    }
+    async function markAllAdminNotifsRead() {
+      try { await fetch('/notifications/read-all', { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } }); loadAdminNotifications(); } catch (e) {}
+    }
+    loadAdminNotifications();
+    setInterval(loadAdminNotifications, 60000);
+    </script>
+
+    <!-- Content -->
+    <main class="admin-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+</div>
+
+<script>
+// Note: getCsrf() is already defined globally in <head> via the csrf-token meta tag.
+
+// Toast
+function showToast(msg, type='info') {
+  const colors = { success:'success', error:'error', warning:'warning', info:'info' };
+  const icons  = { success:'✓', error:'✕', warning:'⚠', info:'ℹ' };
+  const el = document.createElement('div');
+  el.className = 'a-flash ' + (colors[type] || 'info');
+  el.innerHTML = `<span>${icons[type]||'ℹ'}</span><span style="flex:1">${msg}</span><button class="a-flash-close" onclick="this.closest('.a-flash').remove()">✕</button>`;
+  let c = document.getElementById('flash-container');
+  if (!c) { c = document.createElement('div'); c.id='flash-container'; c.className='a-flash-container'; document.body.appendChild(c); }
+  c.appendChild(el);
+  setTimeout(() => { el.style.transition='opacity .4s,transform .4s'; el.style.opacity='0'; el.style.transform='translateX(16px)'; setTimeout(()=>el.remove(),400); }, 4500);
+}
+
+// Sidebar
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  sb.classList.toggle('mobile-open');
+  ov.classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeSidebar(); });
+
+// Modal
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('open'); document.body.style.overflow='hidden'; }
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.remove('open'); document.body.style.overflow=''; }
+}
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('a-modal-overlay')) closeModal(e.target.id);
+});
+
+// Tabs
+function switchTab(containerId, tabName) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.a-tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tabName));
+  container.querySelectorAll('.a-tab-panel').forEach(p => p.classList.toggle('active', p.id===containerId+'-'+tabName));
+}
+
+// Accordion
+function toggleAccordion(id) {
+  const header = document.querySelector(`[data-accordion="${id}"]`);
+  const body   = document.getElementById(id);
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  if (header) header.classList.toggle('open', open);
+}
+
+// Auto-dismiss flash after 4.5s
+setTimeout(() => {
+  document.querySelectorAll('.a-flash').forEach(el => {
+    el.style.transition='opacity .4s,transform .4s';
+    el.style.opacity='0'; el.style.transform='translateX(16px)';
+    setTimeout(()=>el.remove(),400);
+  });
+}, 4500);
+
+// Poll for due To-Do reminders while logged in (no background task runner
+// in this stack, so this only fires while an admin is actually here — see
+// /admin/api/check-reminders for the cron-based fallback that works even
+// when nobody's logged in).
+async function checkDueReminders() {
+  try {
+    const res = await fetch('{{ url_for("admin.due_reminders_api") }}');
+    const data = await res.json();
+    (data.due || []).forEach(t => showToast('⏰ Reminder: ' + t.title, 'info'));
+  } catch (e) { /* fail silently */ }
+}
+checkDueReminders();
+setInterval(checkDueReminders, 60000);
+
+// Save setting (used across all admin pages)
+async function saveSetting(key, value, feedbackEl) {
+  try {
+    const res = await fetch('{{ url_for("admin.settings_update") }}', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify({key, value})
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast('Saved: '+key.replace(/_/g,' '), 'success');
+      if (feedbackEl) { feedbackEl.textContent='✓ Saved'; feedbackEl.style.color='var(--green)'; setTimeout(()=>{feedbackEl.textContent='';},2500); }
+    } else {
+      showToast(d.error||'Save failed','error');
+    }
+  } catch(e) { showToast('Network error','error'); }
+}
+</script>
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% include "admin/partials/media_picker.html" %}
+{% block extra_scripts %}{% endblock %}
+<script>
+  // Render every static data-lucide="..." icon already in the page on
+  // initial load. Individual pages still call lucide.createIcons() again
+  // themselves after swapping in new icon markup dynamically (e.g. a
+  // button's icon changing to a spinner) — this just covers the icons
+  // that are already in the HTML the moment the page loads, which nothing
+  // else was triggering.
+  if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+</script>
+</body>
+</html>

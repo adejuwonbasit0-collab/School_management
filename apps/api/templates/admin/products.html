@@ -1,0 +1,525 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Products{% endblock %}
+{% block page_subtitle %}{{ products.total }} products in the marketplace{% endblock %}
+
+{% block topbar_actions %}
+<button onclick="openModal('import-software-modal')" class="topbar-btn" style="margin-right:8px">
+  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 10l5 5 5-5M12 15V3"/></svg>
+  Import Software
+</button>
+<button onclick="openModal('create-product-modal')" class="topbar-btn primary">
+  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  Add Product
+</button>
+{% endblock %}
+
+{% block content %}
+{% if legacy_seed_count %}
+<div class="a-panel" style="margin-bottom:16px;border-color:#d29922;background:rgba(210,153,34,0.08)">
+  <div class="a-panel-body" style="padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div>
+      <strong style="color:#d29922">⚠ {{ legacy_seed_count }} product(s) shouldn't be in this marketplace</strong>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:4px">Website Builder, Automation Studio, Graphics/Content/Video Studio, Social Bot, Prompt Library, and Voice Studio are admin-only tools — they were auto-seeded here by mistake. (AI Chatbot is a real customer product — manage it from <a href="{{ url_for('admin.customer_tools') }}" style="color:inherit;text-decoration:underline">Customer Tools</a>.)</p>
+    </div>
+    <form method="POST" action="{{ url_for('admin.archive_legacy_seed_products') }}" onsubmit="return confirm('Archive these {{ legacy_seed_count }} products? They\'ll be hidden from the marketplace but not deleted (existing orders stay intact).')">
+      <button class="a-btn a-btn-primary a-btn-sm">Archive These Now</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+<!-- Filters -->
+<div class="a-panel" style="margin-bottom:16px">
+  <div class="a-panel-body" style="padding:14px 20px">
+    <form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div class="a-search" style="flex:1;min-width:200px">
+        <svg class="a-search-icon" width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input name="q" value="{{ q }}" class="a-input a-search-input" placeholder="Search products…"/>
+      </div>
+      <select name="category" class="a-input" style="width:150px">
+        <option value="">All Categories</option>
+        {% for cat in ['template','ui-kit','source-code','wordpress-plugin','script','ai-prompt','icon','animation','component','api','saas-boilerplate','software','ebook'] %}
+        <option value="{{ cat }}" {% if request.args.get('category')==cat %}selected{% endif %}>{{ cat|title }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" class="a-input" style="width:130px">
+        <option value="">All Status</option>
+        {% for s in ['active','draft','pending','rejected','archived'] %}
+        <option value="{{ s }}" {% if request.args.get('status')==s %}selected{% endif %}>{{ s|title }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="a-btn a-btn-ghost">Filter</button>
+    </form>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="a-panel">
+  <div class="a-table-wrap">
+    <table class="a-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Category</th>
+          <th>Price</th>
+          <th>Downloads</th>
+          <th>Status</th>
+          <th>Featured</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products.items %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,rgba(29, 185, 84,0.15),rgba(242, 201, 76,0.15));display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">
+                {% if p.images and p.images[0] %}
+                <img src="{{ p.images[0] }}" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>
+                {% else %}📦{% endif %}
+              </div>
+              <div>
+                <div style="font-weight:600;font-size:13px;color:var(--text)">{{ p.title|truncate(40) }}</div>
+                <div class="text-muted mono">v{{ p.version }} · {{ p.license|title }}</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-purple">{{ p.category }}</span></td>
+          <td>
+            <div style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--text)">{{ p.price|int | money(p.currency) }}</div>
+            {% if p.sale_price %}<div style="font-size:11px;color:var(--green)">Sale: {{ p.sale_price|int | money(p.currency) }}</div>{% endif %}
+          </td>
+          <td><span style="font-family:'JetBrains Mono',monospace;color:var(--cyan)">{{ p.download_count }}</span></td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.update_product_status', pid=p.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <select name="status" onchange="this.form.submit()" class="a-input" style="width:110px;padding:4px 8px;font-size:11px">
+                {% for s in ['active','draft','pending','rejected','archived'] %}
+                <option value="{{ s }}" {% if p.status==s %}selected{% endif %}>{{ s|title }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.toggle_product_featured', pid=p.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" style="background:none;border:none;cursor:pointer;font-size:18px;transition:transform .2s"
+                onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'"
+                title="{{ 'Remove featured' if p.featured else 'Mark as featured' }}">
+                {{ '★' if p.featured else '☆' }}
+              </button>
+            </form>
+          </td>
+          <td style="text-align:right">
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              {% if p.demo_url %}
+              <a href="{{ p.demo_url }}" target="_blank" class="a-btn a-btn-ghost a-btn-xs">Demo</a>
+              {% endif %}
+              <a href="{{ url_for('marketplace.product_detail', slug=p.slug) }}" target="_blank" class="a-btn a-btn-ghost a-btn-xs">View</a>
+              <button type="button" class="a-btn a-btn-ghost a-btn-xs"
+                onclick='editProduct({{ {"id": p.id, "title": p.title, "description": p.description or "", "long_desc": p.long_desc or "", "category": p.category or "template", "license": p.license or "standard", "price": p.price or 0, "sale_price": p.sale_price or "", "currency": p.currency or "USD", "tags": (p.tags or [])|join(", "), "file_url": p.file_url or "", "image_url": (p.images[0] if p.images else ""), "preview_url": p.preview_url or "", "demo_url": p.demo_url or "", "version": p.version or "", "featured": p.featured}|tojson }})'>Edit</button>
+              <form method="POST" action="{{ url_for('admin.delete_product', pid=p.id) }}" style="display:inline"
+                onsubmit="return confirm('Delete {{ p.title }}?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">
+          <div class="a-empty">
+            <div class="a-empty-icon">📦</div>
+            <div class="a-empty-title">No products yet</div>
+            <div class="a-empty-desc">Add your first product to the marketplace</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if products.pages > 1 %}
+  <div class="a-pagination">
+    {% if products.has_prev %}<a href="{{ url_for('admin.products', page=products.prev_num, q=q) }}" class="a-page-btn">←</a>{% endif %}
+    <span style="font-size:12px;color:var(--text-muted)">Page {{ products.page }}/{{ products.pages }}</span>
+    {% if products.has_next %}<a href="{{ url_for('admin.products', page=products.next_num, q=q) }}" class="a-page-btn">→</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Create Product Modal -->
+<div id="create-product-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Add New Product</div>
+      <button class="a-modal-close" onclick="closeModal('create-product-modal')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin.create_product') }}">
+      <div class="a-modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2">
+          <label class="a-label">Title *</label>
+          <input name="title" required class="a-input" placeholder="Premium Dashboard Template"/>
+        </div>
+        <div>
+          <label class="a-label">Category</label>
+          <select name="category" class="a-input">
+            {% for cat in ['template','ui-kit','source-code','wordpress-plugin','script','ai-prompt','icon','animation','component','api','saas-boilerplate','software','ebook'] %}
+            <option value="{{ cat }}">{{ cat|replace('-',' ')|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="a-label">License</label>
+          <select name="license" class="a-input">
+            <option value="standard">Standard</option>
+            <option value="extended">Extended</option>
+            <option value="custom">Custom / Commercial</option>
+          </select>
+        </div>
+        <div>
+          <label class="a-label">Price — set 0 for free</label>
+          <input name="price" type="number" step="0.01" min="0" class="a-input" placeholder="29.00"/>
+        </div>
+        <div>
+          <label class="a-label">Sale Price — optional</label>
+          <input name="sale_price" type="number" step="0.01" min="0" class="a-input" placeholder="19.00"/>
+        </div>
+        <div>
+          <label class="a-label">Currency this product collects payment in</label>
+          <select name="currency" class="a-input">
+            {% for c in ["USD","NGN","GBP","EUR","KES","GHS","ZAR","CAD","AUD"] %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Short Description *</label>
+          <textarea name="description" rows="3" required class="a-input" placeholder="A brief description shown in listings…"></textarea>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Tags (comma separated)</label>
+          <input name="tags" class="a-input" placeholder="react, dashboard, tailwind, dark-mode"/>
+        </div>
+        <div>
+          <label class="a-label">Download File URL</label>
+          <input name="file_url" type="url" class="a-input" placeholder="https://cdn.yourdomain.com/file.zip"/>
+        </div>
+        <div>
+          <label class="a-label">Product Image URL <span style="color:var(--text-3);font-weight:400">(shown as the thumbnail)</span></label>
+          <input name="image_url" type="url" class="a-input" placeholder="https://…/thumbnail.png"/>
+        </div>
+        <div>
+          <label class="a-label">Preview Image URL <span style="color:var(--text-3);font-weight:400">(deprecated — use Image URL above)</span></label>
+          <input name="preview_url" type="url" class="a-input" placeholder="https://…/preview.png"/>
+        </div>
+        <div>
+          <label class="a-label">Live Demo URL</label>
+          <input name="demo_url" type="url" class="a-input" placeholder="https://demo.yourdomain.com"/>
+        </div>
+        <div>
+          <label class="a-label">Version</label>
+          <input name="version" class="a-input" value="1.0.0" placeholder="1.0.0"/>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-toggle">
+            <input type="checkbox" name="featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div>
+              <div class="a-toggle-label">Mark as Featured</div>
+              <div class="a-toggle-sublabel">Appears at top of marketplace and on homepage</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('create-product-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Create Product</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Product Modal (pre-filled via JS) -->
+<div id="edit-product-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Edit Product</div>
+      <button class="a-modal-close" onclick="closeModal('edit-product-modal')">✕</button>
+    </div>
+    <form id="edit-product-form" method="POST">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2">
+          <label class="a-label">Title</label>
+          <input name="title" id="edit-title" class="a-input"/>
+        </div>
+        <div>
+          <label class="a-label">Category</label>
+          <select name="category" id="edit-category" class="a-input">
+            {% for cat in ['template','ui-kit','source-code','wordpress-plugin','script','ai-prompt','icon','animation','component','api','saas-boilerplate','software','ebook'] %}
+            <option value="{{ cat }}">{{ cat|replace('-',' ')|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="a-label">License</label>
+          <select name="license" id="edit-license" class="a-input">
+            <option value="standard">Standard</option>
+            <option value="extended">Extended</option>
+            <option value="custom">Custom / Commercial</option>
+          </select>
+        </div>
+        <div><label class="a-label">Price</label><input name="price" id="edit-price" type="number" step="0.01" class="a-input"/></div>
+        <div><label class="a-label">Sale Price</label><input name="sale_price" id="edit-sale-price" type="number" step="0.01" class="a-input"/></div>
+        <div>
+          <label class="a-label">Currency</label>
+          <select name="currency" id="edit-currency" class="a-input">
+            {% for c in ["USD","NGN","GBP","EUR","KES","GHS","ZAR","CAD","AUD"] %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Short Description</label>
+          <textarea name="description" id="edit-description" rows="2" class="a-input"></textarea>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Full Description (shown on product page)</label>
+          <textarea name="long_desc" id="edit-long-desc" rows="4" class="a-input"></textarea>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Tags (comma separated)</label>
+          <input name="tags" id="edit-tags" class="a-input"/>
+        </div>
+        <div>
+          <label class="a-label">Download File URL</label>
+          <div style="display:flex;gap:8px">
+            <input name="file_url" id="edit-file-url" type="url" class="a-input" style="flex:1"/>
+            <button type="button" class="media-picker-btn" data-media-target="edit-file-url" style="padding:0 14px;background:rgba(29, 185, 84,0.1);border:1px solid rgba(29, 185, 84,0.25);border-radius:8px;color:#1DB954;font-size:12px;white-space:nowrap;cursor:pointer">📁</button>
+          </div>
+        </div>
+        <div>
+          <label class="a-label">Product Image URL <span style="color:var(--text-3);font-weight:400">(shown as the thumbnail)</span></label>
+          <div style="display:flex;gap:8px">
+            <input name="image_url" id="edit-image-url" type="url" class="a-input" style="flex:1"/>
+            <button type="button" class="media-picker-btn" data-media-target="edit-image-url" style="padding:0 14px;background:rgba(29, 185, 84,0.1);border:1px solid rgba(29, 185, 84,0.25);border-radius:8px;color:#1DB954;font-size:12px;white-space:nowrap;cursor:pointer">📁</button>
+          </div>
+        </div>
+        <div><label class="a-label">Live Demo Link <span style="color:var(--text-3);font-weight:400">(a clickable "Preview →" link, not an image)</span></label><input name="preview_url" id="edit-preview-url" type="url" class="a-input"/></div>
+        <div><label class="a-label">Live Demo URL</label><input name="demo_url" id="edit-demo-url" type="url" class="a-input"/></div>
+        <div><label class="a-label">Version</label><input name="version" id="edit-version" class="a-input"/></div>
+        <div style="grid-column:span 2">
+          <label class="a-toggle">
+            <input type="checkbox" name="featured" id="edit-featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Featured</div></div>
+          </label>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-product-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Import Software Modal (searches real, free software sources) -->
+<div id="import-software-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Import Software</div>
+      <button class="a-modal-close" onclick="closeModal('import-software-modal')">✕</button>
+    </div>
+    <div class="a-modal-body">
+      <p style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:12px">
+        Searches a real, free software source — no API key needed. Imported items get their
+        real cover art and the actual downloadable file, mapped straight into Products.
+        <b>Internet Archive</b>: old games/utilities, playable live in-browser via their
+        emulator. <b>Modrinth</b>: current Minecraft mods/plugins/resource packs, each with
+        its own real open-source license shown per item.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <select id="isw-source" class="a-input" style="width:150px" onchange="iswSelected={};updateSelectedCount();document.getElementById('isw-results').innerHTML='';document.getElementById('isw-pagination').innerHTML='';">
+          <option value="archive">Internet Archive</option>
+          <option value="modrinth">Modrinth (mods/plugins)</option>
+        </select>
+        <input id="isw-query" class="a-input" style="flex:1;min-width:180px" placeholder="Search e.g. 'DOS games', 'Sonic', 'SNES'…" onkeydown="if(event.key==='Enter'){event.preventDefault();searchSoftware(1);}"/>
+        <select id="isw-status" class="a-input" style="width:130px">
+          <option value="draft">Import as Draft</option>
+          <option value="active">Import as Published</option>
+        </select>
+        <button type="button" class="a-btn a-btn-primary" onclick="searchSoftware(1)" id="isw-search-btn">Search</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer">
+          <input type="checkbox" id="isw-select-all" onchange="toggleSelectAllSoftware(this)"/> Select all on this page
+        </label>
+        <p id="isw-status-msg" style="font-size:12px;margin:0"></p>
+      </div>
+      <div id="isw-results" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:360px;overflow:auto"></div>
+      <div id="isw-pagination" style="display:flex;justify-content:center;gap:10px;margin-top:12px"></div>
+    </div>
+    <div class="a-modal-footer" style="justify-content:space-between">
+      <span id="isw-selected-count" style="font-size:12px;color:var(--text-muted)">0 selected</span>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="closeModal('import-software-modal')" class="a-btn a-btn-ghost">Close</button>
+        <button type="button" class="a-btn a-btn-primary" onclick="importSelectedSoftware()" id="isw-import-btn">Import Selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function editProduct(d) {
+  document.getElementById('edit-product-form').action = '/admin/products/' + d.id + '/update';
+  document.getElementById('edit-title').value = d.title || '';
+  document.getElementById('edit-category').value = d.category || 'template';
+  document.getElementById('edit-license').value = d.license || 'standard';
+  document.getElementById('edit-price').value = d.price || '';
+  document.getElementById('edit-sale-price').value = d.sale_price || '';
+  document.getElementById('edit-currency').value = d.currency || 'USD';
+  document.getElementById('edit-description').value = d.description || '';
+  document.getElementById('edit-long-desc').value = d.long_desc || '';
+  document.getElementById('edit-tags').value = d.tags || '';
+  document.getElementById('edit-file-url').value = d.file_url || '';
+  document.getElementById('edit-image-url').value = d.image_url || '';
+  document.getElementById('edit-preview-url').value = d.preview_url || '';
+  document.getElementById('edit-demo-url').value = d.demo_url || '';
+  document.getElementById('edit-version').value = d.version || '';
+  document.getElementById('edit-featured').checked = !!d.featured;
+  openModal('edit-product-modal');
+}
+
+// ── Import Software (archive.org) ──────────────────────────────────────────
+let iswSelected = {};   // identifier -> result object, for items checked across pages
+let iswPage = 1;
+
+async function searchSoftware(page) {
+  iswPage = page || 1;
+  const q = document.getElementById('isw-query').value.trim();
+  const source = document.getElementById('isw-source').value;
+  const msg = document.getElementById('isw-status-msg');
+  const resultsEl = document.getElementById('isw-results');
+  const btn = document.getElementById('isw-search-btn');
+  document.getElementById('isw-select-all').checked = false;
+  btn.disabled = true;
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = 'Searching…';
+  resultsEl.innerHTML = '';
+  try {
+    const res = await fetch("{{ url_for('admin.import_software_search') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ q, page: iswPage, source })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      msg.style.color = '#f87171';
+      msg.textContent = data.error || 'Search failed.';
+      return;
+    }
+    if (!data.results.length) {
+      msg.style.color = 'var(--text-muted)';
+      msg.textContent = 'No results — try a different search.';
+      return;
+    }
+    msg.style.color = '#3fb950';
+    msg.textContent = `${data.results.length} result(s)`;
+    renderSoftwareResults(data.results);
+    document.getElementById('isw-pagination').innerHTML = `
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" ${iswPage<=1?'disabled':''} onclick="searchSoftware(${iswPage-1})">← Prev</button>
+      <span style="font-size:12px;color:var(--text-muted);align-self:center">Page ${iswPage}</span>
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="searchSoftware(${iswPage+1})">Next →</button>`;
+  } catch (e) {
+    msg.style.color = '#f87171';
+    msg.textContent = 'Network error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let iswLastResults = [];
+
+function renderSoftwareResults(results) {
+  iswLastResults = results;
+  const resultsEl = document.getElementById('isw-results');
+  resultsEl.innerHTML = results.map(r => {
+    const key = r.source + ':' + r.identifier;
+    const checked = iswSelected[key] ? 'checked' : '';
+    const safeTitle = (r.title || r.identifier).replace(/'/g, "&#39;");
+    const thumb = r.thumbnail_url
+      ? `<img src="${r.thumbnail_url}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0;background:#161b22" onerror="this.style.display='none'"/>`
+      : `<div style="width:48px;height:48px;border-radius:8px;background:#161b22;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>`;
+    return `
+      <label style="display:flex;gap:10px;padding:8px;border:1px solid #30363d;border-radius:10px;cursor:pointer;align-items:flex-start">
+        <input type="checkbox" ${checked} onchange="toggleSoftwareSelect(this, ${JSON.stringify(r).replace(/"/g, '&quot;')})" style="margin-top:4px"/>
+        ${thumb}
+        <div style="min-width:0">
+          <div style="font-weight:600;font-size:12.5px;color:var(--text)" title="${safeTitle}">${(r.title||r.identifier).slice(0,60)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${r.year||''} ${r.description ? '· ' + r.description.slice(0,80) : ''}</div>
+        </div>
+      </label>`;
+  }).join('');
+  updateSelectedCount();
+}
+
+function toggleSoftwareSelect(checkbox, item) {
+  const key = item.source + ':' + item.identifier;
+  if (checkbox.checked) iswSelected[key] = item;
+  else delete iswSelected[key];
+  updateSelectedCount();
+}
+
+function toggleSelectAllSoftware(checkbox) {
+  document.querySelectorAll('#isw-results input[type=checkbox]').forEach(cb => {
+    if (cb.checked !== checkbox.checked) cb.click();
+  });
+}
+
+function updateSelectedCount() {
+  const n = Object.keys(iswSelected).length;
+  document.getElementById('isw-selected-count').textContent = `${n} selected`;
+}
+
+async function importSelectedSoftware() {
+  const items = Object.values(iswSelected).map(r => ({ source: r.source, identifier: r.identifier }));
+  const msg = document.getElementById('isw-status-msg');
+  if (!items.length) {
+    msg.style.color = '#f87171';
+    msg.textContent = 'Select at least one item first.';
+    return;
+  }
+  const status = document.getElementById('isw-status').value;
+  const btn = document.getElementById('isw-import-btn');
+  btn.disabled = true;
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = `Importing ${items.length} item(s)…`;
+  try {
+    const res = await fetch("{{ url_for('admin.import_software_import') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ items, status })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      msg.style.color = '#f87171';
+      msg.textContent = data.error || 'Import failed.';
+      return;
+    }
+    msg.style.color = '#3fb950';
+    msg.textContent = data.message;
+    iswSelected = {};
+    updateSelectedCount();
+    setTimeout(() => window.location.reload(), 1200);
+  } catch (e) {
+    msg.style.color = '#f87171';
+    msg.textContent = 'Network error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

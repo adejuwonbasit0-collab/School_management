@@ -1,0 +1,42 @@
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <span class="footer-logo">{{ site_name or "Bazillin Studio" }}</span>
+      <p class="footer-tagline">{{ site_tagline or "Premium developer ecosystem." }}</p>
+      <form action="{{ url_for('cms.newsletter_subscribe') }}" method="POST" class="footer-newsletter">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="email" name="email" placeholder="Your email" class="footer-email-input" required/>
+        <button type="submit" class="btn-footer-subscribe">Subscribe</button>
+      </form>
+    </div>
+    <div class="footer-links-grid">
+      <div class="footer-col">
+        <h4 class="footer-col-title">Platform</h4>
+        <a href="{{ url_for('marketplace.index') }}">Marketplace</a>
+        <a href="{{ url_for('freelance.index') }}">Hire Talent</a>
+        <a href="{{ url_for('hosting.index') }}">Hosting</a>
+        <a href="{{ url_for('tools.index') }}">Dev Tools</a>
+        <a href="{{ url_for('ai.index') }}">AI Hub</a>
+      </div>
+      <div class="footer-col">
+        <h4 class="footer-col-title">Company</h4>
+        <a href="{{ url_for('cms.about') }}">About</a>
+        <a href="{{ url_for('cms.blog') }}">Blog</a>
+        <a href="{{ url_for('cms.contact') }}">Contact</a>
+      </div>
+      <div class="footer-col">
+        <h4 class="footer-col-title">Account</h4>
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('dashboard.home') }}">Dashboard</a>
+        <a href="{{ url_for('auth.logout') }}">Logout</a>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}">Login</a>
+        <a href="{{ url_for('auth.register') }}">Register</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>&copy; {{ 2025 }} {{ site_name or "Bazillin Studio" }}. All rights reserved.</p>
+  </div>
+</footer>

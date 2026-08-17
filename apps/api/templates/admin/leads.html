@@ -1,0 +1,510 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Leads & Cold Email{% endblock %}
+{% block page_subtitle %}{{ total_count }} leads{% endblock %}
+{% block content %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title">Where to Find Clients</div>
+      <div class="a-panel-sub">Curated platforms and outreach channels — no scraping needed</div>
+    </div>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-3" style="gap:14px">
+      {% for name, url, note in [
+        ("Upwork", "https://www.upwork.com", "Bid on posted freelance/dev jobs directly."),
+        ("Toptal", "https://www.toptal.com", "Vetted, higher-budget clients — application required."),
+        ("Contra", "https://contra.com", "No-fee freelance marketplace, good for portfolio-driven work."),
+        ("LinkedIn", "https://www.linkedin.com/jobs", "Search 'looking for developer', post case studies, DM warm leads."),
+        ("Indie Hackers", "https://www.indiehackers.com", "Founders often need a dev/designer for their MVP."),
+        ("Wellfound (AngelList)", "https://wellfound.com", "Startups hiring contractors, not just full-time."),
+        ("r/forhire / r/slavelabour", "https://www.reddit.com/r/forhire", "Direct job posts — check each sub's rules."),
+        ("Local Facebook/WhatsApp biz groups", "#", "Great for local business sites — low competition."),
+        ("Referrals from past clients", "#", "Ask every happy client for one introduction."),
+      ] %}
+      <a href="{{ url }}" target="_blank" rel="noopener" class="a-panel" style="padding:14px;text-decoration:none;display:block">
+        <p style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">{{ name }} {% if url != '#' %}↗{% endif %}</p>
+        <p style="font-size:11px;color:var(--text-3);line-height:1.5">{{ note }}</p>
+      </a>
+      {% endfor %}
+    </div>
+    <p style="font-size:11px;color:var(--text-3);margin-top:16px;line-height:1.5">
+      Once you've got contacts (from any of the above, or your own network), import them below as a CSV
+      and run a cold email campaign — everything after that is tracked automatically: opens aren't tracked
+      (no invisible pixels), but sends, replies via your inbox, and lead status are all logged here.
+    </p>
+  </div>
+</div>
+
+<!-- Live Google Niche Prospecting Tool -->
+<div class="a-panel" style="margin-bottom:20px; border-color:#388bfd">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title" style="color:#38bdf8">🔍 Live Google Niche Lead Finder</div>
+      <div class="a-panel-sub">Find business prospects by Niche and Location, fetch company details, phone, address, and email for 1-click outreach.</div>
+    </div>
+  </div>
+  <div class="a-panel-body">
+    <form id="google-prospector-form" class="a-grid a-grid-3" style="gap:12px; align-items:end">
+      <div>
+        <label class="a-label">Target Niche / Industry</label>
+        <input type="text" id="prospect-niche" class="a-input" placeholder="e.g. Dentists, Real Estate, Plumbers" required style="margin-top:4px"/>
+      </div>
+      <div>
+        <label class="a-label">City / Location</label>
+        <input type="text" id="prospect-location" class="a-input" placeholder="e.g. Miami FL, Lagos, London" required style="margin-top:4px"/>
+      </div>
+      <div>
+        <button type="submit" class="a-btn a-btn-primary" style="width:100%">🔍 Fetch Niche Leads</button>
+      </div>
+    </form>
+
+    <div id="prospects-results" class="hidden" style="margin-top:20px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+        <h4 style="font-size:14px; font-weight:700; color:#fff" id="prospects-count-title">Found Business Prospects</h4>
+        <span style="font-size:12px; color:var(--text-3)" id="prospects-status"></span>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table class="a-table" style="width:100%; font-size:12px">
+          <thead>
+            <tr>
+              <th>Company Name</th>
+              <th>Contact Person</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Address / Website</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="prospects-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="a-grid a-grid-2" style="gap:20px;margin-bottom:20px">
+  <div class="a-panel">
+    <div class="a-panel-header"><div class="a-panel-title">Import Leads (CSV)</div></div>
+    <div class="a-panel-body">
+      <form method="POST" action="{{ url_for('admin.import_leads') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <label class="a-label">CSV file (columns: name, email, company — niche optional)</label>
+        <input type="file" name="csv_file" accept=".csv" required class="a-input" style="margin-top:6px"/>
+        <label class="a-label" style="margin-top:12px;display:block">Niche/Occupation Tag (applies to all rows without their own)</label>
+        <input type="text" name="niche" class="a-input" placeholder="e.g. Local Restaurants, Dentists, Photographers" style="margin-top:6px"/>
+        <button class="a-btn a-btn-primary" style="margin-top:14px">Import CSV</button>
+      </form>
+      <p style="font-size:11px;color:var(--text-3);margin-top:14px;line-height:1.5">
+        This is a <strong>list you already have or built yourself</strong> — from your own
+        outreach, a directory you have rights to use, referrals, etc. This platform
+        doesn't run an autonomous scraper that harvests people's personal profiles
+        from the web and emails them without any relationship — that runs into real
+        consent-law risk (CAN-SPAM/GDPR) on top of most platforms' terms of service.
+        If you want a live "find businesses in X niche with no website" search tool
+        instead of CSV import, tell me and I'll scope that separately as its own
+        feature with the compliance side built in up front.
+      </p>
+    </div>
+  </div>
+
+  <div class="a-panel">
+    <div class="a-panel-header"><div class="a-panel-title">Add Single Lead</div></div>
+    <div class="a-panel-body">
+      <form method="POST" action="{{ url_for('admin.add_lead') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="a-grid a-grid-2" style="gap:10px">
+          <input name="name" placeholder="Name" class="a-input"/>
+          <input name="email" type="email" placeholder="Email *" required class="a-input"/>
+          <input name="company" placeholder="Company" class="a-input"/>
+          <input name="niche" placeholder="Niche/Occupation" class="a-input"/>
+          <input name="phone" placeholder="Phone" class="a-input"/>
+          <input name="website" placeholder="Website" class="a-input"/>
+        </div>
+        <div style="margin-top:10px">
+          <input name="address" placeholder="Address" class="a-input"/>
+        </div>
+        <button class="a-btn a-btn-primary" style="margin-top:14px">Add Lead</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Compose Cold Email Campaign</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.create_cold_campaign') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Subject</label>
+          <input type="text" name="subject" required class="a-input" placeholder="Quick question about {{ '{{company}}' }}'s website"/>
+        </div>
+        <div>
+          <label class="a-label">Send to Niche (blank = all leads)</label>
+          <select name="niche_filter" class="a-input">
+            <option value="">All niches</option>
+            {% for n in niches %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <label class="a-label">Content (HTML)</label>
+      <textarea name="body_html" required rows="8" class="a-input" style="font-family:'JetBrains Mono',monospace;font-size:12px"
+        placeholder="&lt;p&gt;Hi {{ '{{name}}' }},&lt;/p&gt;&lt;p&gt;I noticed {{ '{{company}}' }} doesn't have a website yet…&lt;/p&gt;"></textarea>
+      <p style="font-size:11px;color:var(--text-3);margin-top:6px">An unsubscribe link and sender identity are appended automatically — required for compliant commercial email.</p>
+      <button class="a-btn a-btn-primary" style="margin-top:14px">Save as Draft</button>
+    </form>
+  </div>
+</div>
+
+{% if campaigns %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Cold Email Campaigns</div></div>
+  <div class="a-panel-body" style="padding:0">
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Subject</th>
+        <th class="text-left px-3 py-3">Niche</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-left px-3 py-3 hidden md:table-cell">Sent / Failed</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for c in campaigns %}
+        <tr>
+          <td class="px-5 py-3 text-white">{{ c.subject }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ c.niche_filter or 'All' }}</td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full {% if c.status=='sent' %}bg-green-500/20 text-green-400{% elif c.status=='sending' %}bg-yellow-500/20 text-yellow-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ c.status }}</span>
+          </td>
+          <td class="px-3 py-3 hidden md:table-cell text-gray-400 text-xs">{{ c.sent_count }} / {{ c.failed_count }}</td>
+          <td class="px-5 py-3 text-right">
+            {% if c.status == 'draft' %}
+            <form method="POST" action="{{ url_for('admin.send_cold_campaign', cid=c.id) }}" class="inline"
+              onsubmit="return confirm('Send this cold email now? This cannot be undone.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">Send Now</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="a-panel">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Leads</div>
+    <form method="GET" class="inline">
+      <select name="niche" onchange="this.form.submit()" class="a-input" style="font-size:12px">
+        <option value="">All niches</option>
+        {% for n in niches %}<option value="{{ n }}" {% if n == active_niche %}selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not leads %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No leads yet — import a CSV or add one above.</p>
+    {% else %}
+    <div style="display:flex;gap:8px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      {% for stage, label, color in [('new','New','#9ca3af'),('qualified','Qualified','#38bdf8'),('proposal','Proposal Sent','#facc15'),('won','Won','#4ade80'),('lost','Lost','#f87171')] %}
+      <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 14px;text-align:center;flex:1;min-width:100px">
+        <div style="color:{{ color }};font-weight:700;font-size:16px">{{ pipeline[stage].count }}</div>
+        <div style="color:var(--text-3);font-size:10px;text-transform:uppercase">{{ label }}</div>
+        {% if pipeline[stage].value %}<div style="color:var(--text-3);font-size:11px">{{ pipeline[stage].value | money }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Name / Email</th>
+        <th class="text-left px-3 py-3 hidden md:table-cell">Company</th>
+        <th class="text-left px-3 py-3">Niche</th>
+        <th class="text-left px-3 py-3">Phone / Website</th>
+        <th class="text-left px-3 py-3">Address</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-left px-3 py-3">Deal Stage</th>
+        <th class="text-left px-3 py-3">Value</th>
+        <th class="text-left px-3 py-3">Score</th>
+        <th class="text-right px-5 py-3"></th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for l in leads %}
+        <tr>
+          <td class="px-5 py-3">
+            <div class="text-white">{{ l.name or '—' }}</div>
+            <div class="text-gray-500 text-xs">{{ l.email }}</div>
+          </td>
+          <td class="px-3 py-3 hidden md:table-cell text-gray-400 text-xs">{{ l.company or '—' }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ l.niche or '—' }}</td>
+          <td class="px-3 py-3 text-xs">
+            {% if l.phone %}<div class="text-white">{{ l.phone }}</div>{% endif %}
+            {% if l.website %}<a href="{{ l.website }}" target="_blank" class="text-[#38bdf8] hover:underline truncate max-w-[150px] inline-block">{{ l.website }}</a>{% endif %}
+            {% if not l.phone and not l.website %}<span class="text-gray-500">—</span>{% endif %}
+          </td>
+          <td class="px-3 py-3 text-xs text-gray-400 max-w-[200px] truncate" title="{{ l.address or '' }}">{{ l.address or '—' }}</td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full
+              {% if l.status=='unsubscribed' %}bg-red-500/20 text-red-400
+              {% elif l.status=='contacted' %}bg-cyan-500/20 text-cyan-400
+              {% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ l.status }}</span>
+          </td>
+          <td class="px-3 py-3">
+            <form method="POST" action="{{ url_for('admin.update_lead_pipeline', lid=l.id) }}" style="display:flex;gap:4px;align-items:center">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <select name="deal_stage" class="a-input" style="font-size:11px;padding:4px 8px" onchange="this.form.requestSubmit()">
+                {% for s in ['new','qualified','proposal','won','lost'] %}
+                <option value="{{ s }}" {% if (l.deal_stage or 'new')==s %}selected{% endif %}>{{ s|title }}</option>
+                {% endfor %}
+              </select>
+              <input type="number" name="deal_value" value="{{ l.deal_value or '' }}" placeholder="$" class="a-input" style="width:70px;font-size:11px;padding:4px 6px" onblur="this.form.requestSubmit()"/>
+            </form>
+          </td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ "$%.0f"|format(l.deal_value) if l.deal_value else '—' }}</td>
+          <td class="px-3 py-3">
+            {% set score = lead_scores.get(l.id, 0) %}
+            {% set days_stale = lead_days_stale.get(l.id) %}
+            <span class="text-xs px-2 py-0.5 rounded-full {% if score >= 70 %}bg-green-500/20 text-green-400{% elif score >= 40 %}bg-yellow-500/20 text-yellow-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ score }}</span>
+            {% if days_stale is not none and days_stale > 14 and l.deal_stage not in ('won', 'lost') %}
+            <span class="text-xs text-red-400 block mt-1">⚠ {{ days_stale }}d quiet</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-right">
+            <button type="button" class="text-xs text-cyan-400 hover:underline mr-2" onclick="suggestFollowUp({{ l.id }}, this)">✨ Suggest</button>
+            <button type="button" class="text-xs text-purple-400 hover:underline mr-2" onclick="draftFollowupEmail({{ l.id }}, this)">✉️ Draft Email</button>
+            <button type="button" class="text-xs text-gray-300 hover:underline mr-2" onclick='openEditLead({{ {"id": l.id, "name": l.name, "email": l.email, "company": l.company, "niche": l.niche, "phone": l.phone, "website": l.website, "address": l.address}|tojson }})'>✏️ Edit</button>
+            <form method="POST" action="{{ url_for('admin.delete_lead', lid=l.id) }}" class="inline" onsubmit="return confirm('Remove this lead?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs text-red-400 hover:underline">Remove</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="followup-row-{{ l.id }}" class="hidden">
+          <td colspan="7" class="px-5 py-2 bg-white/[0.02]">
+            <p id="followup-text-{{ l.id }}" class="text-xs text-gray-300"></p>
+          </td>
+        </tr>
+        <tr id="email-draft-row-{{ l.id }}" class="hidden">
+          <td colspan="7" class="px-5 py-3 bg-white/[0.02]">
+            <div style="display:flex;flex-direction:column;gap:6px;max-width:500px">
+              <input type="text" id="email-subject-{{ l.id }}" class="a-input" style="font-size:12px" placeholder="Subject"/>
+              <textarea id="email-body-{{ l.id }}" class="a-input" style="font-size:12px" rows="5" placeholder="Body"></textarea>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button type="button" class="a-btn a-btn-xs a-btn-primary" onclick="sendFollowupEmail({{ l.id }}, this)">Send Email</button>
+                <span id="email-draft-status-{{ l.id }}" class="text-xs text-gray-500"></span>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Edit Lead Modal -->
+<div id="edit-lead-modal" class="a-modal-overlay">
+  <div class="a-modal" style="max-width:480px">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Lead</div><button class="a-modal-close" onclick="closeModal('edit-lead-modal')">✕</button></div>
+    <form method="POST" id="edit-lead-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div style="display:grid;gap:10px">
+        <div class="a-grid a-grid-2" style="gap:10px">
+          <input name="name" id="el-name" placeholder="Name" class="a-input"/>
+          <input name="email" id="el-email" type="email" placeholder="Email *" required class="a-input"/>
+          <input name="company" id="el-company" placeholder="Company" class="a-input"/>
+          <input name="niche" id="el-niche" placeholder="Niche/Occupation" class="a-input"/>
+          <input name="phone" id="el-phone" placeholder="Phone" class="a-input"/>
+          <input name="website" id="el-website" placeholder="Website" class="a-input"/>
+        </div>
+        <input name="address" id="el-address" placeholder="Address" class="a-input"/>
+      </div>
+      <button type="submit" class="a-btn a-btn-primary" style="width:100%;margin-top:14px">Save Changes</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function openEditLead(lead) {
+  document.getElementById('edit-lead-form').action = "{{ url_for('admin.update_lead', lid=0) }}".replace('/0', '/' + lead.id);
+  document.getElementById('el-name').value = lead.name || '';
+  document.getElementById('el-email').value = lead.email || '';
+  document.getElementById('el-company').value = lead.company || '';
+  document.getElementById('el-niche').value = lead.niche || '';
+  document.getElementById('el-phone').value = lead.phone || '';
+  document.getElementById('el-website').value = lead.website || '';
+  document.getElementById('el-address').value = lead.address || '';
+  openModal('edit-lead-modal');
+}
+
+async function suggestFollowUp(leadId, btn) {
+  const row = document.getElementById('followup-row-' + leadId);
+  const textEl = document.getElementById('followup-text-' + leadId);
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '…';
+  row.classList.remove('hidden');
+  textEl.textContent = 'Thinking…';
+  try {
+    const res = await fetch(`/admin/leads/${leadId}/suggest-followup`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+    });
+    const data = await res.json();
+    textEl.textContent = data.error ? ('⚠ ' + data.error) : data.suggestion;
+  } catch (e) {
+    textEl.textContent = '⚠ Request failed: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = original;
+}
+
+async function draftFollowupEmail(leadId, btn) {
+  const row = document.getElementById('email-draft-row-' + leadId);
+  const subjectEl = document.getElementById('email-subject-' + leadId);
+  const bodyEl = document.getElementById('email-body-' + leadId);
+  const statusEl = document.getElementById('email-draft-status-' + leadId);
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '…';
+  row.classList.remove('hidden');
+  statusEl.textContent = 'Drafting…';
+  subjectEl.value = ''; bodyEl.value = '';
+  try {
+    const res = await fetch(`/admin/leads/${leadId}/draft-followup-email`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+    });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.textContent = '⚠ ' + data.error;
+    } else {
+      subjectEl.value = data.subject;
+      bodyEl.value = data.body;
+      statusEl.textContent = 'Review and edit before sending.';
+    }
+  } catch (e) {
+    statusEl.textContent = '⚠ Request failed: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = original;
+}
+
+async function sendFollowupEmail(leadId, btn) {
+  const subjectEl = document.getElementById('email-subject-' + leadId);
+  const bodyEl = document.getElementById('email-body-' + leadId);
+  const statusEl = document.getElementById('email-draft-status-' + leadId);
+  if (!subjectEl.value.trim() || !bodyEl.value.trim()) {
+    statusEl.textContent = '⚠ Subject and body are required.';
+    return;
+  }
+  btn.disabled = true;
+  statusEl.textContent = 'Sending…';
+  try {
+    const res = await fetch(`/admin/leads/${leadId}/send-followup-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ subject: subjectEl.value, body: bodyEl.value })
+    });
+    const data = await res.json();
+    statusEl.textContent = data.sent ? '✓ Sent' : ('⚠ ' + (data.error || 'Failed to send'));
+  } catch (e) {
+    statusEl.textContent = '⚠ Request failed: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+document.getElementById('google-prospector-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const niche = document.getElementById('prospect-niche').value.trim();
+  const location = document.getElementById('prospect-location').value.trim();
+  
+  const resultsBox = document.getElementById('prospects-results');
+  const tbody = document.getElementById('prospects-table-body');
+  const statusEl = document.getElementById('prospects-status');
+  
+  resultsBox.classList.remove('hidden');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3)">Searching live business directories & Google indices...</td></tr>';
+  statusEl.textContent = 'Searching...';
+
+  try {
+    const res = await fetch('/admin/leads/search-niche-google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ niche, location })
+    });
+    if (!res.ok) {
+      let msg = `Server error (HTTP ${res.status}).`;
+      try { const errBody = await res.json(); if (errBody.error) msg = errBody.error; } catch (_) {}
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#f87171">Error: ${msg}</td></tr>`;
+      statusEl.textContent = 'Error';
+      return;
+    }
+    const data = await res.json();
+    if(data.success && data.results && data.results.length > 0) {
+      statusEl.textContent = data.ai_used === false ? 'Showing example data — AI unavailable' : `Found ${data.count} prospects`;
+      tbody.innerHTML = '';
+      if (data.warning) {
+        const warnRow = document.createElement('tr');
+        warnRow.innerHTML = `<td colspan="6" style="padding:10px 8px;color:#fbbf24;background:rgba(251,191,36,0.08);font-size:12px">⚠️ ${data.warning}</td>`;
+        tbody.appendChild(warnRow);
+      }
+      data.results.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${item.company || 'N/A'}</strong></td>
+          <td>${item.name || 'N/A'}</td>
+          <td style="color:#38bdf8">${item.email || 'N/A'}</td>
+          <td>${item.phone || 'N/A'}</td>
+          <td><span style="font-size:11px;color:var(--text-3)">${item.address || ''}</span><br/><a href="${item.website}" target="_blank" style="font-size:11px;color:#38bdf8">${item.website || ''}</a></td>
+          <td>
+            <button class="a-btn a-btn-primary a-btn-xs" onclick="importSearchedLead(${idx}, this)">+ Import to CRM</button>
+          </td>
+        `;
+        tr.dataset.lead = JSON.stringify(item);
+        tbody.appendChild(tr);
+      });
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#f87171">No prospects found. Try adjusting keywords.</td></tr>';
+    }
+  } catch(err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#f87171">Error: ${err.message}</td></tr>`;
+  }
+});
+
+async function importSearchedLead(idx, btn) {
+  const tr = btn.closest('tr');
+  const leadData = JSON.parse(tr.dataset.lead);
+  btn.textContent = 'Importing...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/admin/leads/import-searched-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify(leadData)
+    });
+    const data = await res.json();
+    if(data.success) {
+      btn.textContent = '✓ Saved in CRM';
+      btn.style.background = '#22c55e';
+    } else {
+      btn.textContent = 'Failed';
+      btn.disabled = false;
+      alert(data.error || 'Import failed');
+    }
+  } catch(e) {
+    btn.textContent = 'Error';
+    btn.disabled = false;
+    alert(e.message);
+  }
+}
+</script>
+{% endblock %}

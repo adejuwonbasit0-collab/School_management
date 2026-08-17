@@ -1,0 +1,163 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Conversation Inbox{% endblock %}
+{% block page_subtitle %}Every message your bots have handled — take over any conversation to reply yourself{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+  <a href="{{ url_for('admin.social_channels') }}" class="a-btn a-btn-ghost a-btn-xs">← Social Bots</a>
+  <form method="GET" style="display:flex;gap:6px;align-items:center">
+    <label class="text-muted" style="font-size:12px">Department:</label>
+    <select name="department" class="a-input" style="font-size:12px;padding:4px 8px" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for d in ['sales','support','billing','general'] %}
+      <option value="{{ d }}" {% if dept_filter==d %}selected{% endif %}>{{ d|title }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="a-panel" style="overflow:hidden">
+  <div style="display:grid;grid-template-columns:280px 1fr;min-height:520px" class="social-inbox-grid">
+    <!-- Contact list -->
+    <div style="border-right:1px solid var(--border);overflow-y:auto;max-height:640px">
+      {% for c in contacts %}
+      {% set icon = {"telegram":"✈️","whatsapp":"💬","facebook":"📘"}.get(c.channel.platform,"🤖") %}
+      <a href="{{ url_for('admin.social_inbox', contact_id=c.id) }}"
+         style="display:flex;gap:10px;align-items:center;padding:12px 16px;text-decoration:none;border-bottom:1px solid var(--border);{{ 'background:rgba(255,255,255,0.04)' if active_contact and c.id==active_contact.id else '' }}">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">{{ icon }}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            {% if c.sentiment %}{{ {'positive':'🙂','neutral':'😐','negative':'🙁'}.get(c.sentiment,'') }}{% endif %}
+            {{ c.display_name or c.external_id }}
+          </div>
+          <div class="text-muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.channel.label }}{% if c.human_takeover %} · 🙋 you're replying{% endif %}{% if c.department %} · {{ c.department|title }}{% endif %}</div>
+          {% if c.tags %}<div style="margin-top:3px">{% for t in c.tags[:3] %}<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--text-3);padding:1px 6px;border-radius:8px;margin-right:3px">{{ t }}</span>{% endfor %}</div>{% endif %}
+        </div>
+      </a>
+      {% else %}
+      <div class="a-empty" style="padding:40px 16px"><div class="a-empty-desc">No conversations yet</div></div>
+      {% endfor %}
+    </div>
+
+    <!-- Thread -->
+    <div style="display:flex;flex-direction:column;max-height:640px">
+      {% if active_contact %}
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-weight:700;color:var(--text)">{{ active_contact.display_name or active_contact.external_id }}</div>
+          <div class="text-muted">{{ active_contact.channel.label }} · {{ active_contact.external_id }}
+            {% if active_contact.sentiment %} · {{ {'positive':'🙂 Positive','neutral':'😐 Neutral','negative':'🙁 Negative'}.get(active_contact.sentiment,'') }}{% endif %}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <form method="POST" action="{{ url_for('admin.social_inbox_set_department', contact_id=active_contact.id) }}" style="display:flex;gap:4px">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <select name="department" class="a-input" style="font-size:11px;padding:4px 6px" onchange="this.form.requestSubmit()">
+              <option value="">No department</option>
+              {% for d in ['sales','support','billing','general'] %}
+              <option value="{{ d }}" {% if active_contact.department==d %}selected{% endif %}>{{ d|title }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="analyzeConversation({{ active_contact.id }})" id="analyze-btn">🔍 Analyze</button>
+          <form method="POST" action="{{ url_for('admin.social_inbox_takeover', contact_id=active_contact.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn {{ 'a-btn-warning' if active_contact.human_takeover else 'a-btn-ghost' }} a-btn-xs">
+              {{ '🙋 You are replying — click to hand back to bot' if active_contact.human_takeover else '🤖 Bot is replying — take over' }}
+            </button>
+          </form>
+        </div>
+      </div>
+      <details style="border-bottom:1px solid var(--border);padding:10px 20px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">📝 Internal Notes & Tags (staff-only, never sent to the customer)</summary>
+        <form method="POST" action="{{ url_for('admin.social_inbox_notes', contact_id=active_contact.id) }}" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <textarea name="internal_notes" class="a-input" rows="2" placeholder="e.g. Waiting on refund approval from finance">{{ active_contact.internal_notes or '' }}</textarea>
+          <input name="tags" class="a-input" placeholder="Tags, comma separated (e.g. vip, refund-issue)" value="{{ (active_contact.tags or [])|join(', ') }}"/>
+          <button type="submit" class="a-btn a-btn-ghost a-btn-xs" style="align-self:flex-start">Save Notes & Tags</button>
+        </form>
+      </details>
+      <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+        {% for m in messages %}
+        <div style="max-width:75%;{{ 'align-self:flex-end' if m.direction=='out' else 'align-self:flex-start' }}">
+          <div style="background:{{ 'linear-gradient(135deg,var(--c-accent),var(--c-accent-2))' if m.direction=='out' else 'rgba(255,255,255,0.05)' }};color:{{ '#000' if m.direction=='out' else 'var(--text)' }};border-radius:14px;padding:10px 14px;font-size:13px;line-height:1.5;white-space:pre-wrap" id="msg-body-{{ m.id }}">{{ m.body }}</div>
+          <div id="msg-translation-{{ m.id }}"></div>
+          <div class="text-muted" style="margin-top:3px;{{ 'text-align:right' if m.direction=='out' else '' }}">
+            {{ m.sent_by }} · {{ m.created_at.strftime('%b %d, %H:%M') }}
+            · <a href="#" onclick="translateMessage({{ m.id }}); return false;" style="color:var(--c-accent)">Translate</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <form method="POST" action="{{ url_for('admin.social_inbox_reply', contact_id=active_contact.id) }}" style="display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--border)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input id="reply-input" name="message" required class="a-input" style="flex:1" placeholder="{{ 'Type a reply — this sends as you, not the bot' if active_contact.human_takeover else 'Type a reply (consider taking over first so the bot does not also reply)' }}"/>
+        <button type="button" class="a-btn a-btn-ghost" onclick="suggestReply({{ active_contact.id }})" id="suggest-btn" title="Draft a reply with AI — review before sending">✨</button>
+        <button type="submit" class="a-btn a-btn-primary">Send</button>
+      </form>
+      <script>
+      async function suggestReply(contactId) {
+        const btn = document.getElementById('suggest-btn');
+        const input = document.getElementById('reply-input');
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          const res = await fetch(`/admin/social-inbox/${contactId}/suggest-reply`, {
+            method: 'POST', headers: { 'X-CSRFToken': getCsrf() },
+          });
+          const data = await res.json();
+          if (!res.ok) { alert(data.error || 'Could not draft a reply.'); return; }
+          input.value = data.suggestion;
+          input.focus();
+        } catch (e) {
+          alert('Request failed: ' + e.message);
+        } finally {
+          btn.disabled = false; btn.textContent = '✨';
+        }
+      }
+      async function analyzeConversation(contactId) {
+        const btn = document.getElementById('analyze-btn');
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          const res = await fetch(`/admin/social-inbox/${contactId}/analyze`, {
+            method: 'POST', headers: { 'X-CSRFToken': getCsrf() },
+          });
+          const data = await res.json();
+          if (!res.ok) { alert(data.error || 'Could not analyze this conversation.'); return; }
+          location.reload();
+        } catch (e) {
+          alert('Request failed: ' + e.message);
+        } finally {
+          btn.disabled = false; btn.textContent = '🔍 Analyze';
+        }
+      }
+      async function translateMessage(msgId) {
+        const bodyEl = document.getElementById('msg-body-' + msgId);
+        const target = document.getElementById('msg-translation-' + msgId);
+        target.textContent = 'Translating…';
+        target.style.cssText = 'font-size:11px;color:var(--text-3);margin-top:2px;font-style:italic';
+        try {
+          const res = await fetch(`/admin/social-inbox/${msgId}/translate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            body: JSON.stringify({ text: bodyEl.textContent, target: 'English' }),
+          });
+          const data = await res.json();
+          target.textContent = res.ok ? ('🌐 ' + data.translation) : (data.error || 'Translation failed.');
+        } catch (e) {
+          target.textContent = 'Request failed: ' + e.message;
+        }
+      }
+      </script>
+      {% else %}
+      <div class="a-empty" style="padding:60px"><div class="a-empty-icon">💬</div><div class="a-empty-title">Select a conversation</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<style>
+@media (max-width: 768px) {
+  .social-inbox-grid { grid-template-columns: 1fr !important; }
+}
+</style>
+{% endblock %}

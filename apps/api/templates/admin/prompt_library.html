@@ -1,0 +1,89 @@
+{% extends "admin/base.html" %}
+{% block page_title %}AI Prompt Library{% endblock %}
+{% block page_subtitle %}Reusable prompt templates for the AI Console, Content Studio, and Developer AI tools{% endblock %}
+{% block content %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Add a Template</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.prompt_library_save') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="id" value=""/>
+      <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Title</label>
+          <input type="text" name="title" required class="a-input" style="margin-top:6px" placeholder="e.g. Redesign a component"/>
+        </div>
+        <div>
+          <label class="a-label">Category</label>
+          <input type="text" name="category" required class="a-input" style="margin-top:6px" placeholder="e.g. UI Design" list="prompt-categories"/>
+          <datalist id="prompt-categories">
+            {% for c in categories %}<option value="{{ c }}">{% endfor %}
+          </datalist>
+        </div>
+      </div>
+      <label class="a-label">Description (optional, shown as a hint under the title)</label>
+      <input type="text" name="description" class="a-input" style="margin-top:6px;margin-bottom:14px" placeholder="One line about when to use this"/>
+      <label class="a-label">Prompt Body</label>
+      <p style="font-size:11px;color:var(--text-3);margin:4px 0 6px">Use <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px">{variable_name}</code> for anything that should be filled in each time — the console will show a field for each one it finds.</p>
+      <textarea name="body" rows="4" required class="a-input" placeholder="Redesign the {component_name} component to..."></textarea>
+      <div style="margin-top:14px">
+        <button type="submit" class="a-btn a-btn-primary">Save Template</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Templates ({{ templates|length }})</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="{{ url_for('admin.prompt_library') }}" class="a-btn a-btn-xs {{ 'a-btn-primary' if not active_category else '' }}">All</a>
+      {% for c in categories %}
+        <a href="{{ url_for('admin.prompt_library', category=c) }}" class="a-btn a-btn-xs {{ 'a-btn-primary' if active_category == c else '' }}">{{ c }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="a-panel-body">
+    {% if not templates %}
+      <p style="color:var(--text-3);font-size:13px">No templates in this category yet.</p>
+    {% endif %}
+    <div class="a-grid a-grid-2" style="gap:14px">
+      {% for t in templates %}
+      <div style="border:1px solid var(--border-1,rgba(255,255,255,0.08));border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:13px">{{ t.title }}</div>
+            <div style="font-size:11px;color:var(--text-3)">{{ t.category }}{% if t.is_builtin %} · built-in{% endif %}{% if t.use_count %} · used {{ t.use_count }}x{% endif %}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="a-btn a-btn-xs" onclick='editTemplate({{ t.id }}, {{ t.title|tojson }}, {{ t.category|tojson }}, {{ t.body|tojson }}, {{ (t.description or "")|tojson }})'>Edit</button>
+            {% if not t.is_builtin %}
+            <form method="POST" action="{{ url_for('admin.prompt_library_delete', template_id=t.id) }}" onsubmit="return confirm('Delete this template?')" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn a-btn-xs" style="color:#f87171">Delete</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% if t.description %}<p style="font-size:11px;color:var(--text-3);margin:8px 0 6px">{{ t.description }}</p>{% endif %}
+        <pre style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;font-size:11px;white-space:pre-wrap;margin-top:8px;max-height:120px;overflow:auto">{{ t.body }}</pre>
+        <a href="{{ url_for('admin.ai_console') }}?use_prompt={{ t.id }}" class="a-btn a-btn-xs a-btn-primary" style="margin-top:8px">Use in AI Console</a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+function editTemplate(id, title, category, body, description) {
+  const form = document.querySelector('form[action*="prompts/save"]');
+  form.querySelector('input[name="id"]').value = id;
+  form.querySelector('input[name="title"]').value = title;
+  form.querySelector('input[name="category"]').value = category;
+  form.querySelector('input[name="description"]').value = description;
+  form.querySelector('textarea[name="body"]').value = body;
+  form.scrollIntoView({behavior:'smooth'});
+}
+</script>
+{% endblock %}

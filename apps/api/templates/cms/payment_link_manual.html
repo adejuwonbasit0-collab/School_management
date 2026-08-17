@@ -1,0 +1,67 @@
+{% extends "standalone_public.html" %}
+{% block title %}Pay {{ link.title }} — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-xl mx-auto px-4 py-12">
+  <a href="{{ url_for('cms.payment_link_view', slug=link.slug) }}" class="text-sm text-cyan-400 hover:text-cyan-300 mb-6 inline-block">← Back</a>
+  <div class="glass border border-white/10 rounded-2xl p-8">
+    <h1 class="text-xl font-bold font-display text-white mb-1">{{ link.title }}</h1>
+    <p class="text-gray-400 text-sm mb-6">Amount due: <strong>{{ link.amount }} {{ link.currency }}</strong></p>
+
+    {% if method == 'bank_transfer' %}
+      <h2 class="text-sm font-semibold text-cyan-400 mb-3">Bank Transfer Details</h2>
+      <div class="space-y-1 text-sm text-gray-300 bg-white/5 rounded-xl p-4 mb-6">
+        {% if bank_details.bank_name %}<p><strong>Bank:</strong> {{ bank_details.bank_name }}</p>{% endif %}
+        {% if bank_details.account_name %}<p><strong>Account Name:</strong> {{ bank_details.account_name }}</p>{% endif %}
+        {% if bank_details.account_number %}<p><strong>Account Number:</strong> {{ bank_details.account_number }}</p>{% endif %}
+        {% if bank_details.routing_swift %}<p><strong>Routing/SWIFT:</strong> {{ bank_details.routing_swift }}</p>{% endif %}
+        {% if not bank_details.bank_name %}<p class="text-red-400">Bank details haven't been set up yet — contact the seller directly.</p>{% endif %}
+        {% if bank_details.instructions %}<p class="text-gray-400 mt-2">{{ bank_details.instructions }}</p>{% endif %}
+      </div>
+    {% elif method == 'crypto' %}
+      <h2 class="text-sm font-semibold text-cyan-400 mb-3">Pay with Crypto</h2>
+      {% if not networks %}<p class="text-red-400 text-sm mb-6">No crypto wallets have been set up yet — contact the seller directly.</p>{% endif %}
+      {% for code, name, address in networks %}
+      <div class="bg-white/5 rounded-xl p-4 mb-3 flex items-center gap-4">
+        {% if qr_codes.get(code) %}<img src="{{ qr_codes[code] }}" class="w-20 h-20 rounded-lg"/>{% endif %}
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-white">{{ name }}</p>
+          <p class="text-xs text-gray-400 break-all font-mono">{{ address }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    {% elif method == 'wave' %}
+      <h2 class="text-sm font-semibold text-cyan-400 mb-3">Pay with Wave</h2>
+      <div class="text-sm text-gray-300 bg-white/5 rounded-xl p-4 mb-6 whitespace-pre-line">
+        {{ instructions or "Wave payment details haven't been set up yet — contact the seller directly." }}
+      </div>
+    {% elif method == 'payoneer' %}
+      <h2 class="text-sm font-semibold text-cyan-400 mb-3">Pay with Payoneer</h2>
+      <div class="text-sm text-gray-300 bg-white/5 rounded-xl p-4 mb-6 whitespace-pre-line">
+        {{ instructions or "Payoneer payment details haven't been set up yet — contact the seller directly." }}
+      </div>
+    {% endif %}
+
+    <h2 class="text-sm font-semibold text-cyan-400 mb-3">Submit your payment for confirmation</h2>
+    <form method="POST" enctype="multipart/form-data" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">Your name</label>
+        <input name="payer_name" type="text" class="input-premium"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">Your email</label>
+        <input name="payer_email" type="email" required class="input-premium"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">Transfer reference / transaction ID / confirmation code</label>
+        <input name="sender_reference" type="text" class="input-premium" placeholder="e.g. bank ref, tx hash, Wave confirmation code"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1.5">Proof of payment (screenshot, optional)</label>
+        <input name="proof_image" type="file" accept="image/*" class="input-premium"/>
+      </div>
+      <button type="submit" class="w-full btn-neon justify-center py-3 text-sm font-semibold">Submit for Confirmation</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Email Templates{% endblock %}
+{% block content %}
+{% set template_defs = [
+  ('welcome','Welcome Email'),('purchase','Purchase Confirmation'),('download_ready','Download Ready'),
+  ('password_reset','Password Reset'),('email_verify','Email Verification'),
+  ('freelancer_approved','Freelancer Approved'),('job_application','Job Application Alert'),
+  ('newsletter','Newsletter Template'),
+] %}
+<div class="space-y-4">
+  {% for tid, tname in template_defs %}
+  {% set tpl = templates | selectattr('template_id','equalto',tid) | first %}
+  <div class="glass border border-white/10 rounded-2xl overflow-hidden">
+    <button onclick="toggleAccordion('tpl-{{ tid }}')" class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-white/3 transition-colors">
+      <span class="font-medium text-white">{{ tname }}</span>
+      <span class="text-gray-400 text-sm">{{ tpl.subject if tpl else 'Not set' }} ↕</span>
+    </button>
+    <div id="tpl-{{ tid }}" class="hidden border-t border-white/10 p-6">
+      <form onsubmit="saveTemplate(event,'{{ tid }}')">
+        <div class="space-y-4">
+          <div><label class="admin-label">Subject</label>
+            <input id="subj-{{ tid }}" value="{{ tpl.subject if tpl else '' }}" class="admin-input w-full mt-1" placeholder="Email subject…"/>
+          </div>
+          <div><label class="admin-label">Body (HTML or plain text — supports {{'{{'}}name{{'}}'}}, {{'{{'}}site_name{{'}}'}}, etc.)</label>
+            <textarea id="body-{{ tid }}" rows="8" class="admin-input w-full mt-1 resize-y font-mono text-xs">{{ tpl.body if tpl else '' }}</textarea>
+          </div>
+          <div class="flex justify-between items-center">
+            <p class="text-xs text-gray-500">Variables: {{'{{'}}name{{'}}'}}, {{'{{'}}email{{'}}'}}, {{'{{'}}site_name{{'}}'}}, {{'{{'}}site_url{{'}}'}}, {{'{{'}}product_name{{'}}'}}, {{'{{'}}download_url{{'}}'}}, {{'{{'}}order_id{{'}}'}}, {{'{{'}}reset_url{{'}}'}}</p>
+            <button type="submit" class="btn-neon text-xs py-2 px-4">Save Template</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>{% endfor %}
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function saveTemplate(e, tid) {
+  e.preventDefault();
+  const subject = document.getElementById('subj-'+tid).value;
+  const body    = document.getElementById('body-'+tid).value;
+  const res = await fetch('{{ url_for("admin.save_email_template") }}', {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'},
+    body: JSON.stringify({template_id: tid, subject, body})
+  });
+  const d = await res.json();
+  showToast(d.success ? 'Template saved!' : d.error, d.success ? 'success' : 'error');
+}
+function toggleAccordion(id) {
+  document.getElementById(id).classList.toggle('hidden');
+}
+</script>
+{% endblock %}

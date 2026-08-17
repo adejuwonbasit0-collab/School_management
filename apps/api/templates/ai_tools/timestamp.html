@@ -1,0 +1,42 @@
+{% extends "public_base.html" %}
+{% block title %}Timestamp Converter — {{ site_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:48px 20px">
+  <a href="{{ url_for('ai.index') }}" style="color:var(--c-text-2);font-size:13px;text-decoration:none">← AI Tools</a>
+  <h1 style="font-size:36px;font-weight:900;font-family:Space Grotesk,sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Timestamp Converter</h1>
+  <p style="color:var(--c-text-2);margin-bottom:32px">Convert Unix timestamps</p>
+  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px">
+    <div>
+      <label style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:8px">Input</label>
+      <textarea id="tool-input" rows="8" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;color:#e8edf8;font-size:13px;outline:none;resize:none;font-family:JetBrains Mono,monospace;transition:border-color .2s" onfocus="this.style.borderColor='rgba(var(--c-accent-rgb),.4)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'" placeholder="Enter your input here…"></textarea>
+    </div>
+    <button onclick="runTool()" style="margin-top:14px;padding:12px 28px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));border:none;border-radius:12px;font-weight:700;font-size:14px;color:#000;cursor:pointer;font-family:inherit">✨ Run</button>
+    <div id="tool-result" style="display:none;margin-top:20px">
+      <label style="font-size:11px;font-weight:700;color:#8899b0;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:8px">Result</label>
+      <div id="tool-output" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;font-family:JetBrains Mono,monospace;font-size:12px;line-height:1.8;color:#a8b8d0;white-space:pre-wrap;max-height:400px;overflow-y:auto"></div>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('tool-output').textContent);showToast&&showToast('Copied!','success')" style="margin-top:10px;padding:8px 16px;background:rgba(var(--c-accent-rgb),0.08);border:1px solid rgba(var(--c-accent-rgb),0.2);border-radius:8px;color:var(--c-accent);font-size:12px;cursor:pointer;font-family:inherit;font-weight:700">Copy Result</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function runTool() {
+  {% if not current_user.is_authenticated %}return showToast&&showToast('Please sign in to use AI tools','error');{% endif %}
+  const content = document.getElementById('tool-input').value.trim();
+  if (!content) return;
+  document.querySelector('button[onclick="runTool()"]').textContent = '…Running';
+  try {
+    const res = await fetch('/ai/api/generic', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify({tool:'time', content})
+    });
+    const d = await res.json();
+    document.getElementById('tool-result').style.display = 'block';
+    document.getElementById('tool-output').innerHTML = d.response ? marked.parse(d.response) : (d.error || 'Error');
+  } catch(e) { showToast&&showToast('Error: '+e.message,'error'); }
+  document.querySelector('button[onclick="runTool()"]').textContent = '✨ Run';
+}
+</script>
+{% endblock %}

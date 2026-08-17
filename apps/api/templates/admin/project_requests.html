@@ -1,0 +1,159 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Project Requests{% endblock %}
+{% block content %}
+<div class="flex gap-2 mb-6 flex-wrap">
+  {% for s, label in [('all','All'),('new','New'),('reviewing','Reviewing'),('quoted','Quoted'),('accepted','Accepted'),('declined','Declined')] %}
+  <a href="{{ url_for('admin.project_requests', status=s) }}"
+    class="text-xs px-4 py-2 rounded-full border {% if current_status == s %}border-green-500/60 text-green-400 bg-green-500/10{% else %}border-white/10 text-gray-400 hover:border-white/20{% endif %} transition-all">
+    {{ label }} <span class="ml-1 opacity-60">{{ counts.get(s,0) }}</span>
+  </a>{% endfor %}
+</div>
+
+{% if items %}
+<div class="space-y-3">
+  {% for r in items %}
+  <div class="ds-card" style="padding:20px">
+    <div class="flex justify-between items-start flex-wrap gap-3 mb-3">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-semibold text-white">{{ r.name }}</span>
+          {% if r.company %}<span class="text-xs text-gray-400">· {{ r.company }}</span>{% endif %}
+          <span class="ds-badge {% if r.status == 'new' %}ds-badge-yellow{% elif r.status == 'accepted' %}ds-badge-green{% elif r.status == 'declined' %}ds-badge-red{% elif r.status == 'quoted' %}ds-badge-blue{% else %}ds-badge-gray{% endif %}">{{ r.status }}</span>
+        </div>
+        <a href="mailto:{{ r.email }}" class="text-xs text-cyan-400 hover:text-cyan-300">{{ r.email }}</a>
+      </div>
+      <span class="text-xs text-gray-500 font-mono">{{ r.created_at | timeago }}</span>
+    </div>
+    <div class="grid grid-cols-3 gap-3 text-xs mb-3">
+      <div><span class="text-gray-500">Type: </span><span class="text-gray-200">{{ r.project_type or '—' }}</span></div>
+      <div><span class="text-gray-500">Budget: </span><span class="text-gray-200">{{ r.budget_range or '—' }}</span></div>
+      <div><span class="text-gray-500">Timeline: </span><span class="text-gray-200">{{ r.timeline or '—' }}</span></div>
+    </div>
+    <p class="text-sm text-gray-300 mb-4">{{ r.description[:240] }}{{ '…' if r.description|length > 240 else '' }}</p>
+    {% set pending_meeting = r.meetings.filter_by(status='requested').first() if r.meetings else None %}
+    {% if pending_meeting %}
+    <div class="ds-card" style="padding:12px;margin-bottom:12px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.25)">
+      <p class="text-xs text-cyan-300 mb-2">📅 They requested a meeting for <strong>{{ pending_meeting.scheduled_at.strftime('%a, %b %d at %I:%M %p') }}</strong>{% if pending_meeting.notes %} — "{{ pending_meeting.notes }}"{% endif %}</p>
+      <form method="POST" action="{{ url_for('admin.confirm_meeting_request', mid=pending_meeting.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="text" name="location" placeholder="Meeting link (Zoom/Meet/Teams) or phone number — sent to the client"
+          class="ds-input" style="width:100%;margin-bottom:8px;font-size:12px"/>
+        <div class="flex gap-2">
+          <button class="ds-btn ds-btn-primary ds-btn-sm">Confirm This Time</button>
+          <button formaction="{{ url_for('admin.decline_meeting_request', mid=pending_meeting.id) }}" class="ds-btn ds-btn-secondary ds-btn-sm">Can't make it</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="openProposal({{ r.id }}, '{{ r.name }}', '{{ r.email }}', '{{ r.currency or '' }}', '{{ r.country or '' }}')" class="ds-btn ds-btn-primary ds-btn-sm">📤 Send Proposal</button>
+      {% if r.user_id and not r.client_project %}
+      <button onclick="openCreateProject({{ r.id }}, {{ r.user_id }}, '{{ r.name }}')" class="ds-btn ds-btn-blue ds-btn-sm">🚀 Create Project</button>{% endif %}
+      <form method="POST" action="{{ url_for('admin.update_project_request_status', rid=r.id) }}" class="flex gap-1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <select name="status" class="admin-input text-xs py-1 px-2" style="border-radius:8px">
+          {% for s in ['new','reviewing','quoted','accepted','declined'] %}
+          <option value="{{ s }}" {% if r.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+        <button class="ds-btn ds-btn-secondary ds-btn-sm">Update</button>
+      </form>
+    </div>
+  </div>{% endfor %}
+</div>
+{% else %}
+<div class="ds-card" style="padding:64px;text-align:center">
+  <div style="font-size:48px;margin-bottom:12px">📭</div>
+  <p class="text-gray-400">No {{ current_status }} project requests.</p>
+</div>{% endif %}
+
+<!-- Send Proposal Modal -->
+<div id="proposal-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5">
+      <h3 class="text-lg font-bold text-white">Send Proposal</h3>
+      <button onclick="closeModal('proposal-modal')" class="text-gray-400 hover:text-white text-xl">✕</button>
+    </div>
+    <form id="proposal-form" method="POST" action="{{ url_for('admin.send_proposal') }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="request_id" id="proposal-request-id"/>
+      <div>
+        <label class="ds-label">Proposal Message *</label>
+        <textarea name="proposal_text" rows="6" required class="ds-input" placeholder="Describe your approach, what you'll deliver, revisions included, etc."></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="ds-label">Quoted Amount *</label><input name="amount" type="number" step="0.01" min="0" required class="ds-input" placeholder="2500.00"/></div>
+        <div>
+          <label class="ds-label">Currency</label>
+          <select name="currency" id="proposal-currency" class="ds-input">
+            <option value="NGN">₦ NGN</option>
+            <option value="USD">$ USD</option>
+            <option value="GBP">£ GBP</option>
+            <option value="EUR">€ EUR</option>
+            <option value="KES">KSh KES</option>
+          </select>
+          <p id="proposal-client-currency-note" class="text-xs text-gray-500 mt-1"></p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="ds-label">Timeline</label><input name="timeline" class="ds-input" placeholder="2–3 weeks"/></div>
+      </div>
+      <div>
+        <label class="ds-label">Payment options to offer this client</label>
+        <div class="space-y-2 mt-2">
+          <label class="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" name="allow_full_payment" value="1" checked/> Full payment upfront</label>
+          <label class="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" name="allow_part_payment" value="1" checked/> Split payment (50% deposit, 50% on delivery)</label>
+          <label class="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" name="allow_after_service" value="1"/> Pay after delivery (invoiced at completion)</label>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Uncheck any option you don't want to offer for this project — the client only sees what you allow here.</p>
+      </div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="closeModal('proposal-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button>
+        <button class="ds-btn ds-btn-primary ds-btn-sm">Send Proposal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Create Project Modal -->
+<div id="create-proj-modal" class="ds-modal-overlay">
+  <div class="ds-modal" style="padding:28px">
+    <div class="flex justify-between items-center mb-5">
+      <h3 class="text-lg font-bold text-white">Create Client Project</h3>
+      <button onclick="closeModal('create-proj-modal')" class="text-gray-400 hover:text-white text-xl">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin.create_client_project') }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="request_id" id="cp-request-id">
+      <input type="hidden" name="client_id" id="cp-client-id">
+      <div><label class="ds-label">Project Title *</label><input name="title" required class="ds-input" id="cp-title"/></div>
+      <div><label class="ds-label">Description</label><textarea name="description" rows="3" class="ds-input"></textarea></div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="closeModal('create-proj-modal')" class="ds-btn ds-btn-ghost ds-btn-sm">Cancel</button>
+        <button class="ds-btn ds-btn-primary ds-btn-sm">Create Project</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function openProposal(rid, name, email, currency, country) {
+  document.getElementById('proposal-request-id').value = rid;
+  document.querySelector('#proposal-form textarea').placeholder = `Hi ${name},\n\nThank you for reaching out...`;
+  const currencySelect = document.getElementById('proposal-currency');
+  if (currency) currencySelect.value = currency;
+  const note = document.getElementById('proposal-client-currency-note');
+  note.textContent = (currency || country) ? `Client requested: ${currency || ''}${country ? ' · ' + country : ''}` : '';
+  openDsModal('proposal-modal');
+}
+function openCreateProject(rid, uid, name) {
+  document.getElementById('cp-request-id').value = rid;
+  document.getElementById('cp-client-id').value = uid;
+  document.getElementById('cp-title').value = `${name}'s Project`;
+  openDsModal('create-proj-modal');
+}
+function openDsModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.ds-modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Feature Disabled — {{ site_name }}{% endblock %}
+{% block body %}
+<div class="min-h-screen grid-pattern flex items-center justify-center px-4">
+  <div class="text-center max-w-lg">
+    <div class="text-8xl mb-6">🚫</div>
+    <h1 class="text-4xl font-bold font-display gradient-text mb-4">{{ feature or "This Feature" }} is Currently Disabled</h1>
+    <p class="text-gray-400 mb-8">This section has been temporarily disabled by the administrator.</p>
+    <a href="{{ url_for('cms.home') }}" class="btn-neon">← Go Home</a>
+  </div>
+</div>
+{% endblock %}

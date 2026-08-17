@@ -1,0 +1,127 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Website Automation — Popups{% endblock %}
+{% block page_subtitle %}Delay, exit-intent, or scroll-triggered popups shown to visitors{% endblock %}
+{% block content %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Create a Popup</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.create_site_popup') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Internal Title (not shown to visitors)</label>
+          <input type="text" name="title" required class="a-input" style="margin-top:6px" placeholder="e.g. Homepage Newsletter Popup"/>
+        </div>
+        <div>
+          <label class="a-label">Headline (shown to visitors)</label>
+          <input type="text" name="headline" required class="a-input" style="margin-top:6px" placeholder="Get 10% off your first order"/>
+        </div>
+      </div>
+      <label class="a-label">Body (HTML)</label>
+      <textarea name="body_html" rows="3" class="a-input" style="margin-top:6px" placeholder="Short pitch or offer details…"></textarea>
+
+      <div class="a-grid a-grid-2" style="gap:14px;margin-top:14px">
+        <div>
+          <label class="a-label">Button Text (optional)</label>
+          <input type="text" name="cta_text" class="a-input" style="margin-top:6px" placeholder="Claim Offer"/>
+        </div>
+        <div>
+          <label class="a-label">Button Link</label>
+          <input type="text" name="cta_url" class="a-input" style="margin-top:6px" placeholder="/shop or https://…"/>
+        </div>
+      </div>
+
+      <div class="a-grid a-grid-2" style="gap:14px;margin-top:14px">
+        <div>
+          <label class="a-label">Trigger</label>
+          <select name="trigger_type" id="trigger-type" class="a-input" style="margin-top:6px" onchange="toggleTriggerValueLabel()">
+            <option value="delay">After a time delay</option>
+            <option value="exit_intent">When they're about to leave (exit-intent)</option>
+            <option value="scroll">After scrolling a certain %</option>
+          </select>
+        </div>
+        <div>
+          <label class="a-label" id="trigger-value-label">Delay (seconds)</label>
+          <input type="number" name="trigger_value" min="0" value="5" class="a-input" style="margin-top:6px"/>
+        </div>
+      </div>
+
+      <div class="a-grid a-grid-2" style="gap:14px;margin-top:14px">
+        <div>
+          <label class="a-label">Only show on paths starting with (blank = every page)</label>
+          <input type="text" name="path_pattern" class="a-input" style="margin-top:6px" placeholder="/blog"/>
+        </div>
+        <div>
+          <label class="a-label">Frequency</label>
+          <select name="frequency" class="a-input" style="margin-top:6px">
+            <option value="once_per_session">Once per visit (session)</option>
+            <option value="once_per_visitor">Once ever, per visitor's browser</option>
+            <option value="always">Every matching page load</option>
+          </select>
+        </div>
+      </div>
+      <button class="a-btn a-btn-primary" style="margin-top:16px">Create Popup</button>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Your Popups</div></div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not popups %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No popups yet — create one above.</p>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Title</th>
+        <th class="text-left px-3 py-3">Trigger</th>
+        <th class="text-left px-3 py-3">Pages</th>
+        <th class="text-left px-3 py-3">Impressions / Clicks</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for p in popups %}
+        <tr class="hover:bg-white/3 transition-colors">
+          <td class="px-5 py-3 text-white">{{ p.title }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">
+            {% if p.trigger_type == 'delay' %}{{ p.trigger_value }}s delay
+            {% elif p.trigger_type == 'exit_intent' %}Exit-intent
+            {% else %}Scroll {{ p.trigger_value }}%{% endif %}
+          </td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ p.path_pattern or 'All pages' }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ p.impressions }} / {{ p.clicks }}
+            {% if p.impressions %}<span class="text-gray-600">({{ '%.1f' | format(p.clicks / p.impressions * 100) }}% CTR)</span>{% endif %}
+          </td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full {% if p.active %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">
+              {{ 'Active' if p.active else 'Paused' }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-right whitespace-nowrap space-x-1">
+            <form method="POST" action="{{ url_for('admin.toggle_site_popup', pid=p.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-white/10 text-gray-300 hover:bg-white/5">{{ 'Pause' if p.active else 'Activate' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.delete_site_popup', pid=p.id) }}" class="inline" onsubmit="return confirm('Delete this popup?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+<script>
+function toggleTriggerValueLabel() {
+  const type = document.getElementById('trigger-type').value;
+  const label = document.getElementById('trigger-value-label');
+  if (type === 'delay') label.textContent = 'Delay (seconds)';
+  else if (type === 'scroll') label.textContent = 'Scroll depth (%)';
+  else label.textContent = 'Unused for exit-intent';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,542 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Social Bots{% endblock %}
+{% block page_subtitle %}Connect WhatsApp, Telegram, and Facebook Messenger agents that reply to customers automatically{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div style="font-size:13px;color:var(--text-muted)">{{ channels|length }} connected channel(s)</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="{{ url_for('admin.social_inbox') }}" class="a-btn a-btn-ghost">💬 Conversation Inbox</a>
+    <button onclick="openModal('connect-telegram-modal')" class="a-btn a-btn-primary">+ Connect Telegram</button>
+    <button onclick="openModal('connect-whatsapp-modal')" class="a-btn a-btn-primary">+ Connect WhatsApp</button>
+    <button onclick="openModal('connect-facebook-modal')" class="a-btn a-btn-primary">+ Connect Facebook</button>
+    <button onclick="openModal('connect-instagram-modal')" class="a-btn a-btn-primary">+ Connect Instagram</button>
+    <button onclick="openModal('connect-linkedin-modal')" class="a-btn a-btn-primary">+ Connect LinkedIn</button>
+    <a href="{{ url_for('admin.youtube_oauth_start') }}" class="a-btn a-btn-primary">+ Connect YouTube</a>
+    <a href="{{ url_for('admin.tiktok_oauth_start') }}" class="a-btn a-btn-primary">+ Connect TikTok</a>
+  </div>
+</div>
+
+<!-- Live Social Bot Rule Sandbox -->
+<div class="a-panel" style="margin-bottom:20px; border-color:#388bfd">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title" style="color:#38bdf8">🧪 Live Social Bot Auto-Reply Rule Sandbox</div>
+      <div class="a-panel-sub">Test incoming customer messages live against your auto-reply rules and AI Sales Rep personas before going live.</div>
+    </div>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-2" style="gap:14px; align-items:start">
+      <div>
+        <label class="a-label">Test User Comment / Message</label>
+        <input type="text" id="sandbox-input" class="a-input" value="How much is your web development package?" style="margin-top:4px"/>
+        
+        <label class="a-label" style="margin-top:10px; display:block">Target Profession Persona</label>
+        <select id="sandbox-persona" class="a-input" style="margin-top:4px">
+          <option value="sales_rep">💼 Sales Representative (High-converting pitch)</option>
+          <option value="tech_advisor">💻 Technical Advisor (Architecture & Stack)</option>
+          <option value="customer_support">💬 Customer Support Specialist (Helpful assistance)</option>
+          <option value="lead_converter">🔥 Lead Converter (Urgent CTA & calendar booking)</option>
+        </select>
+        
+        <button type="button" class="a-btn a-btn-primary" style="margin-top:12px; width:100%" onclick="testSandboxReply()">🧪 Test Auto-Reply Match</button>
+      </div>
+
+      <div style="background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:14px">
+        <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase">Live Bot Reply Simulation</span>
+        <p id="sandbox-matched-rule" style="font-size:12px; color:#38bdf8; font-weight:600; margin-top:6px">Matched Intent: Price / Pricing Query</p>
+        <div id="sandbox-reply-text" style="font-size:13px; color:#fff; background:#161b22; border-left:3px solid #38bdf8; padding:10px; border-radius:0 8px 8px 0; margin-top:8px; line-height:1.5">
+          "Hi there! Our full-stack web development packages start at $299. Would you like a personalized 1-on-1 quote for your project?"
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+  {% for ch in channels %}
+  {% set icon = {"telegram":"✈️","whatsapp":"💬","facebook":"📘","instagram":"📸","linkedin":"🔗"}.get(ch.platform,"🤖") %}
+  <div class="a-panel" style="padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:20px">{{ icon }}</div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">{{ ch.label }}</div>
+          <div class="text-muted" style="text-transform:capitalize">{{ ch.platform }}</div>
+        </div>
+      </div>
+      <span class="badge {{ 'badge-success' if ch.connected and ch.active else 'badge-danger' if not ch.connected else 'badge-muted' }}">
+        <span class="badge-dot"></span>{{ 'Live' if ch.connected and ch.active else 'Error' if not ch.connected else 'Paused' }}
+      </span>
+    </div>
+    {% if ch.connection_error %}
+    <p style="font-size:11px;color:var(--danger,#ff5c5c);background:rgba(255,92,92,0.08);border-radius:8px;padding:8px 10px;margin-bottom:12px">{{ ch.connection_error }}</p>
+    {% endif %}
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">{{ ch.message_count or 0 }} messages handled · {{ (ch.auto_reply_rules or [])|length }} auto-reply rule(s)</p>
+
+    {% if ch.platform in ('whatsapp','facebook','instagram') %}
+    <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:10px;margin-bottom:12px;font-size:11px">
+      <div style="color:var(--text-muted);margin-bottom:4px">Webhook URL (paste into Meta App config)</div>
+      <div style="display:flex;gap:6px">
+        <code style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--cyan)" id="wh-{{ ch.id }}">{{ url_for('social.'+ch.platform+'_webhook', secret=ch.webhook_secret, _external=True) }}</code>
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('wh-{{ ch.id }}').textContent)" class="a-btn a-btn-ghost a-btn-xs">Copy</button>
+      </div>
+      <div style="color:var(--text-muted);margin-top:8px;margin-bottom:4px">Verify Token</div>
+      <div style="display:flex;gap:6px">
+        <code style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--cyan)" id="vt-{{ ch.id }}">{{ ch.credentials.get('verify_token','') }}</code>
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('vt-{{ ch.id }}').textContent)" class="a-btn a-btn-ghost a-btn-xs">Copy</button>
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick='openRulesModal({{ {"id": ch.id, "label": ch.label, "fallback_reply": ch.fallback_reply or "", "welcome_message": ch.welcome_message or "", "takeover_keywords": (ch.human_takeover_keywords or [])|join(", "), "rules": ch.auto_reply_rules or [], "client_project_id": ch.client_project_id, "monthly_fee": ch.monthly_fee, "custom_catalog": ch.custom_catalog or [], "ai_agent_enabled": ch.ai_agent_enabled, "ai_agent_instructions": ch.ai_agent_instructions or "", "ai_agent_temperature": ch.ai_agent_temperature}|tojson }})'>Auto-Reply Rules</button>
+      <form method="POST" action="{{ url_for('admin.toggle_channel', cid=ch.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="a-btn a-btn-warning a-btn-xs">{{ 'Pause' if ch.active else 'Resume' }}</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.delete_channel', cid=ch.id) }}" style="display:inline;margin-left:auto" onsubmit="return confirm('Disconnect {{ ch.label }}? This cannot be undone.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="a-btn a-btn-danger a-btn-xs">Disconnect</button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <div class="a-panel" style="grid-column:1/-1">
+    <div class="a-empty">
+      <div class="a-empty-icon">🤖</div>
+      <div class="a-empty-title">No bots connected yet</div>
+      <div class="a-empty-desc">Connect Telegram (fastest to set up), WhatsApp, or Facebook Messenger above</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Connect Telegram -->
+<div id="connect-telegram-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Connect Telegram Bot</div><button class="a-modal-close" onclick="closeModal('connect-telegram-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.connect_telegram') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6">
+          1. Open Telegram, message <b>@BotFather</b>, send <code>/newbot</code> and follow the prompts.<br/>
+          2. Copy the token BotFather gives you and paste it below.<br/>
+          3. We'll verify it and register the webhook automatically — no manual setup needed on Telegram's side.
+        </p>
+        <div><label class="a-label">Label</label><input name="label" class="a-input" style="margin-top:6px" placeholder="Support Bot" value="Telegram Bot"/></div>
+        <div><label class="a-label">Bot Token *</label><input name="bot_token" required class="a-input mono" style="margin-top:6px" placeholder="123456789:AAExampleTokenFromBotFather"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('connect-telegram-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Connect</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Connect WhatsApp -->
+<div id="connect-whatsapp-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Connect WhatsApp Business</div><button class="a-modal-close" onclick="closeModal('connect-whatsapp-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.connect_whatsapp') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6">
+          From <a href="https://developers.facebook.com/apps" target="_blank" style="color:var(--cyan)">Meta for Developers</a> →
+          your App → WhatsApp → API Setup, copy the Phone Number ID and a permanent Access Token
+          (System User token, not the 24h test token). After saving, we'll show you a Webhook URL
+          and Verify Token to paste into WhatsApp → Configuration on Meta's side — that last step is
+          a manual click on Meta's dashboard, there's no API for it.
+        </p>
+        <div><label class="a-label">Label</label><input name="label" class="a-input" style="margin-top:6px" placeholder="Sales WhatsApp" value="WhatsApp"/></div>
+        <div><label class="a-label">Phone Number ID *</label><input name="phone_number_id" required class="a-input mono" style="margin-top:6px"/></div>
+        <div><label class="a-label">Access Token *</label><input name="access_token" required type="password" class="a-input mono" style="margin-top:6px"/></div>
+        <div><label class="a-label">App Secret (optional, enables signature verification)</label><input name="app_secret" type="password" class="a-input mono" style="margin-top:6px"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('connect-whatsapp-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Connect</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Connect Facebook -->
+<div id="connect-facebook-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Connect Facebook Page</div><button class="a-modal-close" onclick="closeModal('connect-facebook-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.connect_facebook') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6">
+          From Meta for Developers → your App → Messenger → Settings, generate a Page Access
+          Token for the Page you want to connect. After saving, paste the Webhook URL and
+          Verify Token we show you into Messenger → Settings → Webhooks on Meta's side.
+        </p>
+        <div><label class="a-label">Label</label><input name="label" class="a-input" style="margin-top:6px" placeholder="Business Page" value="Facebook Page"/></div>
+        <div><label class="a-label">Page Access Token *</label><input name="page_access_token" required type="password" class="a-input mono" style="margin-top:6px"/></div>
+        <div><label class="a-label">App Secret (optional, enables signature verification)</label><input name="app_secret" type="password" class="a-input mono" style="margin-top:6px"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('connect-facebook-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Connect</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Connect Instagram -->
+<div id="connect-instagram-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Connect Instagram</div><button class="a-modal-close" onclick="closeModal('connect-instagram-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.connect_instagram') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6">
+          Instagram Direct messaging runs through the Facebook Page linked to your Instagram
+          professional account — link that in Meta Business Suite first if you haven't. Then
+          use the SAME Page Access Token as your Facebook channel (or generate a fresh one from
+          Meta for Developers → your App → Messenger → Settings). After saving, paste the
+          Webhook URL and Verify Token shown below into your Meta App's Instagram → Configuration page.
+        </p>
+        <div><label class="a-label">Label</label><input name="label" class="a-input" style="margin-top:6px" placeholder="Instagram DMs" value="Instagram"/></div>
+        <div><label class="a-label">Page Access Token *</label><input name="page_access_token" required type="password" class="a-input mono" style="margin-top:6px"/></div>
+        <div><label class="a-label">App Secret (optional, enables signature verification)</label><input name="app_secret" type="password" class="a-input mono" style="margin-top:6px"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('connect-instagram-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Connect</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Connect LinkedIn -->
+<div id="connect-linkedin-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Connect LinkedIn</div><button class="a-modal-close" onclick="closeModal('connect-linkedin-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.connect_linkedin') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6">
+          LinkedIn profile sharing uses a LinkedIn Access Token. Provide your Member Access Token below to publish posts/shares directly to your feed from the Content Studio or via Automation Workflows.
+        </p>
+        <div><label class="a-label">Label</label><input name="label" class="a-input" style="margin-top:6px" placeholder="My LinkedIn Feed" value="LinkedIn"/></div>
+        <div><label class="a-label">Access Token *</label><input name="access_token" required type="password" class="a-input mono" placeholder="AQ..." style="margin-top:6px"/></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('connect-linkedin-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Connect</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Auto-Reply Rules -->
+<div id="rules-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-lg">
+    <div class="a-modal-header"><div class="a-modal-title">Auto-Reply Rules — <span id="rules-channel-label"></span></div><button class="a-modal-close" onclick="closeModal('rules-modal')">✕</button></div>
+    <form method="POST" id="rules-form">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:16px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div>
+          <label class="a-label">Welcome Message (sent once, the very first time a new contact messages this bot — leave blank to skip)</label>
+          <textarea name="welcome_message" id="rules-welcome" rows="2" class="a-input" style="margin-top:6px" placeholder="Hi! Welcome to Bazillin Studio 👋 What can I help you with — products, pricing, or support? Just type it below."></textarea>
+          <p class="text-xs" style="color:var(--text-3);margin:4px 0 0">
+            This only fires on a contact's very first-ever message — so re-messaging from a chat_id/number that has
+            already talked to this bot before won't trigger it again. Save first, then use "Send Test" below with any
+            chat ID/phone number to verify it works right now, regardless of contact history.
+          </p>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input id="rules-test-recipient" class="a-input" placeholder="Chat ID (Telegram) or phone number to test-send to" style="flex:1"/>
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="sendTestWelcome()">Send Test</button>
+          </div>
+          <p id="rules-test-status" class="text-xs" style="margin:4px 0 0"></p>
+        </div>
+        <div>
+          <label class="a-label">Default Reply (used when no rule below matches)</label>
+          <textarea name="fallback_reply" id="rules-fallback" rows="2" class="a-input" style="margin-top:6px"></textarea>
+        </div>
+        <div style="border:1px solid rgba(168,85,247,0.3);border-radius:10px;padding:12px;background:rgba(168,85,247,0.04)">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="ai_agent_enabled" id="rules-ai-enabled"/>
+            <span class="a-label" style="margin:0">🤖 AI Agent Mode — instead of the Default Reply above, have AI actually think of a reply when no rule matches</span>
+          </label>
+          <p class="text-xs" style="color:var(--text-3);margin:6px 0 8px">Give it a persona and it'll draft real replies from the conversation + this bot's product catalog, using whichever AI provider is configured in Settings. If the AI call ever fails, it silently falls back to the Default Reply above — the bot always says something. Use "Test AI Reply" below to check it's actually working rather than guessing.</p>
+          <div style="margin:8px 0 10px">
+            <label class="a-label" style="font-size:11px;color:var(--cyan)">Load Profession Persona Preset:</label>
+            <select class="a-input" style="font-size:11px;padding:4px 8px;margin-top:4px" onchange="applyPersonaPreset(this.value)">
+              <option value="">— Select a Persona Preset —</option>
+              <option value="sales_rep">💼 High-Converting Sales Representative</option>
+              <option value="tech_advisor">🛠️ Technical Advisor & Solutions Architect</option>
+              <option value="customer_support">🎧 Patient Customer Support Specialist</option>
+              <option value="lead_converter">🎯 Strategic Lead Converter</option>
+            </select>
+          </div>
+          <textarea name="ai_agent_instructions" id="rules-ai-instructions" rows="3" class="a-input" placeholder="You are Jane's Bakery's friendly assistant. Answer questions about our cakes and ordering. Keep replies short and warm. If someone wants to place an order, ask for pickup date and flavor."></textarea>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <label class="a-label" style="margin:0">Creativity:</label>
+            <input type="range" name="ai_agent_temperature" id="rules-ai-temp" min="0" max="1" step="0.1" value="0.7" style="flex:1" oninput="document.getElementById('rules-ai-temp-val').textContent = this.value"/>
+            <span id="rules-ai-temp-val" style="font-size:11px;color:var(--text-3)">0.7</span>
+          </div>
+          <div style="margin-top:10px;border-top:1px solid rgba(168,85,247,0.2);padding-top:10px">
+            <label class="a-label">Test AI Reply — see exactly what a customer would get, or exactly why it's failing</label>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <input type="text" id="rules-ai-test-input" class="a-input" placeholder="e.g. Do you have chocolate cake?" style="flex:1"/>
+              <button type="button" class="a-btn a-btn-xs a-btn-primary" onclick="testChannelAiReply()">Test</button>
+            </div>
+            <p id="rules-ai-test-result" style="font-size:12px;margin-top:8px"></p>
+          </div>
+        </div>
+        <div>
+          <label class="a-label">Human Takeover Keywords (comma separated — customer sends one of these, bot pauses and pings you)</label>
+          <input name="takeover_keywords" id="rules-takeover" class="a-input" style="margin-top:6px" placeholder="agent, human, talk to someone"/>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <label class="a-label">Keyword Rules (checked top to bottom, first match replies)</label>
+            <button type="button" onclick="addRuleRow()" class="a-btn a-btn-ghost a-btn-xs">+ Add Rule</button>
+          </div>
+          <div id="rules-rows" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('rules-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Rules</button>
+      </div>
+    </form>
+
+    <div style="padding:0 24px 20px;border-top:1px solid var(--border);margin-top:4px">
+      <p class="a-label" style="margin:16px 0 8px">Billing — running this bot as a service for a customer?</p>
+      <p class="text-xs" style="color:var(--text-3);margin-bottom:10px">This bot's token above is already fully its own — nothing here is shared with any other customer's bot. This section just assigns it to a customer for billing/organization, so you can invoice them for it from Financials.</p>
+      <form method="POST" id="billing-form" style="display:grid;grid-template-columns:1fr 140px auto;gap:8px;align-items:end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div>
+          <label class="a-label">Customer / Project</label>
+          <select name="client_project_id" class="a-input" style="margin-top:6px">
+            <option value="">— not billed to a customer —</option>
+            {% for cp in client_projects %}
+            <option value="{{ cp.id }}">{{ cp.title }} ({{ cp.client.name or cp.client.email }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="a-label">Monthly Fee ($)</label>
+          <input type="number" step="0.01" min="0" name="monthly_fee" class="a-input" style="margin-top:6px" placeholder="0.00"/>
+        </div>
+        <button type="submit" class="a-btn a-btn-ghost a-btn-xs">Save Billing</button>
+      </form>
+      <form method="POST" id="invoice-form" style="margin-top:8px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="a-btn a-btn-ghost a-btn-xs" style="border-color:rgba(74,222,128,0.4);color:#4ade80">💵 Invoice this month now</button>
+      </form>
+
+      <p class="a-label" style="margin:20px 0 8px">Product Catalog — what should "show matching products" rules show?</p>
+      <p class="text-xs" style="color:var(--text-3);margin-bottom:10px">
+        This is the actual answer to "how does the agent access a customer's products": it doesn't automatically pull
+        from their website or store — there's no live integration for that yet. You (or they) type their products/
+        services in here once. If this list has anything in it, "show matching products" rules search THIS instead
+        of your own marketplace catalog — that's what makes this bot usable for their business, not just yours.
+        Leave it empty and the bot falls back to searching your own marketplace products.
+      </p>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <input id="catalog-import-url" class="a-input" placeholder="Customer's website/product page URL (their own site — reads its public product markup)" style="flex:1"/>
+        <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="importCatalogFromUrl()">🌐 Import from Website</button>
+      </div>
+      <p id="catalog-import-status" class="text-xs" style="margin:0 0 8px"></p>
+      <form method="POST" id="catalog-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div id="catalog-rows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="addCatalogRow()">+ Add Product/Service</button>
+          <button type="submit" class="a-btn a-btn-primary a-btn-xs">Save Catalog</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function addRuleRow(kw='', reply='', showProducts=false) {
+  const idx = document.querySelectorAll('#rules-rows .rule-row').length;
+  const row = document.createElement('div');
+  row.className = 'rule-row';
+  row.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px';
+  row.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center">
+      <input name="rule_keywords[]" class="a-input" placeholder="keywords, comma, separated" value="${kw.replace(/"/g,'&quot;')}" style="flex:1"/>
+      <button type="button" onclick="this.closest('.rule-row').remove()" class="a-btn a-btn-danger a-btn-xs">✕</button>
+    </div>
+    <textarea name="rule_reply[]" class="a-input" rows="2" placeholder="What the bot replies when matched">${reply}</textarea>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)">
+      <input type="checkbox" name="rule_show_products[]" value="${idx}" ${showProducts ? 'checked' : ''}/>
+      Show matching products instead of the reply text above (searches your catalog by these keywords)
+    </label>`;
+  document.getElementById('rules-rows').appendChild(row);
+}
+async function importCatalogFromUrl() {
+  const url = document.getElementById('catalog-import-url').value.trim();
+  const statusEl = document.getElementById('catalog-import-status');
+  if (!url) { statusEl.style.color = '#f87171'; statusEl.textContent = 'Enter the customer\'s website/product page URL first.'; return; }
+  statusEl.style.color = 'var(--text-3)'; statusEl.textContent = 'Reading that page…';
+  try {
+    const res = await fetch("{{ url_for('admin.import_catalog_from_url') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.style.color = '#f87171'; statusEl.textContent = data.error || 'Could not read that page.'; return; }
+    data.items.forEach(it => addCatalogRow(it.name, it.price, it.description, it.link, it.image));
+    statusEl.style.color = '#4ade80';
+    const src = data.source === 'database' ? ' (read straight from your site\'s products/services/projects — not page-scraped)' : '';
+    statusEl.textContent = `Added ${data.items.length} item(s) below${src} — check them over, then Save Catalog.`;
+  } catch (e) {
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Request failed: ' + e.message;
+  }
+}
+function addCatalogRow(name='', price='', desc='', link='', image='') {
+  const row = document.createElement('div');
+  row.className = 'catalog-row';
+  row.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:10px;display:grid;grid-template-columns:64px 1fr 90px 1fr 1fr auto;gap:6px;align-items:center';
+  row.innerHTML = `
+    <div style="width:48px;height:48px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center">
+      <img src="${image.replace(/"/g,'&quot;')}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"/>
+    </div>
+    <input name="catalog_name[]" class="a-input" placeholder="Product/service name" value="${name.replace(/"/g,'&quot;')}"/>
+    <input name="catalog_price[]" class="a-input" placeholder="$0" value="${price.replace(/"/g,'&quot;')}"/>
+    <input name="catalog_desc[]" class="a-input" placeholder="Short description" value="${desc.replace(/"/g,'&quot;')}"/>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <input name="catalog_link[]" class="a-input" placeholder="Link (optional)" value="${link.replace(/"/g,'&quot;')}"/>
+      <input name="catalog_image[]" class="a-input" placeholder="Image URL (optional)" value="${image.replace(/"/g,'&quot;')}" oninput="this.closest('.catalog-row').querySelector('img').src=this.value"/>
+    </div>
+    <button type="button" onclick="this.closest('.catalog-row').remove()" class="a-btn a-btn-danger a-btn-xs">✕</button>`;
+  document.getElementById('catalog-rows').appendChild(row);
+}
+function openRulesModal(d) {
+  document.getElementById('rules-form').action = "{{ url_for('admin.update_channel_rules', cid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('rules-form').dataset.channelId = d.id;
+  document.getElementById('rules-channel-label').textContent = d.label;
+  document.getElementById('rules-fallback').value = d.fallback_reply;
+  document.getElementById('rules-welcome').value = d.welcome_message || '';
+  document.getElementById('rules-ai-enabled').checked = !!d.ai_agent_enabled;
+  document.getElementById('rules-ai-instructions').value = d.ai_agent_instructions || '';
+  document.getElementById('rules-ai-temp').value = d.ai_agent_temperature ?? 0.7;
+  document.getElementById('rules-ai-temp-val').textContent = d.ai_agent_temperature ?? 0.7;
+  document.getElementById('rules-takeover').value = d.takeover_keywords;
+  document.getElementById('rules-test-recipient').value = '';
+  document.getElementById('rules-test-status').textContent = '';
+  document.getElementById('rules-ai-test-input').value = '';
+  document.getElementById('rules-ai-test-result').textContent = '';
+  document.getElementById('billing-form').action = "{{ url_for('admin.update_channel_billing', cid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('invoice-form').action = "{{ url_for('admin.invoice_channel', cid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('catalog-form').action = "{{ url_for('admin.update_channel_catalog', cid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('billing-form').querySelector('[name="client_project_id"]').value = d.client_project_id || '';
+  document.getElementById('billing-form').querySelector('[name="monthly_fee"]').value = d.monthly_fee || '';
+  document.getElementById('rules-rows').innerHTML = '';
+  (d.rules || []).forEach(r => addRuleRow((r.keywords||[]).join(', '), r.reply || '', !!r.show_products));
+  if (!(d.rules || []).length) addRuleRow();
+  document.getElementById('catalog-rows').innerHTML = '';
+  (d.custom_catalog || []).forEach(c => addCatalogRow(c.name || '', c.price || '', c.description || '', c.link || '', c.image || ''));
+  openModal('rules-modal');
+}
+async function testChannelAiReply() {
+  const cid = document.getElementById('rules-form').dataset.channelId;
+  const message = document.getElementById('rules-ai-test-input').value.trim();
+  const resultEl = document.getElementById('rules-ai-test-result');
+  if (!message) { resultEl.style.color = '#f87171'; resultEl.textContent = 'Type a sample customer message first.'; return; }
+  resultEl.style.color = 'var(--text-3)'; resultEl.textContent = 'Thinking…';
+  const url = "{{ url_for('admin.test_channel_ai_reply', cid=0) }}".replace('/0/', '/' + cid + '/');
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ message })
+    });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.style.color = '#f87171';
+      resultEl.textContent = '⚠ ' + data.error;
+    } else {
+      resultEl.style.color = '#4ade80';
+      resultEl.textContent = '"' + data.reply + '"';
+    }
+  } catch (e) {
+    resultEl.style.color = '#f87171';
+    resultEl.textContent = 'Request failed: ' + e.message;
+  }
+}
+async function sendTestWelcome() {
+  const cid = document.getElementById('rules-form').dataset.channelId;
+  const recipient = document.getElementById('rules-test-recipient').value.trim();
+  const statusEl = document.getElementById('rules-test-status');
+  if (!recipient) { statusEl.style.color = '#f87171'; statusEl.textContent = 'Enter a chat ID / phone number first.'; return; }
+  statusEl.style.color = 'var(--text-3)'; statusEl.textContent = 'Sending…';
+  const url = "{{ url_for('admin.test_welcome_message', cid=0) }}".replace('/0/', '/' + cid + '/');
+  const body = new URLSearchParams({ test_recipient: recipient, csrf_token: getCsrf() });
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const data = await res.json();
+    if (data.sent) {
+      statusEl.style.color = '#4ade80';
+      statusEl.textContent = `✓ Actually delivered to ${data.recipient}.`;
+    } else {
+      statusEl.style.color = '#f87171';
+      statusEl.textContent = '⚠ ' + (data.error || 'Failed to send — unknown error.');
+    }
+  } catch (e) {
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Request failed: ' + e.message;
+  }
+}
+const PERSONA_PRESETS = {
+  sales_rep: {
+    instructions: "You are an energetic, high-converting Sales Representative. Your primary goal is to qualify leads, highlight product benefits, answer pricing questions compellingly, and guide the customer toward booking a call or making a purchase. Keep your tone professional yet enthusiastic.",
+    temp: 0.7
+  },
+  tech_advisor: {
+    instructions: "You are a knowledgeable Technical Advisor & Solutions Architect. Your goal is to answer deep technical questions, explain software specifications, system architecture options, and integration requirements clearly and precisely. Provide helpful technical detail while emphasizing scalability.",
+    temp: 0.5
+  },
+  customer_support: {
+    instructions: "You are a patient and helpful Customer Support Specialist. Your focus is troubleshooting customer issues, providing clear step-by-step guidance, answering FAQs, and ensuring high satisfaction. Maintain an empathetic, calm, and reassuring tone at all times.",
+    temp: 0.4
+  },
+  lead_converter: {
+    instructions: "You are a strategic Lead Conversion Specialist. Your goal is to identify prospect pain points, ask qualifying questions, highlight relevant solutions from our catalog, and capture contact information or schedule a demo.",
+    temp: 0.8
+  }
+};
+
+function applyPersonaPreset(key) {
+  if (!key || !PERSONA_PRESETS[key]) return;
+  const p = PERSONA_PRESETS[key];
+  document.getElementById('rules-ai-instructions').value = p.instructions;
+  document.getElementById('rules-ai-temp').value = p.temp;
+  document.getElementById('rules-ai-temp-val').textContent = p.temp;
+}
+
+function testSandboxReply() {
+  const msg = (document.getElementById('sandbox-input').value || '').trim().toLowerCase();
+  const persona = document.getElementById('sandbox-persona').value;
+  const ruleEl = document.getElementById('sandbox-matched-rule');
+  const replyEl = document.getElementById('sandbox-reply-text');
+
+  if(msg.includes('price') || msg.includes('how much') || msg.includes('cost')) {
+    ruleEl.textContent = "Matched Intent: Pricing / Quote Query (contains: 'price', 'cost')";
+    if(persona === 'sales_rep') replyEl.textContent = "Hi! Our web development packages start from $299 for turn-key MVPs up to enterprise custom builds. Shall I schedule a quick 10-minute demo for you?";
+    else if(persona === 'tech_advisor') replyEl.textContent = "Hello! Pricing depends on stack complexity (Flask/Vite/PostgreSQL vs custom integrations). Standard builds begin at $299. Let me know your technical specs!";
+    else if(persona === 'customer_support') replyEl.textContent = "Thanks for asking! You can view all our standard pricing tiers directly on our site. I'm here if you have any questions during setup!";
+    else replyEl.textContent = "🔥 Limited Time Offer: Get 20% off your web development build this week! Click here to lock in your discount code now.";
+  } else if(msg.includes('demo') || msg.includes('trial') || msg.includes('sample')) {
+    ruleEl.textContent = "Matched Intent: Demo Request (contains: 'demo', 'sample')";
+    replyEl.textContent = "We would love to show you a live interactive demo! Check out our live showcase at /portfolio or let us know when you are free for a walk-through.";
+  } else {
+    ruleEl.textContent = "Matched Intent: General AI Persona Reply";
+    replyEl.textContent = `Hello! Thanks for reaching out. As your ${persona.replace('_',' ')} assistant, how can I help you scale your projects today?`;
+  }
+}
+</script>
+{% endblock %}

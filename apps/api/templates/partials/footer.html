@@ -1,0 +1,39 @@
+{% set footer = namespace(data={}) %}
+{% set fb = cms_blocks.footer if cms_blocks is defined else {} %}
+<footer class="mt-20 relative" style="border-top:1px solid rgba(255,255,255,0.08)">
+  <div class="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-px" style="background:linear-gradient(90deg,transparent,rgba(29, 185, 84,0.4),rgba(242, 201, 76,0.3),transparent)"></div>
+  <div class="absolute inset-0 -z-10" style="background:linear-gradient(180deg,transparent,rgba(255,255,255,0.015))"></div>
+  <div class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div class="col-span-1 md:col-span-2">
+        <a href="{{ url_for('cms.home') }}" class="text-xl font-bold font-display gradient-text">{{ site_name }}</a>
+        <p class="mt-2 text-gray-400 text-sm">{{ site_tagline }}</p>
+        <form action="{{ url_for('cms.newsletter_subscribe') }}" method="POST" class="mt-4 flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <input name="email" type="email" placeholder="Your email" class="input-field flex-1 text-sm py-2"/>
+          <button class="btn-neon text-xs py-2 px-4">Subscribe</button>
+        </form>
+      </div>
+      <div>
+        <h4 class="text-sm font-semibold text-white mb-3">Platform</h4>
+        <ul class="space-y-2 text-sm text-gray-400">
+          {% if settings.get('marketplace_enabled', 'true') == 'true' %}<li><a href="{{ url_for('marketplace.index') }}" class="hover:text-white transition-colors">Marketplace</a></li>{% endif %}
+          {% if settings.get('blog_enabled', 'true') == 'true' %}<li><a href="{{ url_for('cms.blog') }}" class="hover:text-white transition-colors">Blog</a></li>{% endif %}
+          {% if settings.get('freelancer_mode_enabled', 'true') == 'true' %}<li><a href="{{ url_for('freelance.index') }}" class="hover:text-white transition-colors">Find Freelancers</a></li>{% endif %}
+          {% if settings.get('hosting_portal_enabled', 'true') == 'true' %}<li><a href="{{ url_for('hosting.index') }}" class="hover:text-white transition-colors">Hosting</a></li>{% endif %}
+          <li><a href="{{ url_for('tools.index') }}" class="hover:text-white transition-colors">Dev Tools</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="text-sm font-semibold text-white mb-3">Links</h4>
+        <ul class="space-y-2 text-sm text-gray-400">
+          <li><a href="{{ url_for('cms.about') }}" class="hover:text-white transition-colors">Portfolio</a></li>
+          <li><a href="{{ url_for('cms.contact') }}" class="hover:text-white transition-colors">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="mt-8 pt-8 border-t border-white/10 text-center text-sm text-gray-500">
+      <p>{{ site_name }} &copy; {{ now.year if now is defined else 2025 }}. All rights reserved.</p>
+    </div>
+  </div>
+</footer>

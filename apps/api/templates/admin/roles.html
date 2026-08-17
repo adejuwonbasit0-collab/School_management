@@ -1,0 +1,50 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Roles{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <p class="text-gray-400 text-sm">{{ roles | length }} roles</p>
+  <button onclick="toggleModal('add-role-modal')" class="btn-neon text-xs py-2 px-4">+ Create Role</button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  {% for r in roles %}
+  <div class="glass border border-white/10 rounded-2xl p-5">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 class="font-semibold text-white capitalize">{{ r.name }}</h3>
+        {% if r.is_system %}<span class="text-xs text-cyan-400">System Role</span>{% endif %}
+      </div>
+      <span class="text-xs text-gray-400">{{ r.users.count() }} users</span>
+    </div>
+    {% if r.description %}<p class="text-sm text-gray-400 mb-3">{{ r.description }}</p>{% endif %}
+    <div class="flex flex-wrap gap-1.5">
+      {% for perm in (r.permissions or []) %}
+      <span class="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">{{ perm }}</span>{% endfor %}
+    </div>
+    {% if not r.is_system %}
+    <form method="POST" action="{{ url_for('admin.delete_role', rid=r.id) }}" class="mt-4" onsubmit="return confirm('Delete role?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all">Delete Role</button>
+    </form>{% endif %}
+  </div>{% endfor %}
+</div>
+<div id="add-role-modal" class="modal-overlay hidden">
+  <div class="modal-box max-w-md">
+    <div class="flex justify-between items-center mb-5"><h3 class="text-lg font-bold text-white">Create Role</h3><button onclick="toggleModal('add-role-modal')" class="text-gray-400 hover:text-white">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_role') }}" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div><label class="admin-label">Role Name *</label><input name="name" required class="admin-input w-full mt-1" placeholder="editor"/></div>
+      <div><label class="admin-label">Description</label><input name="description" class="admin-input w-full mt-1"/></div>
+      <div>
+        <label class="admin-label">Permissions</label>
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          {% for perm in ['read','write','delete','all','freelance.apply','freelance.post','admin.access','marketplace.sell'] %}
+          <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" name="permissions" value="{{ perm }}" class="accent-cyan-500"/> {{ perm }}
+          </label>{% endfor %}
+        </div>
+      </div>
+      <div class="flex justify-end gap-3"><button type="button" onclick="toggleModal('add-role-modal')" class="admin-btn-ghost text-sm">Cancel</button><button class="btn-neon text-sm py-2 px-5">Create</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

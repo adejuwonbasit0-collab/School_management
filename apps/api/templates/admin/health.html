@@ -1,0 +1,260 @@
+{% extends "admin/base.html" %}
+{% block page_title %}System Health{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+  <div class="lg:col-span-1">
+    <div class="glass border border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center">
+      <div class="relative w-32 h-32 mb-4">
+        <svg class="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="50" fill="none"
+            stroke="{% if score >= 80 %}#00ff88{% elif score >= 50 %}#facc15{% else %}#ef4444{% endif %}"
+            stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="{{ score * 3.14 }}, 314"
+            class="transition-all duration-1000"/>
+        </svg>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span class="text-3xl font-bold font-display {% if score >= 80 %}text-green-400{% elif score >= 50 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ score }}</span>
+        </div>
+      </div>
+      <p class="text-sm text-gray-400 text-center">{% if score >= 80 %}All systems operational{% elif score >= 50 %}Some issues detected{% else %}Critical issues!{% endif %}</p>
+    </div>
+  </div>
+  <div class="lg:col-span-2 space-y-3">
+    {% for c in checks %}
+    <div class="glass border border-white/10 rounded-xl px-5 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-base">{% if c.ok == true %}✅{% elif c.ok == false %}❌{% else %}❔{% endif %}</span>
+        <span class="text-sm font-medium text-white">{{ c.label }}</span>
+      </div>
+      <span class="text-xs text-gray-400">{{ c.detail }}</span>
+    </div>{% endfor %}
+  </div>
+</div>
+
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+  <!-- SEO Score -->
+  <div class="glass border border-white/10 rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-white">SEO Score</h3>
+      <span class="text-2xl font-bold font-display {% if seo_score >= 80 %}text-green-400{% elif seo_score >= 50 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ seo_score }}/100</span>
+    </div>
+    <div class="space-y-2">
+      {% for c in seo_checks %}
+      <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white/3">
+        <span class="text-xs text-gray-300">{{ c.label }}</span>
+        <span class="text-xs {% if c.ok %}text-green-400{% else %}text-yellow-400{% endif %}">{{ c.detail }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('admin.seo_settings') }}" class="text-xs text-primary hover:underline mt-3 inline-block">Fix in SEO Settings →</a>
+  </div>
+
+  <!-- Page Speed -->
+  <div class="glass border border-white/10 rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Page Speed</h3>
+    <div class="space-y-2">
+      {% for c in speed_checks %}
+      <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white/3">
+        <span class="text-xs text-gray-300">{{ c.label }}</span>
+        <span class="text-xs {% if c.ok %}text-green-400{% elif c.ok == false %}text-yellow-400{% else %}text-gray-500{% endif %}">{{ c.detail }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-gray-600 mt-3">This measures raw server response time. For full page-load speed (images, scripts, etc.), use Google PageSpeed Insights against your live URL.</p>
+
+    <div class="mt-4 pt-4 border-t border-white/10">
+      <p class="text-xs text-gray-400 mb-2">Check any page — your own, or a customer's:</p>
+      <div class="flex gap-2">
+        <input id="speed-check-url" class="a-input" placeholder="https://example.com" style="flex:1"/>
+        <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="runPageSpeedCheck()">Check</button>
+      </div>
+      <div id="speed-check-result" class="mt-3 text-xs"></div>
+    </div>
+  </div>
+</div>
+
+{% if last_ai_failover %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">AI Provider Status</div></div>
+  <div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3);margin-bottom:10px">Whenever your preferred AI provider fails, the request now automatically retries with the next configured provider (Anthropic → Gemini → OpenAI → Groq → OpenRouter, in whichever order you've set keys). This shows the most recent time that happened, or the most recent time every configured provider failed.</p>
+    <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:12px;font-size:12px;color:#f87171">{{ last_ai_failover }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if recent_errors %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Recent Errors (newest first)</div></div>
+  <div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3);margin-bottom:10px">Reads <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px">logs/app_errors.log</code> — every WARNING and above (including any 500 error) gets written here now. If this is empty, nothing's been logged since the last restart, which is good news.</p>
+    <pre style="background:#0a0a0a;border-radius:8px;padding:12px;font-size:11px;color:#f87171;max-height:320px;overflow:auto;white-space:pre-wrap">{% for line in recent_errors %}{{ line }}{% endfor %}</pre>
+  </div>
+</div>
+{% endif %}
+
+<script>
+async function runPageSpeedCheck() {
+  const url = document.getElementById('speed-check-url').value.trim();
+  const result = document.getElementById('speed-check-result');
+  if (!url) { result.style.color = '#f87171'; result.textContent = 'Enter a URL first.'; return; }
+  result.style.color = 'var(--text-3)'; result.textContent = 'Checking…';
+  try {
+    const res = await fetch("{{ url_for('admin.page_speed_check') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) { result.style.color = '#f87171'; result.textContent = data.error || 'Check failed.'; return; }
+    result.style.color = '#cbd5e1';
+    result.innerHTML = `
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+        <div class="bg-white/3 rounded-lg p-2 text-center"><div class="text-white font-bold">${data.time_ms}ms</div><div class="text-gray-500">Response time</div></div>
+        <div class="bg-white/3 rounded-lg p-2 text-center"><div class="text-white font-bold">${data.total_size_kb}KB</div><div class="text-gray-500">Total Size (HTML: ${data.size_kb}KB)</div></div>
+        <div class="bg-white/3 rounded-lg p-2 text-center"><div class="text-white font-bold">${data.img_count}</div><div class="text-gray-500">Images</div></div>
+        <div class="bg-white/3 rounded-lg p-2 text-center"><div class="text-white font-bold">${data.script_count}</div><div class="text-gray-500">Scripts</div></div>
+      </div>
+      <p><strong>${data.verdict}</strong></p>
+      ${data.tips.length ? '<ul class="list-disc pl-4 mt-1 text-gray-400">' + data.tips.map(t => `<li>${t}</li>`).join('') + '</ul>' : ''}
+    `;
+  } catch (e) {
+    result.style.color = '#f87171';
+    result.textContent = 'Request failed: ' + e.message;
+  }
+}
+</script>
+
+<div class="glass border border-white/10 rounded-2xl p-6 mb-8 flex items-center justify-between flex-wrap gap-3">
+  <div>
+    <h3 class="font-semibold text-white">Cache</h3>
+    <p class="text-xs text-gray-500">Clear cached pages/data if you're seeing stale content after a settings or content change.</p>
+  </div>
+  <form method="POST" action="{{ url_for('admin.clear_cache') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button class="ds-btn ds-btn-secondary ds-btn-sm">🗑️ Clear Cache</button>
+  </form>
+</div>
+
+<div class="glass border border-white/10 rounded-2xl p-6 mb-8">
+  <div class="flex items-center justify-between flex-wrap gap-3 mb-5">
+    <div>
+      <h3 class="font-semibold text-white">Database Backups</h3>
+      <p class="text-xs text-gray-500">Back up your database any time, or set it to run automatically.</p>
+    </div>
+    <form method="POST" action="{{ url_for('admin.run_backup_now') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="ds-btn ds-btn-primary ds-btn-sm">💾 Run Backup Now</button>
+    </form>
+  </div>
+
+  <!-- Auto-backup schedule -->
+  <div class="bg-white/3 border border-white/5 rounded-xl p-4 mb-5">
+    <div class="flex items-center gap-3 mb-4">
+      <label class="a-toggle">
+        <input type="checkbox" id="auto-backup-enabled" {% if settings.get('auto_backup_enabled') %}checked{% endif %}
+          onchange="saveSetting('auto_backup_enabled', this.checked ? '1' : '', document.getElementById('backup-status'))"/>
+        <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+        <div><div class="a-toggle-label">Auto Backup</div></div>
+      </label>
+      <span id="backup-status" class="text-xs"></span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="text-xs text-gray-500 block mb-1.5">Schedule type</label>
+        <select id="backup-schedule-mode" class="a-input"
+          onchange="document.getElementById('backup-interval-row').style.display = this.value==='interval' ? 'flex' : 'none';
+                    document.getElementById('backup-dom-row').style.display = this.value==='day_of_month' ? 'flex' : 'none';
+                    saveSetting('backup_schedule_mode', this.value, document.getElementById('backup-status'))">
+          <option value="interval" {% if settings.get('backup_schedule_mode', 'interval') == 'interval' %}selected{% endif %}>Every N days (daily/weekly/custom)</option>
+          <option value="day_of_month" {% if settings.get('backup_schedule_mode') == 'day_of_month' %}selected{% endif %}>A specific date every month</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 block mb-1.5">Last backup</label>
+        <p class="text-sm text-gray-300">{{ settings.get('last_backup_at', 'Never')[:16] if settings.get('last_backup_at') else 'Never' }}</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div id="backup-interval-row" style="display: {{ 'flex' if settings.get('backup_schedule_mode', 'interval') == 'interval' else 'none' }}; flex-direction:column">
+        <label class="text-xs text-gray-500 block mb-1.5">Run every</label>
+        <div class="flex items-center gap-2">
+          <input type="number" min="1" id="backup-frequency" value="{{ settings.get('backup_frequency_days', '7') }}" class="a-input" style="width:80px"
+            onblur="saveSetting('backup_frequency_days', this.value, document.getElementById('backup-status'))"/>
+          <span class="text-xs text-gray-500">day(s) — 1 = daily, 7 = weekly, 30 = ~monthly, or set any custom number (2, 3, 4...)</span>
+        </div>
+      </div>
+      <div id="backup-dom-row" style="display: {{ 'flex' if settings.get('backup_schedule_mode') == 'day_of_month' else 'none' }}; flex-direction:column">
+        <label class="text-xs text-gray-500 block mb-1.5">Day of the month</label>
+        <div class="flex items-center gap-2">
+          <input type="number" min="1" max="31" id="backup-day-of-month" value="{{ settings.get('backup_day_of_month', '1') }}" class="a-input" style="width:80px"
+            onblur="saveSetting('backup_day_of_month', this.value, document.getElementById('backup-status'))"/>
+          <span class="text-xs text-gray-500">1–31 — e.g. 1 for the 1st of every month. If a month is shorter (e.g. 31 in February), it runs on that month's last day instead.</span>
+        </div>
+      </div>
+    </div>
+    <details class="text-xs text-gray-500">
+      <summary class="cursor-pointer text-cyan-400">How to actually make this run automatically →</summary>
+      <div class="mt-3 space-y-2 pl-1">
+        <p>This server has no background task runner, so "every N days" needs an external nudge — this is the same pattern as reminders (Admin → To-Do → Reminder Setup), just for backups:</p>
+        <ol class="list-decimal pl-4 space-y-1">
+          <li>Set a secret key below (any random string, different from your reminder one).</li>
+          <li>On PythonAnywhere: Dashboard → Tasks → add a scheduled task that runs <b>daily</b> (that's the finest interval PythonAnywhere's free tier allows) hitting:
+            <br/><code class="text-cyan-400 break-all">curl "https://yoursite.com/admin/api/run-scheduled-backup?key=YOUR_KEY"</code></li>
+          <li>Even though the task runs daily, a backup only actually happens once due — either your "Run every" interval has elapsed, or (if you picked "a specific date every month") today matches that day and it hasn't already run today — so set the external task to run daily regardless of which schedule type you pick; my code decides if it's actually due.</li>
+        </ol>
+        <div class="flex items-center gap-2 mt-2">
+          <input id="backup-secret" class="a-input mono" style="max-width:280px" value="{{ settings.get('backup_cron_secret','') }}" placeholder="set a random key"/>
+          <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="saveSetting('backup_cron_secret', document.getElementById('backup-secret').value, document.getElementById('backup-status'))">Save Key</button>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- Backup list -->
+  {% if backups %}
+  <div class="space-y-2">
+    {% for b in backups %}
+    <div class="flex items-center justify-between px-4 py-3 rounded-xl bg-white/3 border border-white/5">
+      <div class="min-w-0">
+        <p class="text-sm text-gray-200 font-mono truncate">{{ b.name }}</p>
+        <p class="text-xs text-gray-500">{{ b.created_at.strftime('%b %d, %Y %H:%M') }} · {{ b.size_mb }} MB</p>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <a href="{{ url_for('admin.download_backup', filename=b.name) }}" class="ds-btn ds-btn-secondary ds-btn-sm">⬇️ Download</a>
+        <form method="POST" action="{{ url_for('admin.delete_backup', filename=b.name) }}" onsubmit="return confirm('Delete this backup?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button class="ds-btn ds-btn-secondary ds-btn-sm" style="color:#ff5c5c">✕</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-sm text-gray-500 text-center py-6">No backups yet — click "Run Backup Now" above to create your first one.</p>
+  {% endif %}
+</div>
+
+{% if queues %}
+<div class="glass border border-white/10 rounded-2xl p-6 mb-8">
+  <h3 class="font-semibold text-white mb-4">Needs Your Attention</h3>
+  <div class="space-y-2">
+    {% for q in queues %}
+    <a href="{{ q.url }}" class="flex items-center justify-between px-4 py-3 rounded-xl {% if q.count > 0 %}bg-yellow-500/5 border border-yellow-500/20 hover:bg-yellow-500/10{% else %}bg-white/3 border border-white/5{% endif %} transition-colors">
+      <span class="text-sm {% if q.count > 0 %}text-white{% else %}text-gray-500{% endif %}">{{ q.label }}</span>
+      <span class="text-sm font-bold {% if q.count > 0 %}text-yellow-400{% else %}text-gray-600{% endif %}">{{ q.count }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+  {% for m in metrics %}
+  <div class="glass border border-white/10 rounded-xl p-4 text-center">
+    <p class="text-xs text-gray-500 mb-1">{{ m.label }}</p>
+    <p class="font-mono font-semibold text-white">{{ m.value }}</p>
+  </div>{% endfor %}
+</div>
+{% endblock %}

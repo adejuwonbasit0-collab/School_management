@@ -1,0 +1,58 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Wallets{% endblock %}
+{% block page_subtitle %}Client wallet balances — credit for refunds/goodwill, debit for corrections{% endblock %}
+{% block content %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Adjust a Wallet</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.wallets_adjust') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Client Email</label>
+          <input type="email" name="email" required class="a-input" style="margin-top:6px" placeholder="client@example.com"/>
+        </div>
+        <div>
+          <label class="a-label">Amount</label>
+          <input type="number" name="amount" step="0.01" min="0.01" required class="a-input" style="margin-top:6px" placeholder="50.00"/>
+        </div>
+      </div>
+      <label class="a-label">Note (optional, shown to the client in their wallet history)</label>
+      <input type="text" name="note" class="a-input" style="margin-top:6px;margin-bottom:14px" placeholder="e.g. Refund for cancelled milestone"/>
+      <div style="display:flex;gap:10px">
+        <button type="submit" name="action" value="credit" class="a-btn a-btn-primary">Credit Wallet</button>
+        <button type="submit" name="action" value="debit" class="a-btn" style="color:#f87171">Debit Wallet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Wallets ({{ wallets|length }})</div>
+    <form method="GET" style="display:flex;gap:8px">
+      <input type="text" name="q" value="{{ q }}" class="a-input a-input-sm" placeholder="Search by name/email"/>
+      <button type="submit" class="a-btn a-btn-xs">Search</button>
+    </form>
+  </div>
+  <div class="a-panel-body">
+    {% if not wallets %}
+    <p style="color:var(--text-3);font-size:13px">No wallets yet — one is created automatically the first time a client is credited or pays with a wallet.</p>
+    {% endif %}
+    <table class="a-table">
+      <thead><tr><th>Client</th><th>Balance</th><th>Pending</th><th>Last Activity</th></tr></thead>
+      <tbody>
+        {% for w in wallets %}
+        <tr>
+          <td>{{ w.user.name or w.user.email }}</td>
+          <td>{{ w.balance | money(w.currency) }}</td>
+          <td>{{ w.pending_balance | money(w.currency) if w.pending_balance else '—' }}</td>
+          <td>{{ w.updated_at.strftime('%b %d, %Y %H:%M') if w.updated_at else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

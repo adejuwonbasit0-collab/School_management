@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Security Center{% endblock %}
+{% block page_subtitle %}Real login activity and account security — not a full enterprise SOC, but grounded in your actual data{% endblock %}
+{% block content %}
+
+<div class="a-grid a-grid-4" style="gap:14px;margin-bottom:20px">
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Failed Logins (24h)</p>
+    <p style="font-size:22px;font-weight:700;color:{{ '#f87171' if failed_24h > 10 else 'inherit' }}">{{ failed_24h }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Failed Logins (7d)</p>
+    <p style="font-size:22px;font-weight:700">{{ failed_7d }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Successful Logins (7d)</p>
+    <p style="font-size:22px;font-weight:700;color:#4ade80">{{ success_7d }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">2FA Adoption</p>
+    <p style="font-size:22px;font-weight:700">{{ two_fa_pct }}%</p>
+    <p style="font-size:10px;color:var(--text-3)">{{ users_with_2fa }} of {{ total_users }} users</p>
+  </div></div>
+</div>
+
+{% if suspicious %}
+<div class="a-panel" style="margin-bottom:20px;border-color:rgba(248,113,113,0.4)">
+  <div class="a-panel-header"><div class="a-panel-title">⚠ Possible Brute-Force Activity</div></div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-3);margin-bottom:10px">5 or more failed login attempts for the same email in the last hour:</p>
+    {% for target, count in suspicious %}
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+      <span style="font-size:13px">{{ target }}</span>
+      <span style="font-size:13px;color:#f87171;font-weight:600">{{ count }} attempts</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Recent Auth Activity</div></div>
+  <div class="a-panel-body">
+    {% if not recent_auth_events %}
+    <p style="color:var(--text-3);font-size:13px">No auth activity recorded yet.</p>
+    {% endif %}
+    <div style="display:flex;flex-direction:column;gap:2px">
+      {% for e in recent_auth_events %}
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <div>
+          <span style="font-size:12px;{% if e.action == 'auth.login_failed' %}color:#f87171{% elif e.action == 'auth.login' %}color:#4ade80{% else %}color:var(--text-2){% endif %}">{{ e.action.replace('auth.', '').replace('_', ' ')|title }}</span>
+          <span style="font-size:11px;color:var(--text-3);margin-left:8px">{{ e.target or '' }}</span>
+        </div>
+        <div style="text-align:right">
+          <span style="font-size:11px;color:var(--text-3)">{{ e.ip_address or 'unknown IP' }}</span>
+          <span style="font-size:11px;color:var(--text-3);display:block">{{ e.created_at.strftime('%b %d, %H:%M') }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

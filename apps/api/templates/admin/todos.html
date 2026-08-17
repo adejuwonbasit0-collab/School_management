@@ -1,0 +1,179 @@
+{% extends "admin/base.html" %}
+{% block page_title %}To-Do{% endblock %}
+{% block page_subtitle %}Plan your work — tasks, priorities, due dates, and reminders{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div style="font-size:13px;color:var(--text-muted)">
+    {{ columns.todo|length }} to do · {{ columns.in_progress|length }} in progress · {{ columns.done|length }} done
+  </div>
+  <div style="display:flex;gap:8px">
+    <button onclick="openModal('reminder-setup-modal')" class="a-btn a-btn-ghost">⏰ Reminder Setup</button>
+    <button onclick="openModal('add-todo-modal')" class="a-btn a-btn-primary">+ Add Task</button>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px" class="todo-board">
+  {% for status, label, color in [('todo','To Do','#8E8E93'),('in_progress','In Progress','#f2c94c'),('done','Done','#1DB954')] %}
+  <div class="a-panel" style="padding:16px;min-height:200px" ondragover="event.preventDefault()" ondrop="dropTodo(event,'{{ status }}')">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="width:8px;height:8px;border-radius:50%;background:{{ color }}"></span>
+      <span style="font-weight:700;font-size:13px;color:var(--text)">{{ label }}</span>
+      <span class="text-muted" style="margin-left:auto">{{ columns[status]|length }}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      {% for t in columns[status] %}
+      {% set pcolor = {"high":"#ff5c5c","medium":"#f2c94c","low":"#8E8E93"}.get(t.priority,"#8E8E93") %}
+      <div class="todo-card" draggable="true" ondragstart="event.dataTransfer.setData('id','{{ t.id }}')"
+           style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:grab">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);{{ 'text-decoration:line-through;opacity:.6' if status=='done' else '' }}">{{ t.title }}</div>
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ pcolor }};flex-shrink:0;margin-top:5px" title="{{ t.priority|title }} priority"></span>
+        </div>
+        {% if t.description %}<p class="text-muted" style="margin-bottom:8px;line-height:1.5">{{ t.description[:100] }}</p>{% endif %}
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
+          {% if t.category %}<span class="badge badge-muted">{{ t.category }}</span>{% endif %}
+          {% if t.due_date %}<span class="text-muted">📅 {{ t.due_date.strftime('%b %d') }}</span>{% endif %}
+          {% if t.reminder_at %}<span class="text-muted">⏰ {{ t.reminder_at.strftime('%b %d, %H:%M') }}</span>{% endif %}
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="flex:1"
+            onclick='editTodo({{ {"id": t.id, "title": t.title, "description": t.description or "", "priority": t.priority, "category": t.category or "", "due_date": t.due_date.strftime("%Y-%m-%dT%H:%M") if t.due_date else "", "reminder_at": t.reminder_at.strftime("%Y-%m-%dT%H:%M") if t.reminder_at else ""}|tojson }})'>Edit</button>
+          {% if status != 'done' %}
+          <form method="POST" action="{{ url_for('admin.update_todo_status', tid=t.id) }}" style="flex:1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="status" value="{{ 'in_progress' if status=='todo' else 'done' }}"/>
+            <button type="submit" class="a-btn a-btn-primary a-btn-xs" style="width:100%">{{ 'Start' if status=='todo' else 'Complete' }}</button>
+          </form>
+          {% else %}
+          <form method="POST" action="{{ url_for('admin.delete_todo', tid=t.id) }}" style="flex:1" onsubmit="return confirm('Delete this task?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="a-btn a-btn-danger a-btn-xs" style="width:100%">Delete</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="text-muted" style="text-align:center;padding:20px 0">Nothing here</p>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Add Task -->
+<div id="add-todo-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Add Task</div><button class="a-modal-close" onclick="closeModal('add-todo-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_todo') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Title *</label><input name="title" required class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Notes</label><textarea name="description" rows="2" class="a-input" style="margin-top:6px"></textarea></div>
+        <div class="responsive-grid-2" style="display:grid;gap:12px">
+          <div><label class="a-label">Category</label><input name="category" class="a-input" style="margin-top:6px" placeholder="e.g. Client work"/></div>
+          <div>
+            <label class="a-label">Priority</label>
+            <select name="priority" class="a-input" style="margin-top:6px">
+              <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option>
+            </select>
+          </div>
+          <div><label class="a-label">Due Date</label><input name="due_date" type="datetime-local" class="a-input" style="margin-top:6px"/></div>
+          <div><label class="a-label">Remind Me At</label><input name="reminder_at" type="datetime-local" class="a-input" style="margin-top:6px"/></div>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('add-todo-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Add Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Task -->
+<div id="edit-todo-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Task</div><button class="a-modal-close" onclick="closeModal('edit-todo-modal')">✕</button></div>
+    <form method="POST" id="edit-todo-form">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div><label class="a-label">Title *</label><input name="title" id="et-title" required class="a-input" style="margin-top:6px"/></div>
+        <div><label class="a-label">Notes</label><textarea name="description" id="et-description" rows="2" class="a-input" style="margin-top:6px"></textarea></div>
+        <div class="responsive-grid-2" style="display:grid;gap:12px">
+          <div><label class="a-label">Category</label><input name="category" id="et-category" class="a-input" style="margin-top:6px"/></div>
+          <div>
+            <label class="a-label">Priority</label>
+            <select name="priority" id="et-priority" class="a-input" style="margin-top:6px">
+              <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+            </select>
+          </div>
+          <div><label class="a-label">Due Date</label><input name="due_date" id="et-due" type="datetime-local" class="a-input" style="margin-top:6px"/></div>
+          <div><label class="a-label">Remind Me At</label><input name="reminder_at" id="et-reminder" type="datetime-local" class="a-input" style="margin-top:6px"/></div>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-todo-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reminder Setup -->
+<div id="reminder-setup-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header"><div class="a-modal-title">Reminder Setup</div><button class="a-modal-close" onclick="closeModal('reminder-setup-modal')">✕</button></div>
+    <div class="a-modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <p style="font-size:12px;color:var(--text-muted);line-height:1.7">
+        While you're logged into admin, due reminders pop up as a toast automatically —
+        nothing to set up for that. For a reminder to <b>email you even when you're not
+        logged in</b>, this site has no background task runner, so it needs an external
+        scheduler to "wake it up" periodically:
+      </p>
+      <ol style="font-size:12px;color:var(--text-muted);line-height:1.9;padding-left:18px">
+        <li>Set a secret key below (any random string).</li>
+        <li>On PythonAnywhere: Dashboard → Tasks → add a scheduled task that runs every
+          5–15 minutes: <code style="color:var(--cyan)">curl "https://yoursite.com/admin/api/check-reminders?key=YOUR_KEY"</code></li>
+        <li>Any due, unsent reminders get emailed to the task's owner at that point.</li>
+      </ol>
+      <div>
+        <label class="a-label">Reminder Cron Secret</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input id="reminder-secret" class="a-input mono" value="{{ settings.get('reminder_cron_secret','') }}" style="flex:1"/>
+          <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="saveSetting('reminder_cron_secret', document.getElementById('reminder-secret').value, document.getElementById('reminder-secret-status'))">Save</button>
+        </div>
+        <span id="reminder-secret-status" style="font-size:11px"></span>
+      </div>
+    </div>
+    <div class="a-modal-footer">
+      <button type="button" onclick="closeModal('reminder-setup-modal')" class="a-btn a-btn-ghost">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function editTodo(d) {
+  document.getElementById('edit-todo-form').action = "{{ url_for('admin.edit_todo', tid=0) }}".replace('/0/', '/' + d.id + '/');
+  document.getElementById('et-title').value = d.title;
+  document.getElementById('et-description').value = d.description;
+  document.getElementById('et-category').value = d.category;
+  document.getElementById('et-priority').value = d.priority;
+  document.getElementById('et-due').value = d.due_date;
+  document.getElementById('et-reminder').value = d.reminder_at;
+  openModal('edit-todo-modal');
+}
+function dropTodo(ev, status) {
+  ev.preventDefault();
+  const id = ev.dataTransfer.getData('id');
+  if (!id) return;
+  fetch(`/admin/todos/${id}/status`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken': getCsrf()},
+    body: JSON.stringify({status})
+  }).then(() => location.reload());
+}
+</script>
+<style>
+@media (max-width: 640px) { .todo-board { grid-template-columns: 1fr !important; } }
+</style>
+{% endblock %}

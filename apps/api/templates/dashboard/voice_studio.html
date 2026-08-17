@@ -1,0 +1,298 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block title %}AI Voice Studio{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-display font-bold text-white tracking-tight">AI Voice Studio</h1>
+            <p class="text-gray-400 text-sm mt-1">Generate real, downloadable speech — saved to your account, not just this browser tab</p>
+        </div>
+        <div class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg flex items-center gap-2">
+            <i data-lucide="zap" class="w-4 h-4 text-[#F2C94C]"></i>
+            <span class="text-sm text-white font-medium" id="credits-display">{{ credits }} credits</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Generation workspace -->
+        <div class="lg:col-span-2 space-y-4">
+            <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5">
+                <label class="block text-sm font-medium text-gray-400 mb-2">Text to convert</label>
+                <textarea id="voice-text" rows="8" maxlength="5000"
+                    class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#1DB954] resize-none"
+                    placeholder="Type or paste up to 5,000 characters..."></textarea>
+                <div class="flex justify-between items-center mt-2 text-xs text-gray-500">
+                    <span id="char-count">0 / 5000 characters</span>
+                    <span>~<span id="word-count">0</span> words</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Voice</label>
+                        <select id="voice-select" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                            {% for v in voices %}
+                            <option value="{{ v.id }}">{{ v.name }}{{ ' (Premium)' if not v.free else '' }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Speed</label>
+                        <select id="voice-speed" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                            <option value="0.75">0.75x (Slower)</option>
+                            <option value="1.0" selected>1x (Normal)</option>
+                            <option value="1.25">1.25x (Faster)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="generateVoice()" id="generate-btn" class="w-full mt-4 py-3 bg-gradient-to-r from-[#1DB954] to-emerald-400 text-black rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all">
+                    <i data-lucide="mic" class="w-4 h-4"></i>
+                    Generate — 1 Credit
+                </button>
+                <p id="generate-error" class="text-xs text-red-400 mt-2 hidden"></p>
+            </div>
+
+            <!-- Live result player -->
+            <div id="result-card" class="hidden bg-white/5 backdrop-blur-xl border border-[#1DB954]/30 rounded-2xl p-5">
+                <p class="text-xs text-[#1DB954] font-bold uppercase tracking-wider mb-2">Just Generated</p>
+                <audio id="result-audio" controls class="w-full"></audio>
+                <div class="flex gap-2 mt-3">
+                    <a id="result-download" href="#" download class="flex-1 text-center py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white transition-all">Download MP3</a>
+                </div>
+            </div>
+
+            <!-- Record your own voice -->
+            <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-white mb-1 flex items-center gap-2"><i data-lucide="radio" class="w-4 h-4 text-red-400"></i> Record Your Own Voice</h3>
+                <p class="text-xs text-gray-500 mb-3">Uses your browser's microphone — no software needed, saved to My Audio like any other generation.</p>
+                <div class="flex items-center gap-3">
+                    <button id="record-btn" onclick="toggleRecording()" class="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-sm font-bold flex items-center gap-2 transition-all">
+                        <i data-lucide="circle" class="w-3.5 h-3.5" id="record-icon"></i>
+                        <span id="record-label">Start Recording</span>
+                    </button>
+                    <span id="record-timer" class="text-sm text-gray-400 font-mono hidden">00:00</span>
+                </div>
+                <div id="record-preview" class="hidden mt-3">
+                    <audio id="record-audio-preview" controls class="w-full"></audio>
+                    <div class="flex gap-2 mt-2">
+                        <input id="record-title" type="text" placeholder="Name this recording..." class="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs">
+                        <button onclick="saveRecording()" class="px-4 py-2 bg-[#1DB954] text-black rounded-lg text-xs font-bold">Save to My Audio</button>
+                    </div>
+                </div>
+                <p id="record-error" class="text-xs text-red-400 mt-2 hidden"></p>
+            </div>
+        </div>
+
+        <!-- Voice library browser -->
+        <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 h-fit">
+            <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2"><i data-lucide="users" class="w-4 h-4 text-[#8B5CF6]"></i> Voice Library</h3>
+            <input type="text" id="voice-search" oninput="filterVoices()" placeholder="Search voices (e.g. British, Nigerian)..." class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs mb-3">
+            <div id="voice-cards" class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {% for v in voices %}
+                <div class="voice-card p-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg flex items-center justify-between cursor-pointer" data-name="{{ v.name|lower }}" onclick="selectVoice('{{ v.id }}')">
+                    <div class="min-w-0">
+                        <p class="text-xs text-white font-medium truncate">{{ v.name }}</p>
+                        <p class="text-[10px] text-gray-500">{{ v.provider }}{{ ' · Premium' if not v.free else ' · Free' }}</p>
+                    </div>
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-[#1DB954] voice-selected-icon hidden shrink-0"></i>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- My Audio library -->
+    <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5">
+        <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="library" class="w-4 h-4 text-[#F2C94C]"></i> My Audio</h3>
+        <div id="audio-library" class="space-y-2">
+            {% for g in generations %}
+            <div class="audio-row p-3 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3 flex-wrap" data-id="{{ g.id }}">
+                <button onclick="toggleFavorite({{ g.id }}, this)" class="shrink-0 text-gray-500 hover:text-[#F2C94C] {{ 'text-[#F2C94C]' if g.is_favorite else '' }}">
+                    <i data-lucide="star" class="w-4 h-4" {{ 'fill="currentColor"' if g.is_favorite else '' }}></i>
+                </button>
+                <div class="flex-1 min-w-[160px]">
+                    <p class="text-sm text-white font-medium truncate">{{ g.title }}</p>
+                    <p class="text-[11px] text-gray-500">{{ g.voice_name }} · {{ g.char_count }} chars · {{ g.created_at }}</p>
+                </div>
+                <audio controls src="{{ g.url }}" class="h-8" style="max-width:220px"></audio>
+                <a href="{{ g.url }}" download class="p-2 text-gray-400 hover:text-white"><i data-lucide="download" class="w-4 h-4"></i></a>
+                <button onclick="deleteGeneration({{ g.id }}, this)" class="p-2 text-gray-400 hover:text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 text-sm py-8">No audio yet — generate your first one above.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let selectedVoice = "{{ voices[0].id if voices else '' }}";
+
+function selectVoice(id) {
+    selectedVoice = id;
+    document.getElementById('voice-select').value = id;
+    document.querySelectorAll('.voice-card').forEach(el => el.classList.remove('border-[#1DB954]'));
+    document.querySelectorAll('.voice-selected-icon').forEach(el => el.classList.add('hidden'));
+    event.currentTarget.classList.add('border-[#1DB954]');
+    event.currentTarget.querySelector('.voice-selected-icon').classList.remove('hidden');
+}
+
+function filterVoices() {
+    const q = document.getElementById('voice-search').value.toLowerCase();
+    document.querySelectorAll('.voice-card').forEach(el => {
+        el.style.display = el.dataset.name.includes(q) ? 'flex' : 'none';
+    });
+}
+
+document.getElementById('voice-text').addEventListener('input', function () {
+    const len = this.value.length;
+    document.getElementById('char-count').textContent = `${len} / 5000 characters`;
+    document.getElementById('word-count').textContent = this.value.trim() ? this.value.trim().split(/\s+/).length : 0;
+});
+
+document.getElementById('voice-select').addEventListener('change', function () { selectedVoice = this.value; });
+
+function generateVoice() {
+    const text = document.getElementById('voice-text').value.trim();
+    const errEl = document.getElementById('generate-error');
+    errEl.classList.add('hidden');
+    if (!text) { errEl.textContent = 'Please enter some text.'; errEl.classList.remove('hidden'); return; }
+
+    const btn = document.getElementById('generate-btn');
+    const original = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Generating...';
+    btn.disabled = true;
+    lucide.createIcons();
+
+    fetch('/dashboard/voice-studio/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+        body: JSON.stringify({ text, voice_id: selectedVoice, speed: document.getElementById('voice-speed').value }),
+    })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'Generation failed.');
+        document.getElementById('result-card').classList.remove('hidden');
+        document.getElementById('result-audio').src = data.generation.url;
+        document.getElementById('result-download').href = data.generation.url;
+        document.getElementById('credits-display').textContent = `${data.credits_left} credits`;
+        if (typeof refreshTopbarCredits === 'function') refreshTopbarCredits();
+        prependToLibrary(data.generation);
+    })
+    .catch(err => { errEl.textContent = err.message; errEl.classList.remove('hidden'); })
+    .finally(() => { btn.innerHTML = original; btn.disabled = false; lucide.createIcons(); });
+}
+
+function prependToLibrary(g) {
+    const lib = document.getElementById('audio-library');
+    const empty = lib.querySelector('p');
+    if (empty) empty.remove();
+    const row = document.createElement('div');
+    row.className = 'audio-row p-3 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3 flex-wrap';
+    row.dataset.id = g.id;
+    row.innerHTML = `
+        <button onclick="toggleFavorite(${g.id}, this)" class="shrink-0 text-gray-500 hover:text-[#F2C94C]"><i data-lucide="star" class="w-4 h-4"></i></button>
+        <div class="flex-1 min-w-[160px]">
+            <p class="text-sm text-white font-medium truncate">${g.title}</p>
+            <p class="text-[11px] text-gray-500">${g.voice_name || ''} · ${g.char_count} chars · ${g.created_at}</p>
+        </div>
+        <audio controls src="${g.url}" class="h-8" style="max-width:220px"></audio>
+        <a href="${g.url}" download class="p-2 text-gray-400 hover:text-white"><i data-lucide="download" class="w-4 h-4"></i></a>
+        <button onclick="deleteGeneration(${g.id}, this)" class="p-2 text-gray-400 hover:text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+    `;
+    lib.insertBefore(row, lib.firstChild);
+    lucide.createIcons();
+}
+
+function toggleFavorite(id, btn) {
+    fetch(`/dashboard/voice-studio/${id}/favorite`, { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } })
+        .then(r => r.json())
+        .then(data => { btn.classList.toggle('text-[#F2C94C]', data.is_favorite); });
+}
+
+function deleteGeneration(id, btn) {
+    if (!confirm('Delete this audio?')) return;
+    fetch(`/dashboard/voice-studio/${id}/delete`, { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } })
+        .then(() => btn.closest('.audio-row').remove());
+}
+
+// ── Recording (real browser microphone, no server/network dependency) ──
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordedBlob = null;
+let recordTimerInterval = null;
+let recordSeconds = 0;
+
+function toggleRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        return;
+    }
+    const errEl = document.getElementById('record-error');
+    errEl.classList.add('hidden');
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+            mediaRecorder.onstop = () => {
+                recordedBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+                document.getElementById('record-audio-preview').src = URL.createObjectURL(recordedBlob);
+                document.getElementById('record-preview').classList.remove('hidden');
+                stream.getTracks().forEach(t => t.stop());
+                clearInterval(recordTimerInterval);
+                document.getElementById('record-timer').classList.add('hidden');
+                document.getElementById('record-label').textContent = 'Start Recording';
+                document.getElementById('record-btn').classList.remove('bg-red-500/30');
+            };
+            mediaRecorder.start();
+            recordSeconds = 0;
+            document.getElementById('record-timer').classList.remove('hidden');
+            document.getElementById('record-timer').textContent = '00:00';
+            recordTimerInterval = setInterval(() => {
+                recordSeconds++;
+                const m = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+                const s = String(recordSeconds % 60).padStart(2, '0');
+                document.getElementById('record-timer').textContent = `${m}:${s}`;
+            }, 1000);
+            document.getElementById('record-label').textContent = 'Stop Recording';
+            document.getElementById('record-btn').classList.add('bg-red-500/30');
+        })
+        .catch(() => {
+            errEl.textContent = "Couldn't access your microphone — check your browser's permission for this site.";
+            errEl.classList.remove('hidden');
+        });
+}
+
+function saveRecording() {
+    if (!recordedBlob) return;
+    const title = document.getElementById('record-title').value.trim() || 'My Recording';
+    const formData = new FormData();
+    formData.append('audio', recordedBlob, 'recording.webm');
+    formData.append('title', title);
+
+    fetch('/dashboard/voice-studio/record', {
+        method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' }, body: formData,
+    })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'Could not save recording.');
+        prependToLibrary(data.generation);
+        document.getElementById('record-preview').classList.add('hidden');
+        document.getElementById('record-title').value = '';
+        recordedBlob = null;
+    })
+    .catch(err => {
+        const errEl = document.getElementById('record-error');
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+    });
+}
+
+lucide.createIcons();
+</script>
+{% endblock %}

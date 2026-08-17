@@ -1,0 +1,10 @@
+{% extends "standalone_public.html" %}
+{% block title %}{{ link.title }} — No longer available{% endblock %}
+{% block content %}
+<div class="max-w-xl mx-auto px-4 py-16 text-center">
+  <p class="text-6xl mb-4">🔒</p>
+  <h1 class="text-2xl font-bold font-display text-white mb-3">This payment link is no longer accepting payments</h1>
+  <p class="text-gray-400 mb-8">"{{ link.title }}" has been closed by the seller.</p>
+  <a href="{{ url_for('cms.home') }}" class="btn-neon">← Back to {{ site_name }}</a>
+</div>
+{% endblock %}

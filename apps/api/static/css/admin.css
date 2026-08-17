@@ -1,0 +1,1254 @@
+/* ============================================================
+   ADMIN PANEL — Apple/Spotify Dark Theme
+   ============================================================ */
+
+/* Every .a-input/select/textarea below is width:100% plus its own
+   padding+border, and nothing in this file ever set box-sizing —
+   so under the default content-box model, every single one of them
+   rendered wider than its container by (padding*2 + border*2), most
+   visibly inside grid columns and next to the fixed sidebar where
+   there's no slack to absorb the overflow. Scoping the fix to
+   .admin-content (not a global *) keeps it from touching the public
+   site's own styling. */
+.admin-content, .admin-content * {
+  box-sizing: border-box;
+}
+.admin-content input, .admin-content select, .admin-content textarea {
+  max-width: 100%;
+}
+
+/* ── Base ── */
+.admin-body {
+  background: #0C0C0E;
+  color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Admin Shell ── */
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Sidebar ── */
+.admin-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100vh;
+  background: rgba(12, 12, 14, 0.92);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 24px 16px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.admin-sidebar::-webkit-scrollbar { width: 4px; }
+.admin-sidebar::-webkit-scrollbar-track { background: transparent; }
+.admin-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+/* ── Main Content ── */
+.admin-main {
+  margin-left: 260px;
+  width: calc(100% - 260px);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.responsive-grid-2 {
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+}
+@media (max-width: 640px) {
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Content Area ── */
+.admin-content {
+  flex: 1;
+  padding: 28px 32px 60px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ── Sidebar Logo ── */
+.admin-sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 20px;
+}
+
+.admin-logo-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #1DB954;
+  color: #0C0C0E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 20px;
+  text-decoration: none;
+  transition: transform 0.2s ease;
+}
+
+.admin-logo-mark:hover {
+  transform: scale(1.05);
+}
+
+.admin-logo-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.3px;
+}
+
+.admin-logo-sub {
+  font-size: 11px;
+  color: #8E8E93;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  margin-top: -2px;
+}
+
+/* ── Sidebar Navigation ── */
+.sidebar-nav {
+  flex: 1;
+  padding-bottom: 16px;
+}
+
+.sidebar-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5C5C60;
+  font-weight: 700;
+  padding: 12px 12px 6px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #8E8E93;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  margin-bottom: 1px;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+}
+
+.sidebar-link.active {
+  background: rgba(29, 185, 84, 0.12);
+  color: #1DB954;
+}
+
+.sidebar-link .s-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.sidebar-link.active .s-icon {
+  opacity: 1;
+}
+
+.sidebar-link:hover .s-icon {
+  opacity: 1;
+}
+
+/* ── Collapsible Sidebar Groups ── */
+.sidebar-group { margin-top: 2px; }
+.sidebar-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5C5C60;
+  font-weight: 700;
+  padding: 12px 12px 6px;
+  transition: color 0.15s ease;
+}
+.sidebar-group-header:hover { color: #ABABB0; }
+.sidebar-group-links { display: none; }
+.sidebar-link-nested { padding-left: 12px; }
+
+/* ── Sidebar Footer ── */
+.sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 16px;
+  margin-top: auto;
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1DB954, #007AFF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #0C0C0E;
+  flex-shrink: 0;
+}
+
+.sidebar-user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+  font-size: 11px;
+  color: #8E8E93;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sidebar-action-btn {
+  flex: 1;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8E8E93;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.sidebar-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.sidebar-action-btn.danger:hover {
+  background: rgba(255, 59, 48, 0.15);
+  border-color: rgba(255, 59, 48, 0.3);
+  color: #FF3B30;
+}
+
+/* ── Topbar ── */
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 32px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  gap: 12px;
+  background: rgba(12, 12, 14, 0.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #FFFFFF;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.hamburger-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.topbar-page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.3px;
+}
+
+.topbar-breadcrumb {
+  font-size: 13px;
+  color: #8E8E93;
+  margin-top: 1px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8E8E93;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.topbar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.topbar-btn.primary {
+  background: #1DB954;
+  color: #0C0C0E;
+  border-color: #1DB954;
+}
+
+.topbar-btn.primary:hover {
+  background: #1ed760;
+  box-shadow: 0 0 30px rgba(29, 185, 84, 0.2);
+}
+
+/* ── Stat Cards ── */
+.stat-card {
+  display: block;
+  padding: 20px 18px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.stat-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.stat-icon.cyan { background: rgba(29, 185, 84, 0.12); }
+.stat-icon.purple { background: rgba(242, 201, 76, 0.12); }
+.stat-icon.green { background: rgba(29, 185, 84, 0.12); }
+.stat-icon.yellow { background: rgba(255, 211, 42, 0.12); }
+.stat-icon.orange { background: rgba(255, 149, 0, 0.12); }
+.stat-icon.red { background: rgba(255, 59, 48, 0.12); }
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #FFFFFF;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.5px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #8E8E93;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* ── Grid ── */
+.a-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.a-grid-2 { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.a-grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.a-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.a-grid-6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
+
+/* Grid/flex children default to min-width:auto, which keeps them at their
+   content's intrinsic width even when the container is too narrow. On the
+   Settings page specifically, a long unbreakable string (a webhook URL, an
+   API key placeholder, a code snippet) in any one cell was enough to force
+   the whole grid wider than .admin-content — and since the sidebar is
+   position:fixed and the page has overflow-x:hidden, that overflow wasn't
+   scrollable into view, it was just clipped. This is what made part of the
+   page permanently unreachable on ordinary laptop-width desktop screens. */
+.a-grid > *, .a-panel-body > *, .a-panel-body { min-width: 0; }
+/* Same overflow fix as above, but for inline style="grid-template-columns:…"
+   used directly in a form (billing rows, catalog rows, etc.) instead of the
+   .a-grid class — those children default to min-width:auto too and can
+   force the same off-screen overflow on desktop widths. */
+[style*="grid-template-columns"] > * { min-width: 0; }
+.admin-content code, .admin-content pre, .admin-content .mono {
+  word-break: break-all;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* ── Panels / Cards ── */
+.a-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.a-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.a-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.a-panel-sub {
+  font-size: 12px;
+  color: #8E8E93;
+  margin-top: 2px;
+}
+
+.a-panel-body {
+  padding: 20px;
+}
+
+.a-panel-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Charts ── */
+.a-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 140px;
+  padding-bottom: 20px;
+}
+
+.a-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.a-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.a-bar.cyan-bar { background: linear-gradient(to top, #0ea5e9, #22d3ee); }
+.a-bar.purple-bar { background: linear-gradient(to top, #8b5cf6, #a78bfa); }
+
+.a-bar-label {
+  font-size: 8px;
+  color: #5C5C60;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Tables ── */
+.a-table-wrap {
+  overflow-x: auto;
+}
+
+.a-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.a-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #5C5C60;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.a-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #E8EDF8;
+}
+
+.a-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Inputs ── */
+.a-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  outline: none;
+  width: 100%;
+}
+
+.a-input:focus {
+  border-color: rgba(29, 185, 84, 0.4);
+  background: rgba(29, 185, 84, 0.04);
+  box-shadow: 0 0 0 4px rgba(29, 185, 84, 0.06);
+}
+
+.a-input::placeholder {
+  color: #5C5C60;
+}
+
+.a-input.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+/* <select class="a-input"> inherits the dark background/white text for
+   its closed box from .a-input above, but the browser's native POPUP
+   options list doesn't inherit that — most browsers fall back to a
+   plain white system background for the open dropdown, which combined
+   with .a-input's white text made every option invisible (white on
+   white) until you dragged over it. Force a dark background on the
+   options themselves so the open list matches the site instead of the
+   browser default. */
+/* Broadened: the admin dashboard actually uses at least three different
+   form-styling class systems (.a-input here, .admin-input and .ds-input
+   in design-system.css/main.css) — scoping this fix to just
+   "select.a-input option" left every .admin-input/.ds-input dropdown
+   still showing the native white-background options list. Targeting
+   .admin-content directly instead of any specific input class covers
+   all of them at once. */
+.admin-content select option {
+  background: #16181D;
+  color: #FFFFFF;
+}
+
+.a-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8E8E93;
+  margin-bottom: 4px;
+}
+
+/* ── Buttons ── */
+.a-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.a-btn-xs { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
+.a-btn-sm { padding: 6px 14px; font-size: 12px; }
+
+.a-btn-primary {
+  background: #1DB954;
+  color: #0C0C0E;
+}
+
+.a-btn-primary:hover {
+  background: #1ed760;
+  transform: scale(1.02);
+}
+
+.a-btn-ghost {
+  background: rgba(255, 255, 255, 0.04);
+  color: #8E8E93;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.a-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.a-btn-danger {
+  background: rgba(255, 59, 48, 0.12);
+  color: #FF3B30;
+  border: 1px solid rgba(255, 59, 48, 0.15);
+}
+
+.a-btn-danger:hover {
+  background: rgba(255, 59, 48, 0.2);
+}
+
+.a-btn-warning {
+  background: rgba(255, 211, 42, 0.12);
+  color: #FFD32A;
+  border: 1px solid rgba(255, 211, 42, 0.15);
+}
+
+.a-btn-warning:hover {
+  background: rgba(255, 211, 42, 0.2);
+}
+
+.a-btn-success {
+  background: rgba(29, 185, 84, 0.12);
+  color: #1DB954;
+  border: 1px solid rgba(29, 185, 84, 0.15);
+}
+
+.a-btn-success:hover {
+  background: rgba(29, 185, 84, 0.2);
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-success { background: rgba(29, 185, 84, 0.15); color: #1DB954; }
+.badge-danger { background: rgba(255, 59, 48, 0.12); color: #FF3B30; }
+.badge-warning { background: rgba(255, 211, 42, 0.12); color: #FFD32A; }
+.badge-info { background: rgba(29, 185, 84, 0.12); color: #1DB954; }
+.badge-purple { background: rgba(242, 201, 76, 0.12); color: #F2C94C; }
+.badge-muted { background: rgba(255, 255, 255, 0.06); color: #8E8E93; }
+
+.badge-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.badge-success .badge-dot { background: #1DB954; }
+.badge-danger .badge-dot { background: #FF3B30; }
+.badge-warning .badge-dot { background: #FFD32A; }
+.badge-info .badge-dot { background: #1DB954; }
+.badge-purple .badge-dot { background: #F2C94C; }
+.badge-muted .badge-dot { background: #5C5C60; }
+
+/* ── Tabs ── */
+.a-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 4px;
+  /* 5 tabs at their natural width overflow a narrow phone. Scroll the
+     strip horizontally instead of letting it wrap into a cramped mess
+     or push the page wider than the viewport. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.a-tabs::-webkit-scrollbar { display: none; }
+
+.a-tab {
+  padding: 8px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8E8E93;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.a-tab:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.a-tab.active {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.a-tab-panel {
+  display: none;
+}
+
+.a-tab-panel.active {
+  display: block;
+}
+
+/* ── Toggle Switch ── */
+.a-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.a-toggle input {
+  display: none;
+}
+
+.a-toggle-track {
+  width: 44px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  position: relative;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.a-toggle input:checked + .a-toggle-track {
+  background: #1DB954;
+}
+
+.a-toggle-thumb {
+  width: 18px;
+  height: 18px;
+  background: #FFFFFF;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: all 0.3s ease;
+}
+
+.a-toggle input:checked + .a-toggle-track .a-toggle-thumb {
+  left: 23px;
+}
+
+.a-toggle-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.a-toggle-sublabel {
+  font-size: 11px;
+  color: #8E8E93;
+}
+
+/* ── Avatar ── */
+.a-avatar-fallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1DB954, #007AFF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #0C0C0E;
+  flex-shrink: 0;
+}
+
+.a-avatar-sm { width: 32px; height: 32px; font-size: 12px; }
+.a-avatar-md { width: 40px; height: 40px; font-size: 16px; }
+
+/* ── Search ── */
+.a-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 0 14px;
+}
+
+.a-search-icon {
+  color: #5C5C60;
+  flex-shrink: 0;
+}
+
+.a-search-input {
+  background: transparent;
+  border: none;
+  padding: 10px 0;
+  color: #FFFFFF;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.a-search-input::placeholder {
+  color: #5C5C60;
+}
+
+/* ── Empty State ── */
+.a-empty {
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.a-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.a-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin-bottom: 4px;
+}
+
+.a-empty-desc {
+  font-size: 13px;
+  color: #8E8E93;
+}
+
+/* ── Modals ── */
+.a-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.a-modal-overlay.open {
+  display: flex;
+}
+
+.a-modal {
+  background: #18181C;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.a-modal-lg { max-width: 800px; }
+.a-modal-xl { max-width: 1000px; }
+.a-modal-sm { max-width: 420px; }
+.a-modal-md { max-width: 540px; }
+
+.a-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.a-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.a-modal-close {
+  background: none;
+  border: none;
+  color: #8E8E93;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.a-modal-close:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.a-modal-body {
+  padding: 24px;
+}
+
+.a-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Flash Messages ── */
+.a-flash-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.a-flash {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #18181C;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: auto;
+  animation: slideIn 0.3s ease;
+}
+
+.a-flash.success { border-left: 4px solid #1DB954; }
+.a-flash.error { border-left: 4px solid #FF3B30; }
+.a-flash.warning { border-left: 4px solid #FFD32A; }
+.a-flash.info { border-left: 4px solid #1DB954; }
+
+.a-flash-close {
+  background: none;
+  border: none;
+  color: #8E8E93;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  transition: color 0.2s ease;
+}
+
+.a-flash-close:hover {
+  color: #FFFFFF;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Pagination ── */
+.a-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.a-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #8E8E93;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.a-page-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.a-page-btn.active {
+  background: #1DB954;
+  color: #0C0C0E;
+  border-color: #1DB954;
+}
+
+/* ── Responsive ── */
+@media (max-width: 992px) {
+  .admin-sidebar {
+    position: fixed;
+    left: -280px;
+    transition: left 0.3s ease;
+    width: 280px;
+    background: #0C0C0E;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  
+  .admin-sidebar.mobile-open {
+    left: 0;
+  }
+  
+  .admin-main {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  .admin-content {
+    padding: 20px;
+  }
+  
+  .admin-topbar {
+    padding: 14px 20px;
+  }
+  
+  .hamburger-btn {
+    display: block;
+  }
+  
+  .topbar-page-title {
+    font-size: 17px;
+  }
+  
+  .a-grid-2,
+  .a-grid-3,
+  .a-grid-4,
+  .a-grid-6 {
+    grid-template-columns: 1fr;
+  }
+  
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-content {
+    padding: 16px;
+  }
+
+  /* Real fix for "forms feel cramped on mobile": two separate things were
+     wrong — inputs used the desktop 13px font-size, which is under the
+     16px threshold that makes iOS Safari auto-zoom the whole page on
+     focus (the actual "jumpy/cramped" feeling, not just visual padding),
+     and touch targets were sized for a mouse pointer, not a fingertip. */
+  .a-input, .a-textarea, select.a-input, textarea.a-input,
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="tel"], input[type="url"],
+  input[type="date"], input[type="datetime-local"], select, textarea {
+    font-size: 16px !important;
+    padding: 13px 14px !important;
+    min-height: 48px;
+  }
+  textarea.a-input, textarea {
+    min-height: 96px;
+  }
+  .a-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .a-grid-2, .a-grid-3, .a-grid-4, .a-grid-6 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .a-modal {
+    margin: 10px;
+    border-radius: 16px;
+  }
+  
+  .a-flash-container {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    max-width: none;
+  }
+  
+  .admin-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .topbar-right {
+    justify-content: flex-end;
+  }
+
+  /* Many admin forms use inline style="grid-template-columns:1fr 1fr" for
+     desktop 2-column layouts. Regular CSS can't override an inline style
+     without !important, so this forces every such grid to stack on mobile
+     regardless of where it's used (modals, panels, portfolio forms, etc). */
+  .a-modal [style*="grid-template-columns"],
+  .a-panel-body[style*="grid-template-columns"],
+  .admin-content [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Global safety net: same as public site — force any inline flex row
+     to wrap on mobile instead of overflowing/getting clipped. */
+  [style*="display:flex"] {
+    flex-wrap: wrap !important;
+  }
+  [style*="display: flex"] {
+    flex-wrap: wrap !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .a-table th, .a-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+/* ── Progress ── */
+.a-progress {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.a-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #1DB954;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   FIX: SIDEBAR OVERLAY — Only shows on mobile, behind sidebar
+   ============================================================ */
+
+.admin-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: none;
+}
+
+.admin-sidebar-overlay.open {
+  display: block;
+}
+
+/* Desktop: overlay never shows */
+@media (min-width: 993px) {
+  .admin-sidebar-overlay,
+  .admin-sidebar-overlay.open {
+    display: none !important;
+  }
+}
+
+/* Mobile: overlay shows behind sidebar when open */
+@media (max-width: 992px) {
+  .admin-sidebar-overlay {
+    display: none !important;
+  }
+  .admin-sidebar-overlay.open {
+    display: block !important;
+  }
+}
+
+/* ── MOBILE FORM SPACING & AUTO-ZOOM PREVENTION ── */
+@media (max-width: 768px) {
+  .a-input, select, textarea, input[type="text"], input[type="email"], input[type="password"], input[type="number"], .admin-input, .ds-input {
+    font-size: 16px !important; /* Prevents auto-zoom on mobile */
+    padding: 12px 16px !important;
+  }
+}

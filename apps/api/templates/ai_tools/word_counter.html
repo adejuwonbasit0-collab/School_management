@@ -1,0 +1,44 @@
+{% extends "public_base.html" %}
+{% block title %}Word Counter — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:760px;margin:0 auto;padding:48px 20px }
+textarea.admin-input { width:100%;min-height:240px;font-family:monospace }
+.stats { display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 }
+.stat { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;text-align:center }
+.stat .n { font-size:24px;font-weight:900;color:var(--c-accent) }
+.stat .l { font-size:11px;color:var(--c-text-2);text-transform:uppercase }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Word Counter</h1>
+    <p style="color:var(--c-text-2)">Live word, character, sentence, and reading-time stats as you type.</p>
+  </div>
+  <textarea id="input" class="admin-input" placeholder="Paste or type text…"></textarea>
+  <div class="stats">
+    <div class="stat"><div class="n" id="words">0</div><div class="l">Words</div></div>
+    <div class="stat"><div class="n" id="chars">0</div><div class="l">Characters</div></div>
+    <div class="stat"><div class="n" id="sentences">0</div><div class="l">Sentences</div></div>
+    <div class="stat"><div class="n" id="readtime">0m</div><div class="l">Read Time</div></div>
+  </div>
+</div>
+<script>
+const input = document.getElementById('input');
+function update() {
+  const text = input.value;
+  const words = (text.match(/\S+/g) || []).length;
+  const chars = text.length;
+  const sentences = (text.match(/[.!?]+/g) || []).length;
+  const minutes = Math.max(1, Math.round(words / 200));
+  document.getElementById('words').textContent = words;
+  document.getElementById('chars').textContent = chars;
+  document.getElementById('sentences').textContent = sentences;
+  document.getElementById('readtime').textContent = minutes + 'm';
+}
+input.addEventListener('input', update);
+update();
+</script>
+{% endblock %}

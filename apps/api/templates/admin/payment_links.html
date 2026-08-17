@@ -1,0 +1,155 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Payment Links{% endblock %}
+{% block page_subtitle %}Public "pay me" pages — share a link, get paid, no account needed for the buyer{% endblock %}
+
+{% block topbar_actions %}
+<button onclick="openModal('create-payment-link-modal')" class="topbar-btn primary">+ New Payment Link</button>
+{% endblock %}
+
+{% block content %}
+
+{# ── MACRO DEFINITION (must be before first call) ── #}
+{% macro payment_link_form_fields(gateway_labels, edit=False) %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+<div style="display:grid;gap:12px">
+  <div>
+    <label class="a-label">Title</label>
+    <input name="title" id="{{ 'pl-title-edit' if edit else 'pl-title' }}" required class="a-input" placeholder="e.g. 1-on-1 Website Consultation"/>
+  </div>
+  <div>
+    <label class="a-label">Description</label>
+    <textarea name="description" id="{{ 'pl-desc-edit' if edit else 'pl-desc' }}" class="a-input" rows="2"></textarea>
+  </div>
+  <div>
+    <label class="a-label">Image URL (optional)</label>
+    <input name="image_url" id="{{ 'pl-image-edit' if edit else 'pl-image' }}" class="a-input" placeholder="https://..."/>
+  </div>
+  <div class="a-grid a-grid-2" style="gap:12px">
+    <div>
+      <label class="a-label">Amount</label>
+      <input name="amount" id="{{ 'pl-amount-edit' if edit else 'pl-amount' }}" type="number" step="0.01" min="0.01" required class="a-input"/>
+    </div>
+    <div>
+      <label class="a-label">Currency</label>
+      <input name="currency" id="{{ 'pl-currency-edit' if edit else 'pl-currency' }}" class="a-input" value="{{ default_currency }}"/>
+    </div>
+  </div>
+  <div>
+    <label class="a-label">Payment Methods to Show</label>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px" id="{{ 'pl-methods-edit' if edit else 'pl-methods' }}">
+      {% for code, label in gateway_labels.items() %}
+      <label style="font-size:12px;display:flex;align-items:center;gap:5px">
+        <input type="checkbox" name="allowed_methods" value="{{ code }}"/> {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+    <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Gateway options (Paystack/Flutterwave/PayPal/Stripe) only work if that gateway is also enabled in Settings → Payments. Bank Transfer/Crypto use your existing Settings details. Wave/Payoneer have no checkout API — buyers submit proof, you confirm manually.</p>
+  </div>
+  <div id="{{ 'pl-wave-wrap-edit' if edit else 'pl-wave-wrap' }}">
+    <label class="a-label">Wave Instructions</label>
+    <textarea name="wave_instructions" id="{{ 'pl-wave-edit' if edit else 'pl-wave' }}" class="a-input" rows="2" placeholder="e.g. Send to Wave number +221 XX XXX XX XX, then submit your confirmation code below"></textarea>
+  </div>
+  <div id="{{ 'pl-payoneer-wrap-edit' if edit else 'pl-payoneer-wrap' }}">
+    <label class="a-label">Payoneer Instructions</label>
+    <textarea name="payoneer_instructions" id="{{ 'pl-payoneer-edit' if edit else 'pl-payoneer' }}" class="a-input" rows="2" placeholder="e.g. Send to Payoneer email you@example.com or use payment request link https://..."></textarea>
+  </div>
+  <div>
+    <label class="a-label">Thank-You Message</label>
+    <textarea name="thank_you_message" id="{{ 'pl-thanks-edit' if edit else 'pl-thanks' }}" class="a-input" rows="2">Thank you! Your payment has been received.</textarea>
+  </div>
+  <div>
+    <label class="a-label">Redirect URL after payment (optional)</label>
+    <input name="redirect_url" id="{{ 'pl-redirect-edit' if edit else 'pl-redirect' }}" class="a-input" placeholder="Leave blank to use the built-in thank-you page"/>
+  </div>
+  <div>
+    <label class="a-label">Status</label>
+    <select name="status" id="{{ 'pl-status-edit' if edit else 'pl-status' }}" class="a-input">
+      <option value="draft">Draft (not publicly visible)</option>
+      <option value="published">Published (live, accepting payments)</option>
+      {% if edit %}<option value="archived">Archived (closed, keeps history)</option>{% endif %}
+    </select>
+  </div>
+</div>
+{% endmacro %}
+
+{# ── Main table ── #}
+<div class="a-panel">
+  <div class="a-table-wrap">
+    <table class="a-table">
+      <thead>
+        <tr>
+          <th>Link</th><th>Amount</th><th>Methods</th><th>Status</th><th>Collected</th><th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for link in links %}
+        <tr>
+          <td>
+            <div style="font-weight:600">{{ link.title }}</div>
+            <a href="{{ url_for('cms.payment_link_view', slug=link.slug, _external=True) }}" target="_blank" style="font-size:11px;color:var(--cyan)">/pay/{{ link.slug }}</a>
+          </td>
+          <td>{{ link.amount }} {{ link.currency }}</td>
+          <td style="font-size:11px">{{ (link.allowed_methods or [])|map('replace','_',' ')|join(', ')|title }}</td>
+          <td><span class="badge {{ 'badge-success' if link.status=='published' else ('badge-warning' if link.status=='draft' else 'badge-muted') }}">{{ link.status }}</span></td>
+          <td>{{ link.total_collected }} {{ link.currency }} <span style="color:var(--text-muted);font-size:11px">({{ link.paid_count }})</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <a href="{{ url_for('admin.payment_link_payments', lid=link.id) }}" class="a-btn a-btn-ghost a-btn-xs">Payments</a>
+            <button onclick='openEditPaymentLink({{ {"id": link.id, "title": link.title, "description": link.description, "image_url": link.image_url, "amount": link.amount|float, "currency": link.currency, "status": link.status, "allowed_methods": link.allowed_methods, "wave_instructions": link.wave_instructions, "payoneer_instructions": link.payoneer_instructions, "thank_you_message": link.thank_you_message, "redirect_url": link.redirect_url}|tojson }})' class="a-btn a-btn-ghost a-btn-xs">Edit</button>
+            <form method="POST" action="{{ url_for('admin.delete_payment_link', lid=link.id) }}" style="display:inline" onsubmit="return confirm('Delete this payment link?')">
+              <button type="submit" class="a-btn a-btn-ghost a-btn-xs" style="color:#f87171">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">No payment links yet — create one to start selling.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div id="create-payment-link-modal" class="a-modal-overlay">
+  <div class="a-modal" style="max-width:560px">
+    <div class="a-modal-header"><div class="a-modal-title">New Payment Link</div><button class="a-modal-close" onclick="closeModal('create-payment-link-modal')">✕</button></div>
+    <form method="POST" action="{{ url_for('admin.create_payment_link') }}">
+      <div class="a-modal-body">
+        {{ payment_link_form_fields(gateway_labels) }}
+        <button type="submit" class="a-btn a-btn-primary" style="width:100%;margin-top:16px">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-payment-link-modal" class="a-modal-overlay">
+  <div class="a-modal" style="max-width:560px">
+    <div class="a-modal-header"><div class="a-modal-title">Edit Payment Link</div><button class="a-modal-close" onclick="closeModal('edit-payment-link-modal')">✕</button></div>
+    <form method="POST" id="edit-payment-link-form">
+      <div class="a-modal-body">
+        {{ payment_link_form_fields(gateway_labels, edit=True) }}
+        <button type="submit" class="a-btn a-btn-primary" style="width:100%;margin-top:16px">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditPaymentLink(link) {
+  document.getElementById('edit-payment-link-form').action = "{{ url_for('admin.update_payment_link', lid=0) }}".replace('/0', '/' + link.id);
+  document.getElementById('pl-title-edit').value = link.title || '';
+  document.getElementById('pl-desc-edit').value = link.description || '';
+  document.getElementById('pl-image-edit').value = link.image_url || '';
+  document.getElementById('pl-amount-edit').value = link.amount || '';
+  document.getElementById('pl-currency-edit').value = link.currency || '';
+  document.getElementById('pl-wave-edit').value = link.wave_instructions || '';
+  document.getElementById('pl-payoneer-edit').value = link.payoneer_instructions || '';
+  document.getElementById('pl-thanks-edit').value = link.thank_you_message || '';
+  document.getElementById('pl-redirect-edit').value = link.redirect_url || '';
+  document.getElementById('pl-status-edit').value = link.status || 'draft';
+  const methods = link.allowed_methods || [];
+  document.querySelectorAll('#pl-methods-edit input[type=checkbox]').forEach(cb => { cb.checked = methods.includes(cb.value); });
+  openModal('edit-payment-link-modal');
+}
+</script>
+{% endblock %}

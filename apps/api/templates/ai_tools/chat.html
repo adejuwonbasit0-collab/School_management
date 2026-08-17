@@ -1,0 +1,144 @@
+{% extends "public_base.html" %}
+{% block title %}AI Chat — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+#chat-shell { height: calc(100vh - 64px); display: grid; grid-template-rows: auto 1fr auto; }
+#messages-area { overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+.msg-user { display: flex; justify-content: flex-end; }
+.msg-ai   { display: flex; justify-content: flex-start; align-items: flex-start; gap: 0.75rem; }
+.bubble-user { background: linear-gradient(135deg, rgba(var(--c-accent-rgb),0.15), rgba(var(--c-accent-2-rgb),0.15)); border: 1px solid rgba(var(--c-accent-rgb),0.2); border-radius: 18px 18px 4px 18px; padding: 0.75rem 1rem; max-width: 75%; }
+.bubble-ai   { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px 18px 18px 4px; padding: 0.75rem 1rem; max-width: 80%; }
+.bubble-ai .prose { font-size: 0.875rem; }
+.typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); animation: typing-bounce 1.2s infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typing-bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-8px)} }
+</style>
+{% endblock %}
+{% block content %}
+<div id="chat-shell">
+  <!-- topbar -->
+  <div class="flex items-center gap-3 px-4 py-3 border-b border-white/8 glass-dark">
+    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-black font-bold flex-shrink-0">AI</div>
+    <div>
+      <p class="font-semibold text-white text-sm">Claude AI Assistant</p>
+      <p class="text-xs text-gray-500">Powered by Anthropic Claude · Specialized for developers</p>
+    </div>
+    <div class="ml-auto flex items-center gap-3">
+      {% if current_user.is_authenticated %}
+      <span class="text-xs text-cyan-400 font-mono glass border border-cyan-500/20 px-3 py-1 rounded-full">{{ current_user.credits }} credits</span>{% endif %}
+      <select id="tool-select" class="admin-input text-xs py-1.5">
+        <option value="chat">General Chat</option>
+        <option value="code_review">Code Review Mode</option>
+        <option value="debug">Debug Mode</option>
+        <option value="explain">Explain Mode</option>
+        <option value="refactor">Refactor Mode</option>
+      </select>
+      <button onclick="clearChat()" class="admin-btn-ghost text-xs">Clear</button>
+      <a href="{{ url_for('ai.index') }}" class="admin-btn-ghost text-xs">← AI Hub</a>
+    </div>
+  </div>
+
+  <!-- messages -->
+  <div id="messages-area">
+    <div class="msg-ai">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-black text-xs font-bold flex-shrink-0">AI</div>
+      <div class="bubble-ai">
+        <div class="prose text-sm text-gray-300">👋 Hi! I'm your Claude-powered dev assistant. I can help with <strong>code review</strong>, <strong>debugging</strong>, <strong>architecture</strong>, <strong>SQL</strong>, and anything else dev-related. What are you working on?</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- input -->
+  <div class="border-t border-white/8 p-4 glass-dark">
+    <!-- quick prompts -->
+    <div class="flex gap-2 mb-3 overflow-x-auto pb-1">
+      {% for prompt in ["Review my code","Explain this error","Write unit tests","Optimise this query","Design an API","Refactor this function","Write documentation","Security audit"] %}
+      <button onclick="setPrompt('{{ prompt }}')" class="text-xs px-3 py-1.5 rounded-full border border-white/10 text-gray-400 hover:text-white hover:border-cyan-500/30 whitespace-nowrap transition-all flex-shrink-0">{{ prompt }}</button>{% endfor %}
+    </div>
+    <div class="flex gap-3 items-end">
+      <textarea id="chat-input" rows="1" class="input-field flex-1 resize-none font-mono text-sm"
+        placeholder="Ask anything… (Shift+Enter for new line, Enter to send)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"
+        oninput="autoResize(this)" style="max-height:180px"></textarea>
+      <button onclick="sendMessage()" id="send-btn" class="btn-neon py-3 px-5 flex-shrink-0">Send</button>
+    </div>
+    <p class="text-xs text-gray-600 mt-2 text-center">Each message uses 1 credit · <a href="{{ url_for('cms.contact') }}" class="text-cyan-500 hover:text-cyan-400">Request more credits</a></p>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let messages = [];
+const messagesArea = document.getElementById('messages-area');
+const input = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,180)+'px'; }
+function setPrompt(p) { input.value=p; input.focus(); autoResize(input); }
+
+function appendMessage(role, content) {
+  const isUser = role === 'user';
+  const div = document.createElement('div');
+  div.className = isUser ? 'msg-user' : 'msg-ai';
+  if (isUser) {
+    div.innerHTML = `<div class="bubble-user"><p class="text-sm text-gray-200 whitespace-pre-wrap">${escHtml(content)}</p></div>`;
+  } else {
+    div.innerHTML = `
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-black text-xs font-bold flex-shrink-0">AI</div>
+      <div class="bubble-ai"><div class="prose text-sm">${marked.parse(content)}</div></div>`;
+  }
+  messagesArea.appendChild(div);
+  messagesArea.scrollTop = messagesArea.scrollHeight;
+  return div;
+}
+
+function appendTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg-ai'; div.id = 'typing-indicator';
+  div.innerHTML = `<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-black text-xs font-bold flex-shrink-0">AI</div>
+    <div class="bubble-ai flex gap-1 items-center py-3 px-4"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+  messagesArea.appendChild(div);
+  messagesArea.scrollTop = messagesArea.scrollHeight;
+}
+
+async function sendMessage() {
+  const text = input.value.trim();
+  if (!text) return;
+  {% if not current_user.is_authenticated %}
+  showToast('Please sign in to use AI tools', 'error');
+  setTimeout(() => window.location.href = '{{ url_for("auth.login") }}', 1500);
+  return;{% endif %}
+  input.value = ''; autoResize(input);
+  sendBtn.disabled = true; sendBtn.textContent = '…';
+  messages.push({ role: 'user', content: text });
+  appendMessage('user', text);
+  appendTyping();
+  try {
+    const res = await fetch('{{ url_for("ai.api_chat") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ tool: document.getElementById('tool-select').value, messages })
+    });
+    document.getElementById('typing-indicator')?.remove();
+    const data = await res.json();
+    if (data.error) { showToast(data.error, 'error'); }
+    else {
+      messages.push({ role: 'assistant', content: data.response });
+      appendMessage('assistant', data.response);
+      if (data.credits_left !== undefined) {
+        document.querySelector('.font-mono.glass')&&(document.querySelector('.font-mono.glass').textContent = data.credits_left + ' credits');
+      }
+    }
+  } catch(e) {
+    document.getElementById('typing-indicator')?.remove();
+    showToast('Connection error: ' + e.message, 'error');
+  }
+  sendBtn.disabled = false; sendBtn.textContent = 'Send';
+}
+
+function clearChat() { messages=[]; messagesArea.innerHTML=''; }
+function escHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}

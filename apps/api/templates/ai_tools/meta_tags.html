@@ -1,0 +1,65 @@
+{% extends "public_base.html" %}
+{% block title %}Meta Tag Generator — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:760px;margin:0 auto;padding:48px 20px }
+pre.code-out { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;font-size:12px;color:#cfe6ff;overflow-x:auto;white-space:pre-wrap;max-height:340px }
+.field { margin-bottom:12px }
+.field label { font-size:12px;color:#9fb3d1;display:block;margin-bottom:4px }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Meta Tag Generator</h1>
+    <p style="color:var(--c-text-2)">Generates real SEO + Open Graph + Twitter Card tags ready to paste into &lt;head&gt;.</p>
+  </div>
+
+  <div class="field"><label>Page Title</label><input id="m-title" class="admin-input" style="width:100%" placeholder="My Awesome Page"></div>
+  <div class="field"><label>Description</label><textarea id="m-desc" class="admin-input" style="width:100%" rows="2" placeholder="A short, compelling description (under 160 chars)"></textarea></div>
+  <div class="field"><label>Canonical URL</label><input id="m-url" class="admin-input" style="width:100%" placeholder="https://example.com/page"></div>
+  <div class="field"><label>Image URL (for social sharing)</label><input id="m-image" class="admin-input" style="width:100%" placeholder="https://example.com/og-image.png"></div>
+  <div class="field"><label>Site Name</label><input id="m-site" class="admin-input" style="width:100%" placeholder="{{ site_name }}"></div>
+  <div class="field"><label>Twitter Handle (optional)</label><input id="m-twitter" class="admin-input" style="width:100%" placeholder="@yourhandle"></div>
+
+  <div style="text-align:center;margin:18px 0"><button class="btn-neon" id="gen-btn">Generate Tags</button></div>
+  <pre class="code-out" id="output"></pre>
+  <div style="text-align:right;margin-top:10px"><button class="btn-ghost-neon" id="copy-btn">Copy</button></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function esc(s) { return (s||'').replace(/"/g,'&quot;'); }
+document.getElementById('gen-btn').addEventListener('click', () => {
+  const title = document.getElementById('m-title').value || 'Page Title';
+  const desc = document.getElementById('m-desc').value || '';
+  const url = document.getElementById('m-url').value || '';
+  const image = document.getElementById('m-image').value || '';
+  const site = document.getElementById('m-site').value || '';
+  const twitter = document.getElementById('m-twitter').value || '';
+
+  let tags = `<title>${title}</title>\n`;
+  tags += `<meta name="description" content="${esc(desc)}">\n`;
+  if (url) tags += `<link rel="canonical" href="${url}">\n`;
+  tags += `\n<!-- Open Graph -->\n`;
+  tags += `<meta property="og:title" content="${esc(title)}">\n`;
+  tags += `<meta property="og:description" content="${esc(desc)}">\n`;
+  tags += `<meta property="og:type" content="website">\n`;
+  if (url) tags += `<meta property="og:url" content="${url}">\n`;
+  if (image) tags += `<meta property="og:image" content="${image}">\n`;
+  if (site) tags += `<meta property="og:site_name" content="${esc(site)}">\n`;
+  tags += `\n<!-- Twitter Card -->\n`;
+  tags += `<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">\n`;
+  tags += `<meta name="twitter:title" content="${esc(title)}">\n`;
+  tags += `<meta name="twitter:description" content="${esc(desc)}">\n`;
+  if (image) tags += `<meta name="twitter:image" content="${image}">\n`;
+  if (twitter) tags += `<meta name="twitter:site" content="${twitter}">\n`;
+
+  document.getElementById('output').textContent = tags;
+});
+document.getElementById('copy-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('output').textContent);
+});
+</script>
+{% endblock %}

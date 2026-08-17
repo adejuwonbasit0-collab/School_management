@@ -1,0 +1,58 @@
+{% extends "public_base.html" %}
+{% block title %}File → Shareable URL — {{ site_name }}{% endblock %}
+{% block content %}
+<div style="max-width:700px;margin:0 auto;padding:48px 20px">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">File → Shareable URL</h1>
+    <p style="color:var(--c-text-2)">Upload a real file and get back a real, working HTTP link — not a data: URL. Files are stored on the server (25MB limit).</p>
+  </div>
+
+  <div id="drop-zone" style="border:2px dashed rgba(var(--c-accent-rgb),0.3);border-radius:16px;padding:48px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(var(--c-accent-rgb),0.02)"
+    onclick="document.getElementById('f-input').click()"
+    ondragover="event.preventDefault();this.style.borderColor='rgba(var(--c-accent-rgb),0.7)'"
+    ondragleave="this.style.borderColor='rgba(var(--c-accent-rgb),0.3)'"
+    ondrop="event.preventDefault();this.style.borderColor='rgba(var(--c-accent-rgb),0.3)';if(event.dataTransfer.files[0])uploadFile(event.dataTransfer.files[0])">
+    <div style="font-size:48px;margin-bottom:12px">📤</div>
+    <p style="font-size:15px;font-weight:700;color:#e8edf8;margin-bottom:6px">Drop a file here, or click to browse</p>
+    <p style="font-size:12px;color:var(--c-text-2)">Up to 25MB — executable files are blocked for safety</p>
+    <input type="file" id="f-input" style="display:none" onchange="if(this.files[0])uploadFile(this.files[0])"/>
+  </div>
+
+  <p id="status" style="text-align:center;color:var(--c-text-2);font-size:13px;margin-top:14px"></p>
+  <div id="result"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function uploadFile(file) {
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+  status.textContent = `Uploading ${file.name}…`;
+  result.innerHTML = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('{{ url_for("ai_browser.api_upload_to_url") }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+      body: fd
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = 'Error: ' + (data.error || res.statusText); return; }
+    status.textContent = 'Uploaded successfully.';
+    result.innerHTML = `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px;margin-top:14px">
+        <p style="font-size:12px;color:var(--c-text-2);margin-bottom:8px">${data.filename} · ${(data.size/1024).toFixed(1)} KB · ${data.type}</p>
+        <div style="display:flex;gap:8px">
+          <input readonly value="${data.url}" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;color:#7a9ab5;font-family:monospace;font-size:12px" onclick="this.select()">
+          <button onclick="navigator.clipboard.writeText('${data.url}')" style="padding:10px 18px;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));border:none;border-radius:8px;font-weight:700;color:#000;cursor:pointer;font-size:12px">Copy</button>
+        </div>
+        ${data.type === 'image' ? `<img src="${data.url}" style="max-width:100%;max-height:240px;border-radius:8px;margin-top:14px;object-fit:contain">` : ''}
+      </div>`;
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+</script>
+{% endblock %}

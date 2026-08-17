@@ -1,0 +1,1369 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Site Settings{% endblock %}
+{% block page_subtitle %}Changes apply immediately across the entire site{% endblock %}
+
+{% block content %}
+
+{# Helper macro for getting a setting value from groups #}
+{% macro sv(key, default='') %}
+  {%- set found = namespace(val=default) -%}
+  {%- for grp_name, grp_settings in groups.items() -%}
+    {%- for s in grp_settings -%}
+      {%- if s.key == key -%}{%- set found.val = s.value -%}{%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+  {{- found.val -}}
+{% endmacro %}
+
+{% macro is_on(key) %}
+  {{- sv(key)|lower in ('true','1','yes','on') -}}
+{% endmacro %}
+
+<!-- Settings tab nav — this page used to be one 1200-line scroll of 25
+     sections stacked on top of each other. Every section already had a
+     stable id/data-settings-tab from before; this just adds a filter on
+     top so only one group shows at a time. Nothing below was reordered
+     or removed, only grouped. -->
+<style>
+.settings-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:22px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0 }
+.settings-tab-btn { background:transparent; border:none; border-bottom:2px solid transparent; color:var(--text-muted); font-size:13px; font-weight:600; padding:10px 14px; cursor:pointer; border-radius:8px 8px 0 0 }
+.settings-tab-btn:hover { color:var(--text); background:rgba(255,255,255,0.04) }
+.settings-tab-btn.active { color:#38bdf8; border-bottom-color:#38bdf8 }
+[data-settings-tab] { display:none }
+[data-settings-tab].settings-tab-visible { display:block }
+</style>
+<div class="settings-tabs" id="settings-tabs">
+  <button type="button" class="settings-tab-btn" data-tab="general" onclick="showSettingsTab('general')">⚙️ General</button>
+  <button type="button" class="settings-tab-btn" data-tab="money" onclick="showSettingsTab('money')">💵 Payments &amp; Currency</button>
+  <button type="button" class="settings-tab-btn" data-tab="email" onclick="showSettingsTab('email')">✉️ Email</button>
+  <button type="button" class="settings-tab-btn" data-tab="ai" onclick="showSettingsTab('ai')">🤖 AI &amp; Automation Agents</button>
+  <button type="button" class="settings-tab-btn" data-tab="system" onclick="showSettingsTab('system')">🛠️ System &amp; Security</button>
+</div>
+<script>
+function showSettingsTab(tab) {
+  document.querySelectorAll('[data-settings-tab]').forEach(el => {
+    el.classList.toggle('settings-tab-visible', el.getAttribute('data-settings-tab') === tab);
+  });
+  document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+  });
+  try { history.replaceState(null, '', '#tab-' + tab); } catch (e) {}
+}
+(function() {
+  // Deep-links like #bloom or #twilio (used elsewhere in the app to link
+  // straight to a setting) still work — this finds which tab that
+  // section lives in and opens it there before scrolling.
+  const hash = window.location.hash.replace('#', '');
+  let startTab = 'general';
+  if (hash.startsWith('tab-')) {
+    startTab = hash.replace('tab-', '');
+  } else if (hash) {
+    const target = document.getElementById(hash);
+    if (target) {
+      const panel = target.closest('[data-settings-tab]');
+      if (panel) startTab = panel.getAttribute('data-settings-tab');
+    }
+  }
+  showSettingsTab(startTab);
+  if (hash && !hash.startsWith('tab-')) {
+    setTimeout(() => { const el = document.getElementById(hash); if (el) el.scrollIntoView({behavior:'smooth', block:'start'}); }, 50);
+  }
+})();
+</script>
+
+<!-- ── THEME / APPEARANCE ── -->
+<div class="a-panel" data-settings-tab="general" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title">Theme / Appearance</div>
+      <div class="a-panel-sub">Change the site's font and accent colors — applies everywhere instantly</div>
+    </div>
+    <span id="theme-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Heading Font</label>
+        <select class="a-input" onchange="saveSetting('theme_font_heading', this.value, document.getElementById('theme-status')); document.documentElement.style.setProperty('--c-font-heading', this.value);">
+          {% set heading_fonts = ["Plus Jakarta Sans","Poppins","Sora","Space Grotesk","Clash Display","Manrope","DM Sans","Outfit"] %}
+          {% for f in heading_fonts %}
+          <option value="{{ f }}" {{ 'selected' if sv('theme_font_heading','Plus Jakarta Sans') == f }}>{{ f }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="a-label">Body Font</label>
+        <select class="a-input" onchange="saveSetting('theme_font_body', this.value, document.getElementById('theme-status')); document.documentElement.style.setProperty('--c-font-body', this.value);">
+          {% set body_fonts = ["Inter","Manrope","Poppins","DM Sans","Work Sans","Sora","Outfit"] %}
+          {% for f in body_fonts %}
+          <option value="{{ f }}" {{ 'selected' if sv('theme_font_body','Inter') == f }}>{{ f }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="a-label">Primary Accent Color</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <input type="color" value="{{ sv('theme_accent','#2D68FF') }}" style="width:44px;height:38px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;padding:2px"
+            oninput="document.getElementById('theme-accent-hex').value=this.value; document.documentElement.style.setProperty('--c-accent', this.value);"
+            onchange="saveSetting('theme_accent', this.value, document.getElementById('theme-status'))"/>
+          <input type="text" id="theme-accent-hex" value="{{ sv('theme_accent','#2D68FF') }}" class="a-input" style="margin-top:0"
+            onblur="saveSetting('theme_accent', this.value, document.getElementById('theme-status')); document.documentElement.style.setProperty('--c-accent', this.value);"/>
+        </div>
+      </div>
+      <div>
+        <label class="a-label">Secondary Accent Color</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <input type="color" value="{{ sv('theme_accent_2','#779DFF') }}" style="width:44px;height:38px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;padding:2px"
+            oninput="document.getElementById('theme-accent2-hex').value=this.value; document.documentElement.style.setProperty('--c-accent-2', this.value);"
+            onchange="saveSetting('theme_accent_2', this.value, document.getElementById('theme-status'))"/>
+          <input type="text" id="theme-accent2-hex" value="{{ sv('theme_accent_2','#779DFF') }}" class="a-input" style="margin-top:0"
+            onblur="saveSetting('theme_accent_2', this.value, document.getElementById('theme-status')); document.documentElement.style.setProperty('--c-accent-2', this.value);"/>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-3);margin-top:12px">Changes save instantly and apply across the entire public site, admin, and client dashboard on next page load.</p>
+  </div>
+</div>
+
+<!-- ── PARTNERS DIRECTORY ── -->
+<div class="a-panel" data-settings-tab="general" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title">Partners Directory</div>
+      <div class="a-panel-sub">Upload or manage partner logos displayed on the home page</div>
+    </div>
+    <span id="partners-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div id="partners-list-container" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px">
+      <!-- Loaded and managed via JS -->
+    </div>
+    
+    <div style="border-top:1px solid var(--border); padding-top:14px; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap">
+      <div style="flex:1; min-width:180px">
+        <label class="a-label">Partner Name</label>
+        <input type="text" id="partner-new-name" class="a-input" style="margin-top:6px" placeholder="Google"/>
+      </div>
+      <div style="flex:2; min-width:240px">
+        <label class="a-label">Logo Image URL</label>
+        <input type="text" id="partner-new-logo" class="a-input" style="margin-top:6px" placeholder="https://.../logo.svg"/>
+      </div>
+      <button type="button" class="a-btn a-btn-primary" onclick="addPartnerRow()">+ Add Partner</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FEATURE TOGGLES ── -->
+<div class="a-panel" data-settings-tab="general" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title">Feature Toggles</div>
+      <div class="a-panel-sub">Enable or disable entire sections of the site instantly</div>
+    </div>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-2" style="gap:12px">
+      {% set toggles = [
+        ("maintenance_mode",       "Maintenance Mode",         "Temporarily show a maintenance page to all visitors (admins bypass)",  "red"),
+        ("marketplace_enabled",    "Marketplace",              "Allow users to browse and purchase products",                          "cyan"),
+        ("blog_enabled",           "Blog",                     "Show the blog and allow reading articles",                             "purple"),
+        ("freelancer_mode_enabled","Freelancer Registration",  "Allow new freelancer accounts to be created",                         "green"),
+        ("client_mode_enabled",    "Client Registration",      "Allow new client accounts to be created",                             "green"),
+        ("hosting_portal_enabled", "Hosting Portal",           "Show the hosting plans and allow subscriptions",                      "cyan"),
+        ("ai_tools_enabled",       "AI Tools Hub",             "Allow users to access AI-powered tools",                              "purple"),
+        ("require_email_verify",   "Require Email Verification","Users must verify email before accessing protected features",         "yellow"),
+        ("rate_limiting",          "Rate Limiting",            "Limit repeated requests to protect against abuse",                    "orange"),
+        ("bot_protection",         "Bot Protection",           "Block automated scraping and bot traffic",                            "orange"),
+        ("enable_2fa",             "Two-Factor Auth",          "Allow users to set up 2FA on their accounts",                         "yellow"),
+      ] %}
+      {% for key, label, desc, color in toggles %}
+      {% set val = sv(key)|lower %}
+      {% set checked = val in ('true','1','yes','on') %}
+      <div style="display:flex;align-items:flex-start;gap:14px;padding:16px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;transition:border-color .2s"
+           onmouseover="this.style.borderColor='var(--border-bright)'" onmouseout="this.style.borderColor='var(--border)'">
+        <label class="a-toggle" style="margin-top:2px;flex-shrink:0">
+          <input type="checkbox" {% if checked %}checked{% endif %}
+            onchange="saveSetting('{{ key }}', this.checked?'true':'false', document.getElementById('status-{{ key }}'))"/>
+          <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+        </label>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;font-weight:700;color:var(--text)">{{ label }}</span>
+            {% if key == 'maintenance_mode' and checked %}
+            <span class="badge badge-danger" style="animation:pulse 2s infinite">ACTIVE</span>
+            {% endif %}
+            <span id="status-{{ key }}" style="font-size:11px;color:var(--green);margin-left:auto"></span>
+          </div>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:3px">{{ desc }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── SITE IDENTITY ── -->
+<div class="a-panel" data-settings-tab="general" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Site Identity</div>
+    <span id="identity-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-3" style="gap:16px">
+      {% for key, label, placeholder in [
+        ("site_name",    "Site Name",           "Bazillin Studio"),
+        ("site_tagline", "Tagline",             "Build. Ship. Scale."),
+        ("contact_email","Contact Email",       "hello@yourdomain.com"),
+        ("whatsapp_number","WhatsApp Number",   "+1234567890"),
+        ("site_logo",    "Logo Image URL",      "https://…/logo.png"),
+        ("google_analytics_id","Google Analytics ID","G-XXXXXXXXXX"),
+        ("admin_allowed_ips","Admin Allowed IPs (comma-sep)","leave blank to allow all"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        <input type="text" value="{{ sv(key) }}" placeholder="{{ placeholder }}"
+          class="a-input" onblur="saveSetting('{{ key }}', this.value, document.getElementById('identity-status'))"/>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── HOSTING CONFIGURATION ── -->
+<div class="a-panel" data-settings-tab="system" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Hosting Configuration</div>
+    <span id="hosting-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-2" style="gap:16px">
+      {% for key, label, placeholder in [
+        ("hosting_base_domain",  "Base Domain for Free Subdomains", "bazillinapps.com"),
+        ("hosting_server_ip",    "Hosting Server IP (shown in DNS setup instructions)", "203.0.113.10"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        <input type="text" value="{{ sv(key) }}" placeholder="{{ placeholder }}"
+          class="a-input" onblur="saveSetting('{{ key }}', this.value, document.getElementById('hosting-status'))"/>
+      </div>
+      {% endfor %}
+    </div>
+    <p style="font-size:12px;color:var(--text-3);margin-top:12px">Users on the Hosting page get a free <code>name.{{ sv('hosting_base_domain') or 'bazillinapps.com' }}</code> subdomain, or can connect a domain they already own (we don't sell/register new domains yet).</p>
+  </div>
+</div>
+
+<!-- ── PAYMENT CONFIGURATION ── -->
+<div class="a-panel" data-settings-tab="money" style="margin-bottom:20px">
+  <div class="a-panel-body" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div class="a-panel-title" style="margin-bottom:4px">Payment Configuration</div>
+      <p style="font-size:12px;color:var(--text-3)">Currency, gateways, and bank transfer details now have their own dedicated page.</p>
+    </div>
+    <a href="{{ url_for('admin.payment_config') }}" class="a-btn a-btn-primary">Open Payment Configuration →</a>
+  </div>
+</div>
+
+<!-- Revenue settings — this used to be missing its own panel wrapper
+     (a-panel / a-panel-body), leaving two closing tags below with
+     nothing to close. Those two orphaned closes were quietly closing the
+     REAL ancestor containers around this point in the page instead (the
+     ones the template author actually meant), which knocked every section
+     below this one (Email Configuration and everything after it) out of
+     its intended column — that's what put content behind the sidebar. -->
+<div class="a-panel" data-settings-tab="money" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Revenue Settings</div></div>
+  <div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3);margin-bottom:12px">Your site's actual currency is set on <a href="{{ url_for('admin.payment_config') }}" style="text-decoration:underline">Payment Configuration</a> — that's the one field that controls it everywhere (products, invoices, the visitor-facing currency switcher).</p>
+    <div class="a-grid a-grid-4" style="gap:14px">
+      {% for key, label, placeholder in [
+        ("platform_fee_pct","Platform Fee %","10"),
+        ("min_payout_amount","Min Payout (in your Site Currency)","50"),
+        ("payout_schedule","Payout Schedule","weekly"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        {% if key == "payout_schedule" %}
+        <select class="a-input" onchange="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))">
+          {% for s in ['daily','weekly','biweekly','monthly'] %}
+          <option value="{{ s }}" {% if sv(key)==s %}selected{% endif %}>{{ s|title }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" value="{{ sv(key) }}" placeholder="{{ placeholder }}" class="a-input"
+          onblur="saveSetting('{{ key }}',this.value,document.getElementById('payment-status'))"/>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── EMAIL CONFIGURATION ── -->
+<div class="a-panel" data-settings-tab="email" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Email Configuration</div>
+    <span id="email-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div style="margin-bottom:16px">
+      <label class="a-label">Email Provider</label>
+      <select class="a-input" style="margin-top:6px;max-width:320px"
+        onchange="saveSetting('email_provider',this.value,document.getElementById('email-status'))">
+        {% for pval, plabel in [('smtp','SMTP (Gmail, Outlook, custom host)'),('sendgrid','SendGrid'),('mailgun','Mailgun'),('postmark','Postmark'),('resend','Resend'),('mailchimp','Mailchimp Transactional / Mandrill')] %}
+        <option value="{{ pval }}" {{ 'selected' if sv('email_provider','smtp') == pval else '' }}>{{ plabel }}</option>
+        {% endfor %}
+      </select>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:6px">
+        Only the account credentials for whichever provider you pick here are actually used to send mail —
+        the fields below stay saved either way, so switching back and forth doesn't lose anything.
+        (Nodemailer isn't listed: it's a Node.js library, not an email service — it has no API a Python
+        backend can call. Its usual job is plain SMTP, which "SMTP" above already covers.)
+      </p>
+    </div>
+
+    <p style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin:14px 0 8px">📧 SMTP</p>
+    <div class="a-grid a-grid-3" style="gap:14px">
+      {% for key, label, ph in [
+        ("mail_server","SMTP Host","smtp.gmail.com"),
+        ("mail_port","SMTP Port","587"),
+        ("mail_username","SMTP Username","you@gmail.com"),
+        ("mail_password","SMTP Password","••••••••"),
+        ("mail_default_sender","From Address (shared by all providers)","noreply@yourdomain.com"),
+        ("admin_email","Admin Email (receives contact forms & notifications)","admin@yourdomain.com"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        <input type="{{ 'password' if 'password' in key or 'key' in key else 'text' }}"
+          value="{{ sv(key) }}" placeholder="{{ ph }}" class="a-input" autocomplete="off"
+          onblur="saveSetting('{{ key }}',this.value,document.getElementById('email-status'))"/>
+      </div>
+      {% endfor %}
+    </div>
+
+    <p style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin:18px 0 8px">Provider API keys — only used when selected above</p>
+    <div class="a-grid a-grid-3" style="gap:14px">
+      {% for key, label, ph in [
+        ("sendgrid_api_key","SendGrid API Key","SG.…"),
+        ("mailgun_api_key","Mailgun API Key","key-…"),
+        ("mailgun_domain","Mailgun Domain","mg.yourdomain.com"),
+        ("postmark_server_token","Postmark Server Token","••••••••"),
+        ("resend_api_key","Resend API Key","re_…"),
+        ("mailchimp_api_key","Mailchimp Transactional (Mandrill) API Key","md-…"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        <input type="{{ 'password' if 'key' in key or 'token' in key else 'text' }}"
+          value="{{ sv(key) }}" placeholder="{{ ph }}" class="a-input" autocomplete="off"
+          onblur="saveSetting('{{ key }}',this.value,document.getElementById('email-status'))"/>
+      </div>
+      {% endfor %}
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px">
+      Mailchimp's main audience/campaign API doesn't send one-off transactional emails (signup confirmations,
+      receipts) at all — that's a separate Mailchimp product called Mandrill (transactional). The key above is
+      a Mandrill key, not your regular Mailchimp API key.
+    </p>
+    <div style="margin-top:14px">
+      <label class="a-label">Email Header/Logo Image (shown at the top of every outgoing email)</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input type="text" id="field-email_header_image" value="{{ sv('email_header_image') }}" placeholder="https://.../logo.png" class="a-input" style="flex:1;margin-top:0"
+          onblur="saveSetting('email_header_image', this.value, document.getElementById('email-status'))"/>
+        <button type="button" class="media-picker-btn" data-media-target="field-email_header_image" style="padding:0 14px;background:rgba(29,185,84,0.1);border:1px solid rgba(29,185,84,0.25);border-radius:8px;color:#2D68FF;font-size:12px;cursor:pointer">📁</button>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:10px">
+      <button type="button" class="a-btn a-btn-sm" onclick="sendTestEmail()">Send Test Email</button>
+      <span id="test-email-status" style="font-size:12px;color:var(--text-3)"></span>
+    </div>
+  </div>
+</div>
+<script>
+async function sendTestEmail() {
+  const statusEl = document.getElementById('test-email-status');
+  statusEl.textContent = 'Sending...';
+  statusEl.style.color = 'var(--text-3)';
+  try {
+    const res = await fetch("{{ url_for('admin.send_test_email') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+    });
+    const data = await res.json();
+    if (data.success) {
+      statusEl.textContent = `Sent to ${data.to} ✓`;
+      statusEl.style.color = 'var(--green)';
+    } else {
+      statusEl.textContent = data.error || 'Failed to send — check SMTP credentials above.';
+      statusEl.style.color = 'var(--red, #f43f5e)';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Request failed.';
+    statusEl.style.color = 'var(--red, #f43f5e)';
+  }
+}
+</script>
+<div class="a-panel" data-settings-tab="email" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Social Links</div>
+    <span id="social-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-3" style="gap:14px">
+      {% for key, label in [
+        ("twitter_url","Twitter / X"),("github_url","GitHub"),("linkedin_url","LinkedIn"),
+        ("instagram_url","Instagram"),("youtube_url","YouTube"),("discord_url","Discord"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        <input type="url" value="{{ sv(key) }}" placeholder="https://…" class="a-input"
+          onblur="saveSetting('{{ key }}',this.value,document.getElementById('social-status'))"/>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── NETWORK / OUTBOUND PROXY ── -->
+<div class="a-panel" data-settings-tab="system" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Network / Outbound Proxy</div>
+    <span id="net-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Only needed if your host requires outbound HTTPS requests (to Telegram, WhatsApp, etc.) to go through
+      a proxy. <b>PythonAnywhere is the common case</b> — its proxy is normally only available inside an
+      interactive Bash console (via your shell profile), not inside your actual running web app, which is
+      why a webhook can test fine from the console but still fail from the live site with a
+      <code style="color:var(--cyan)">ProxyError</code>/<code style="color:var(--cyan)">Tunnel connection failed</code>.
+      Setting it here makes every outbound bot request use it directly, regardless of how the web app was started.
+      Leave blank if your host doesn't need one (most don't).
+    </p>
+    <div style="max-width:420px">
+      <label class="a-label">Outbound Proxy URL</label>
+      <input type="text" value="{{ sv('outbound_proxy_url') }}" placeholder="http://proxy.server:3128" class="a-input" style="margin-top:6px"
+        onblur="saveSetting('outbound_proxy_url',this.value,document.getElementById('net-status'))"/>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:6px">PythonAnywhere's documented proxy address is <code style="color:var(--cyan)">http://proxy.server:3128</code> — check <a href="https://help.pythonanywhere.com/pages/InternetAccessProxy" target="_blank" style="color:var(--cyan)">their Internet Access help page</a> for what's current on your plan.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── MEDIA STORAGE ── -->
+<div class="a-panel" data-settings-tab="system" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Media Storage</div>
+    <span id="storage-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Where uploaded images/files get saved. Local storage writes to this server's disk — simple, but on hosts
+      with limited or ephemeral storage (and no way to serve files at scale), a CDN like Cloudinary is more
+      reliable for anything customer-facing. Switching only affects <i>new</i> uploads — existing local files
+      keep working from their current URLs.
+    </p>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      {% for opt, label in [('local','Local Storage'),('cloudinary','Cloudinary')] %}
+      <label style="flex:1;display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid {{ 'rgba(29,185,84,0.4)' if sv('media_storage_backend', 'local')==opt else 'var(--border)' }};border-radius:10px;cursor:pointer">
+        <input type="radio" name="media_storage_backend" value="{{ opt }}" {% if sv('media_storage_backend','local')==opt %}checked{% endif %}
+          onchange="saveSetting('media_storage_backend', this.value, document.getElementById('storage-status'))"/>
+        <span style="font-size:13px;color:var(--text)">{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="a-grid a-grid-3" style="gap:14px">
+      {% for key, label, ph in [
+        ("cloudinary_cloud_name","Cloud Name","your-cloud-name"),
+        ("cloudinary_api_key","API Key","1234567890"),
+        ("cloudinary_api_secret","API Secret","••••••••"),
+      ] %}
+      <div>
+        <label class="a-label">{{ label }}</label>
+        <input type="{{ 'password' if 'secret' in key else 'text' }}" value="{{ sv(key) }}" placeholder="{{ ph }}" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('{{ key }}',this.value,document.getElementById('storage-status'))"/>
+      </div>
+      {% endfor %}
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px">Get these from <a href="https://cloudinary.com/console" target="_blank" style="color:var(--cyan)">cloudinary.com/console</a> after creating a free account — they're shown right on your dashboard.</p>
+  </div>
+</div>
+
+<!-- ── CURRENCY ── -->
+<div class="a-panel" data-settings-tab="money" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Currency</div>
+    <span id="currency-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Visitors can switch the currency prices are DISPLAYED in (bottom-left of every page) — rates auto-update
+      every 6 hours from a free exchange-rate service. This only changes what's shown; actual checkout still
+      charges through whichever payment gateway is configured (Paystack settles in ₦, Stripe in whatever you
+      set it up for) — making the CHECKOUT itself charge dynamically per currency is a separate, bigger project
+      tied to each gateway's own currency rules, not just a display setting.
+    </p>
+    <label class="a-label">Manual Rate Overrides (optional — JSON, relative to 1 USD)</label>
+    <textarea class="a-input mono" rows="3" style="margin-top:6px" placeholder='{"NGN": 1550, "EUR": 0.92}'
+      onblur="saveSetting('manual_exchange_rates_json',this.value,document.getElementById('currency-status'))">{{ sv('manual_exchange_rates_json') }}</textarea>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px">
+      Leave blank to always use the live auto-fetched rate. Set a value here only if you want to lock a
+      specific rate regardless of what the market rate does (common for invoicing consistency).
+    </p>
+  </div>
+</div>
+
+<!-- ── AI PROVIDERS ── -->
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">AI Providers</div>
+    <span id="ai-providers-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Powers every AI tool on the site (Content Studio, Suggest Reply, AI Agent Mode bots, sentiment analysis, etc).
+      Set one or more keys here — this takes priority over the matching key in <code style="color:var(--cyan)">.env</code>,
+      so you can manage it without redeploying. If more than one is set, "Preferred Provider" decides which one is used first.
+    </p>
+    <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+      <div>
+        <label class="a-label">Anthropic (Claude) API Key</label>
+        <input type="password" value="{{ sv('anthropic_api_key') }}" placeholder="sk-ant-..." class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('anthropic_api_key',this.value,document.getElementById('ai-providers-status'))"/>
+        <select class="a-input" style="margin-top:6px;font-size:12px" onchange="saveSetting('anthropic_model',this.value,document.getElementById('ai-providers-status'))">
+          {% for m, label in [('claude-sonnet-5','Claude Sonnet 5 (balanced, default)'),('claude-opus-4-8','Claude Opus 4.8 (most capable)'),('claude-haiku-4-5-20251001','Claude Haiku 4.5 (fastest/cheapest)')] %}
+          <option value="{{ m }}" {% if (sv('anthropic_model') or 'claude-sonnet-5')==m %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a key: <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--cyan)">console.anthropic.com</a></p>
+      </div>
+      <div>
+        <label class="a-label">Google Gemini API Key</label>
+        <input type="password" value="{{ sv('gemini_api_key') }}" placeholder="AIza..." class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('gemini_api_key',this.value,document.getElementById('ai-providers-status'))"/>
+        <select class="a-input" style="margin-top:6px;font-size:12px" onchange="saveSetting('gemini_model',this.value,document.getElementById('ai-providers-status'))">
+          {% for m, label in [('gemini-2.5-flash','Gemini 2.5 Flash (default)'),('gemini-2.5-pro','Gemini 2.5 Pro (most capable)'),('gemini-2.0-flash','Gemini 2.0 Flash'),('gemini-2.0-flash-lite','Gemini 2.0 Flash-Lite (cheapest)'),('gemini-1.5-flash','Gemini 1.5 Flash (legacy)'),('gemini-1.5-pro','Gemini 1.5 Pro (legacy)')] %}
+          <option value="{{ m }}" {% if (sv('gemini_model') or 'gemini-2.5-flash')==m %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a key (generous free tier): <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--cyan)">aistudio.google.com/apikey</a></p>
+      </div>
+      <div>
+        <label class="a-label">OpenAI API Key</label>
+        <input type="password" value="{{ sv('openai_api_key') }}" placeholder="sk-..." class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('openai_api_key',this.value,document.getElementById('ai-providers-status'))"/>
+        <select class="a-input" style="margin-top:6px;font-size:12px" onchange="saveSetting('openai_model',this.value,document.getElementById('ai-providers-status'))">
+          {% for m, label in [('gpt-4o','GPT-4o (default)'),('gpt-4o-mini','GPT-4o mini (cheaper/faster)'),('o3-mini','o3-mini (reasoning)')] %}
+          <option value="{{ m }}" {% if (sv('openai_model') or 'gpt-4o')==m %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a key: <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--cyan)">platform.openai.com/api-keys</a></p>
+      </div>
+      <div>
+        <label class="a-label">Groq API Key <span style="color:var(--text-muted);font-weight:400">(free tier, ultra-fast)</span></label>
+        <input type="password" value="{{ sv('groq_api_key') }}" placeholder="gsk_..." class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('groq_api_key',this.value,document.getElementById('ai-providers-status'))"/>
+        <select class="a-input" style="margin-top:6px;font-size:12px" onchange="saveSetting('groq_model',this.value,document.getElementById('ai-providers-status'))">
+          {% for m, label in [('llama-3.1-8b-instant','Llama 3.1 8B Instant (ultra-fast, free tier, default)'),('mixtral-8x7b-32768','Mixtral 8x7B (adaptive fallback)'),('gemma2-9b-it','Gemma 2 9B (adaptive fallback)'),('qwen/qwen3.6-27b','Qwen 3.6 27B'),('openai/gpt-oss-120b','GPT-OSS 120B'),('llama-3.3-70b-versatile','Llama 3.3 70B Versatile')] %}
+          <option value="{{ m }}" {% if (sv('groq_model') or 'llama-3.1-8b-instant')==m %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a free key: <a href="https://console.groq.com/keys" target="_blank" style="color:var(--cyan)">console.groq.com/keys</a></p>
+      </div>
+      <div>
+        <label class="a-label">OpenRouter API Key <span style="color:var(--text-muted);font-weight:400">(active free-tier models)</span></label>
+        <input type="password" value="{{ sv('openrouter_api_key') }}" placeholder="sk-or-..." class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('openrouter_api_key',this.value,document.getElementById('ai-providers-status'))"/>
+        <select class="a-input" style="margin-top:6px;font-size:12px" onchange="saveSetting('openrouter_model',this.value,document.getElementById('ai-providers-status'))">
+          {% for m, label in [('meta-llama/llama-3.1-8b-instruct:free','Llama 3.1 8B Instruct (100% free, default)'),('mistralai/mistral-7b-instruct:free','Mistral 7B Instruct (free fallback)'),('google/gemini-2.0-flash-exp:free','Gemini 2.0 Flash Exp (free fallback)'),('qwen/qwen-2.5-72b-instruct:free','Qwen 2.5 72B Instruct (free fallback)'),('openrouter/auto','OpenRouter Auto (adaptive fallback)'),('meta-llama/llama-3.3-70b-instruct:free','Llama 3.3 70B Instruct (free)')] %}
+          <option value="{{ m }}" {% if (sv('openrouter_model') or 'meta-llama/llama-3.1-8b-instruct:free')==m %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a key (many <code>:free</code> models): <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--cyan)">openrouter.ai/keys</a></p>
+      </div>
+    </div>
+    <div>
+      <label class="a-label">Preferred Provider</label>
+      <select class="a-input" style="margin-top:6px;max-width:320px" onchange="saveSetting('preferred_ai_provider',this.value,document.getElementById('ai-providers-status'))">
+        {% for p, label in [('','Auto — Groq (Ultra-Fast) → OpenRouter → Gemini → Claude → OpenAI'),('groq','Groq (Free & Ultra-Fast)'),('openrouter','OpenRouter (Active Free Tier)'),('gemini','Google Gemini (2nd Fallback)'),('anthropic','Anthropic (Claude)'),('openai','OpenAI')] %}
+        <option value="{{ p }}" {% if sv('preferred_ai_provider')==p %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+      Groq and OpenRouter provide ultra-fast and active free-tier models with sub-second response times. The engine automatically adapts and falls back between active free models if any single model is ever rate-limited or decommissioned.
+    </p>
+  </div>
+</div>
+
+<!-- ── BLOOM (trybloom.ai) — real API: brand-aware AI IMAGE generation ── -->
+<div class="a-panel" data-settings-tab="ai" id="bloom" style="margin-bottom:20px;scroll-margin-top:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Bloom (trybloom.ai) — Image Generation</div>
+    <span id="bloom-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Bloom generates on-brand images from a prompt — it's image-only (no text or video
+      endpoint exists in their API). Every image is scoped to a "brand" Bloom has analyzed
+      from a site or Instagram URL, so after adding your API key, onboard one brand below
+      before generating from Content Studio.
+    </p>
+    <div style="margin-bottom:16px">
+      <label class="a-label">Bloom API Key</label>
+      <input type="password" value="{{ sv('bloom_api_key') }}" placeholder="paste your Bloom API key" class="a-input" autocomplete="off" style="margin-top:6px;max-width:420px"
+        onblur="saveSetting('bloom_api_key',this.value,document.getElementById('bloom-status'))"/>
+      <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a key: <a href="https://www.trybloom.ai/settings#api-keys" target="_blank" style="color:var(--cyan)">trybloom.ai/settings</a></p>
+    </div>
+
+    <p style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin:16px 0 8px">Brand</p>
+    <div id="bloom-brand-current" style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Checking current brand…</div>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Onboard a new brand from a URL</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input id="bloom-brand-url" type="text" class="a-input" placeholder="https://yoursite.com" style="flex:1"/>
+          <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="onboardBloomBrand()">Onboard</button>
+        </div>
+      </div>
+      <div>
+        <label class="a-label">…or pick an existing brand on this account</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <select id="bloom-brand-select" class="a-input" style="flex:1"><option value="">Load brands first →</option></select>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="loadBloomBrands()">Load</button>
+        </div>
+      </div>
+    </div>
+    <p id="bloom-brand-status" style="font-size:12px;margin-top:10px"></p>
+
+    <label class="a-label" style="margin-top:16px;display:block">Test Connection</label>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="testBloom()">▶ Test Connection</button>
+      <span id="bloom-test-status" style="font-size:12px"></span>
+    </div>
+    <pre id="bloom-test-result" style="display:none;margin-top:10px;font-size:11px;background:rgba(0,0,0,0.3);border-radius:8px;padding:10px;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto"></pre>
+
+    <p style="font-size:11px;color:var(--text-muted);margin-top:14px;line-height:1.6">
+      Getting a proxy/connection error here instead of an actual Bloom response? That means your
+      hosting environment is blocking or proxying outbound HTTPS to trybloom.ai — that's a hosting
+      config issue (check for <code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code> env vars, or ask your
+      host to whitelist the domain), not something to fix in this app. In the meantime use the free
+      image options below.
+    </p>
+  </div>
+</div>
+
+<!-- ── Free image alternatives (work even if Bloom is unreachable) ── -->
+<div class="a-panel" data-settings-tab="ai" id="free-images" style="margin-bottom:20px;scroll-margin-top:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Free Image Alternatives</div>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      <strong>Pollinations</strong> (free AI image generation) needs no setup at all — it's ready to use
+      right now in Content Studio's "Free Image Finder" panel.<br/>
+      <strong>Pexels</strong> (real matching stock photos) needs one free key below.
+    </p>
+    <div>
+      <label class="a-label">Pexels API Key</label>
+      <input type="password" value="{{ sv('pexels_api_key') }}" placeholder="paste your Pexels API key" class="a-input" autocomplete="off" style="margin-top:6px;max-width:420px"
+        onblur="saveSetting('pexels_api_key',this.value,document.getElementById('pexels-status'))"/>
+      <span id="pexels-status" style="font-size:12px;color:var(--green);margin-left:8px"></span>
+      <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Get a free key: <a href="https://www.pexels.com/api/" target="_blank" style="color:var(--cyan)">pexels.com/api</a></p>
+    </div>
+  </div>
+</div>
+<script>
+async function testBloom() {
+  const statusEl = document.getElementById('bloom-test-status');
+  const resultEl = document.getElementById('bloom-test-result');
+  statusEl.textContent = 'Testing…';
+  statusEl.style.color = 'var(--text-muted)';
+  resultEl.style.display = 'none';
+  try {
+    const res = await fetch('{{ url_for("admin.test_bloom") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({})
+    });
+    const d = await res.json();
+    if (d.success) {
+      statusEl.textContent = '✓ Success';
+      statusEl.style.color = 'var(--green)';
+      resultEl.textContent = d.text;
+    } else {
+      statusEl.textContent = '✗ Failed';
+      statusEl.style.color = 'var(--accent-red, #f87171)';
+      resultEl.textContent = d.error || 'Unknown error';
+    }
+    resultEl.style.display = 'block';
+  } catch (e) {
+    statusEl.textContent = '✗ Network error';
+    statusEl.style.color = 'var(--accent-red, #f87171)';
+  }
+}
+
+async function refreshBloomBrandCurrent() {
+  const el = document.getElementById('bloom-brand-current');
+  try {
+    const res = await fetch('{{ url_for("admin.bloom_brand_status") }}');
+    const d = await res.json();
+    if (!d.success) { el.textContent = 'Couldn\'t check brand status: ' + (d.error || ''); return; }
+    if (!d.brand) { el.textContent = 'No brand configured yet — onboard one below.'; el.style.color = 'var(--text-muted)'; return; }
+    const b = d.brand;
+    if (b.status === 'ready') { el.textContent = `✓ Brand ready (id: ${b.id})`; el.style.color = '#3fb950'; }
+    else if (b.status === 'analyzing') { el.textContent = `⏳ Brand still analyzing (id: ${b.id}) — checking again shortly…`; el.style.color = 'var(--text-muted)'; setTimeout(refreshBloomBrandCurrent, 5000); }
+    else if (b.status === 'failed') { el.textContent = `✗ Brand setup failed: ${(b.failure||{}).message || 'unknown error'}`; el.style.color = '#f87171'; }
+    else { el.textContent = `Brand status: ${b.status} (id: ${b.id})`; el.style.color = 'var(--text-muted)'; }
+  } catch (e) {
+    el.textContent = 'Couldn\'t reach the server to check brand status.';
+  }
+}
+refreshBloomBrandCurrent();
+
+async function onboardBloomBrand() {
+  const url = document.getElementById('bloom-brand-url').value.trim();
+  const statusEl = document.getElementById('bloom-brand-status');
+  if (!url) { statusEl.style.color = '#f87171'; statusEl.textContent = 'Enter a URL first.'; return; }
+  statusEl.style.color = 'var(--text-muted)';
+  statusEl.textContent = 'Onboarding — Bloom analyzes the site in the background…';
+  try {
+    const res = await fetch('{{ url_for("admin.bloom_onboard_brand") }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({url})
+    });
+    const d = await res.json();
+    if (!d.success) { statusEl.style.color = '#f87171'; statusEl.textContent = d.error || 'Onboarding failed.'; return; }
+    statusEl.style.color = '#3fb950';
+    statusEl.textContent = `Queued — status: ${d.brand.status}. This can take a minute.`;
+    refreshBloomBrandCurrent();
+  } catch (e) {
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Network error: ' + e.message;
+  }
+}
+
+async function loadBloomBrands() {
+  const select = document.getElementById('bloom-brand-select');
+  const statusEl = document.getElementById('bloom-brand-status');
+  select.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const res = await fetch('{{ url_for("admin.bloom_brands") }}');
+    const d = await res.json();
+    if (!d.success) { statusEl.style.color = '#f87171'; statusEl.textContent = d.error || 'Could not load brands.'; select.innerHTML = '<option value="">Load brands first →</option>'; return; }
+    if (!d.brands.length) { select.innerHTML = '<option value="">No brands on this account yet</option>'; return; }
+    select.innerHTML = '<option value="">Select a brand…</option>' + d.brands.map(b => `<option value="${b.id}">${b.id} — ${b.status}</option>`).join('');
+    select.onchange = () => selectBloomBrand(select.value);
+  } catch (e) {
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Network error: ' + e.message;
+  }
+}
+
+async function selectBloomBrand(brandId) {
+  if (!brandId) return;
+  const statusEl = document.getElementById('bloom-brand-status');
+  try {
+    const res = await fetch('{{ url_for("admin.bloom_select_brand") }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({brand_id: brandId})
+    });
+    const d = await res.json();
+    if (!d.success) { statusEl.style.color = '#f87171'; statusEl.textContent = d.error || 'Could not select brand.'; return; }
+    statusEl.style.color = '#3fb950';
+    statusEl.textContent = `Using brand ${brandId}.`;
+    refreshBloomBrandCurrent();
+  } catch (e) {
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Network error: ' + e.message;
+  }
+}
+</script>
+
+<!-- ── GENERIC VIDEO AI ── -->
+<div class="a-panel" data-settings-tab="ai" id="video-ai" style="margin-bottom:20px;scroll-margin-top:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">🎬 Video AI (generic — bring your own provider)</div>
+    <span id="video-ai-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Point this at any video-generation API that returns JSON — Stability AI, Runway, Pika, or anything else
+      you sign up with (several offer free or trial tiers; check their current terms, since those change).
+      Field names are configurable the same way as Bloom, so this works regardless of which provider you pick.
+    </p>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">API Key</label>
+        <input type="password" value="{{ sv('video_ai_api_key') }}" placeholder="paste your provider's API key" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('video_ai_api_key',this.value,document.getElementById('video-ai-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">API Base URL</label>
+        <input type="text" value="{{ sv('video_ai_base_url') }}" placeholder="https://api.yourprovider.com/v1" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('video_ai_base_url',this.value,document.getElementById('video-ai-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">API Path</label>
+        <input type="text" value="{{ sv('video_ai_api_path') or '/generate' }}" placeholder="/generate" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('video_ai_api_path',this.value,document.getElementById('video-ai-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Request field for prompt</label>
+        <input type="text" value="{{ sv('video_ai_prompt_field') or 'prompt' }}" placeholder="prompt" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('video_ai_prompt_field',this.value,document.getElementById('video-ai-status'))"/>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="a-label">Response field (video URL or job/request ID — many video APIs generate asynchronously)</label>
+        <input type="text" value="{{ sv('video_ai_response_field') or 'video_url' }}" placeholder="video_url" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('video_ai_response_field',this.value,document.getElementById('video-ai-status'))"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── GENERIC AI WEBSITE BUILDER ── -->
+<div class="a-panel" data-settings-tab="ai" id="website-builder" style="margin-bottom:20px;scroll-margin-top:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">🌐 AI Website Builder (generic — optional)</div>
+    <span id="website-builder-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      The <a href="{{ url_for('admin.website_builder') }}" style="color:#38bdf8">Website Builder</a> tool
+      works out of the box using this site's own configured AI (no signup needed) — filling in an API here is
+      optional, and only takes over if you'd rather offload the generation work to an external website-builder API.
+      Same configurable field-name pattern as Bloom/Video AI above, so it works with whichever provider you pick.
+    </p>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">API Key</label>
+        <input type="password" value="{{ sv('website_builder_api_key') }}" placeholder="paste your provider's API key" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('website_builder_api_key',this.value,document.getElementById('website-builder-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">API Base URL</label>
+        <input type="text" value="{{ sv('website_builder_base_url') }}" placeholder="https://api.yourprovider.com/v1" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('website_builder_base_url',this.value,document.getElementById('website-builder-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">API Path</label>
+        <input type="text" value="{{ sv('website_builder_api_path') or '/generate' }}" placeholder="/generate" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('website_builder_api_path',this.value,document.getElementById('website-builder-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Request field for prompt</label>
+        <input type="text" value="{{ sv('website_builder_prompt_field') or 'prompt' }}" placeholder="prompt" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('website_builder_prompt_field',this.value,document.getElementById('website-builder-status'))"/>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="a-label">Response field (should contain the generated HTML)</label>
+        <input type="text" value="{{ sv('website_builder_response_field') or 'html' }}" placeholder="html" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('website_builder_response_field',this.value,document.getElementById('website-builder-status'))"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TWILIO VOICE + WHATSAPP ── -->
+<div class="a-panel" data-settings-tab="ai" id="twilio" style="margin-bottom:20px;scroll-margin-top:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">☎️ Twilio Voice + WhatsApp Agents</div>
+    <span id="twilio-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Lets an Agent Studio persona answer phone calls (via Twilio's built-in speech recognition + text-to-speech —
+      no separate voice service needed) and WhatsApp messages. You'll need your own Twilio account with a phone
+      number and a WhatsApp Business sender approved through Twilio — that setup happens directly on
+      <a href="https://www.twilio.com" target="_blank" style="color:#38bdf8">twilio.com</a>, nothing here creates
+      that account for you. Once you have your SID/token/numbers, point Twilio's webhook URLs at:
+    </p>
+    <p style="font-size:11px;font-family:monospace;color:#8b93a5;margin-bottom:14px">
+      Voice: {{ request.url_root.rstrip('/') }}/webhooks/twilio/voice<br>
+      WhatsApp: {{ request.url_root.rstrip('/') }}/webhooks/twilio/whatsapp
+    </p>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Account SID</label>
+        <input type="text" value="{{ sv('twilio_account_sid') }}" placeholder="AC…" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('twilio_account_sid',this.value,document.getElementById('twilio-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Auth Token</label>
+        <input type="password" value="{{ sv('twilio_auth_token') }}" placeholder="••••••••" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('twilio_auth_token',this.value,document.getElementById('twilio-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Voice Phone Number</label>
+        <input type="text" value="{{ sv('twilio_voice_number') }}" placeholder="+15551234567" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('twilio_voice_number',this.value,document.getElementById('twilio-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">WhatsApp Number</label>
+        <input type="text" value="{{ sv('twilio_whatsapp_number') }}" placeholder="+15551234567" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('twilio_whatsapp_number',this.value,document.getElementById('twilio-status'))"/>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="a-label">Agent for calls/WhatsApp</label>
+        <select class="a-input" style="margin-top:6px" onchange="saveSetting('twilio_agent_id',this.value,document.getElementById('twilio-status'))">
+          <option value="">— none configured —</option>
+          {% for ag in all_agents %}
+          <option value="{{ ag.id }}" {{ 'selected' if sv('twilio_agent_id') == ag.id|string else '' }}>{{ ag.name }}{% if ag.role %} ({{ ag.role }}){% endif %}</option>
+          {% endfor %}
+        </select>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:6px">Runs tool-free over calls/WhatsApp — same safety rule as the public widgets: a caller or WhatsApp sender is an anonymous stranger, so this agent can only talk, never take real actions on your site.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Direct Social Publishing (Ayrshare)</div>
+    <span id="ayrshare-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Posting straight to Facebook/Instagram normally means registering your own Facebook Developer App with
+      Meta and going through their App Review — that's Meta's platform rule, nothing here can skip it. Ayrshare
+      already has an approved app, so you connect your accounts inside <em>their</em> dashboard instead, and
+      this platform only needs one API key from them. Steps:
+    </p>
+    <ol style="font-size:12px;color:var(--text-muted);line-height:1.8;margin:0 0 14px 18px;padding:0">
+      <li>Sign up at <a href="https://www.ayrshare.com" target="_blank" style="color:var(--cyan)">ayrshare.com</a></li>
+      <li>In their dashboard, click Connect and link Facebook Page / Instagram Business / etc — done on their site, no Developer App needed here</li>
+      <li>Copy your API Key from their dashboard and paste it below</li>
+    </ol>
+    <label class="a-label">Ayrshare API Key</label>
+    <input type="password" value="{{ sv('ayrshare_api_key') }}" placeholder="paste your Ayrshare API key" class="a-input" autocomplete="off" style="margin-top:6px"
+      onblur="saveSetting('ayrshare_api_key',this.value,document.getElementById('ayrshare-status'))"/>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px">
+      Once this is set, a "Post via Ayrshare" panel appears in Content Studio for posting directly to whichever
+      accounts you connected — no per-platform tokens to manage here.
+    </p>
+  </div>
+</div>
+
+<!-- ── CLIENT OAUTH CONNECTIONS ── -->
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Client OAuth Connections (Meta)</div>
+    <span id="oauth-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      This is what lets a <strong>client connect their own Facebook Page and Instagram account themselves</strong> —
+      they click "Connect" in their Client Portal, log into their own Facebook, and approve access. You never see
+      or handle their access token; Meta hands it straight to your platform. One-time setup:
+    </p>
+    <ol style="font-size:12px;color:var(--text-muted);line-height:1.9;margin:0 0 14px 18px;padding:0">
+      <li>Create an app at <a href="https://developers.facebook.com/apps" target="_blank" style="color:var(--cyan)">developers.facebook.com/apps</a> (type: "Business")</li>
+      <li>Add the <strong>Facebook Login</strong> product, and under its settings add this exact Valid OAuth Redirect URI:
+        <code id="oauth-redirect-uri" style="display:block;margin-top:4px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:6px;word-break:break-all;color:var(--cyan)">{{ url_for('social.facebook_oauth_callback', _external=True) }}</code>
+      </li>
+      <li>Under App Review, request <code>pages_show_list</code>, <code>pages_manage_posts</code>, <code>pages_messaging</code>, <code>pages_read_engagement</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code> (Meta reviews these before they work for anyone besides you as the app's own test user — until approved, only accounts added as "Testers" in your app can complete the connection)</li>
+      <li>Paste the App ID and App Secret from the app's Settings → Basic page below</li>
+    </ol>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Facebook App ID</label>
+        <input type="text" class="a-input" style="margin-top:6px" value="{{ sv('facebook_app_id') }}"
+          onblur="saveSetting('facebook_app_id',this.value,document.getElementById('oauth-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Facebook App Secret</label>
+        <input type="password" class="a-input" style="margin-top:6px" value="{{ sv('facebook_app_secret') }}" autocomplete="off"
+          onblur="saveSetting('facebook_app_secret',this.value,document.getElementById('oauth-status'))"/>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+      Once both are saved, every client with an active project gets a "Connect Your Facebook Page" button in their
+      Client Portal → My Bots tab automatically.
+    </p>
+  </div>
+</div>
+
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Client OAuth Connections (LinkedIn)</div>
+    <span id="oauth-li-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Same idea as the Facebook connection above: a client clicks "Connect", logs into their own LinkedIn, and
+      approves posting to their personal profile — you never see their token.
+    </p>
+    <ol style="font-size:12px;color:var(--text-muted);line-height:1.9;margin:0 0 14px 18px;padding:0">
+      <li>Create an app at <a href="https://www.linkedin.com/developers/apps" target="_blank" style="color:var(--cyan)">linkedin.com/developers/apps</a></li>
+      <li>Under Products, request <strong>"Sign In with LinkedIn using OpenID Connect"</strong> and <strong>"Share on LinkedIn"</strong> (both are instant-approve for most apps, no review wait)</li>
+      <li>Under Auth, add this exact Authorized Redirect URL:
+        <code style="display:block;margin-top:4px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:6px;word-break:break-all;color:var(--cyan)">{{ url_for('social.linkedin_oauth_callback', _external=True) }}</code>
+      </li>
+      <li>Paste the Client ID and Client Secret from the app's Auth tab below</li>
+    </ol>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">LinkedIn Client ID</label>
+        <input type="text" class="a-input" style="margin-top:6px" value="{{ sv('linkedin_client_id') }}"
+          onblur="saveSetting('linkedin_client_id',this.value,document.getElementById('oauth-li-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">LinkedIn Client Secret</label>
+        <input type="password" class="a-input" style="margin-top:6px" value="{{ sv('linkedin_client_secret') }}" autocomplete="off"
+          onblur="saveSetting('linkedin_client_secret',this.value,document.getElementById('oauth-li-status'))"/>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+      Note: LinkedIn's tokens from this flow typically expire after ~60 days with no automatic refresh for most
+      apps — clients will need to click "Connect" again when that happens. That's a LinkedIn platform limit, not
+      something this build can route around.
+    </p>
+  </div>
+</div>
+
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Client OAuth Connections (Google Sheets)</div>
+    <span id="oauth-google-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Same idea again: lets a client connect their <strong>own</strong> Google account so an "Append Row to Google
+      Sheet" automation step can write into a spreadsheet THEY own — instead of always using your one site-wide
+      service account. Pick whichever fits a given workflow: your service account (Settings → Integrations, above)
+      for sheets you control, or a client's own connection for sheets they control.
+    </p>
+    <ol style="font-size:12px;color:var(--text-muted);line-height:1.9;margin:0 0 14px 18px;padding:0">
+      <li>Create a project at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--cyan)">console.cloud.google.com/apis/credentials</a>, enable the Google Sheets API</li>
+      <li>Create an OAuth 2.0 Client ID (type: Web application)</li>
+      <li>Add this exact Authorized redirect URI:
+        <code style="display:block;margin-top:4px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:6px;word-break:break-all;color:var(--cyan)">{{ url_for('social.google_oauth_callback', _external=True) }}</code>
+      </li>
+      <li>If you also want to connect YOUR site's own YouTube channel (Social Channels → Connect YouTube), enable the
+        YouTube Data API v3 on the same project and add this second redirect URI too:
+        <code style="display:block;margin-top:4px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:6px;word-break:break-all;color:var(--cyan)">{{ url_for('admin.youtube_oauth_callback', _external=True) }}</code>
+      </li>
+      <li>Paste the Client ID and Client Secret below</li>
+    </ol>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">Google OAuth Client ID</label>
+        <input type="text" class="a-input" style="margin-top:6px" value="{{ sv('google_oauth_client_id') }}"
+          onblur="saveSetting('google_oauth_client_id',this.value,document.getElementById('oauth-google-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Google OAuth Client Secret</label>
+        <input type="password" class="a-input" style="margin-top:6px" value="{{ sv('google_oauth_client_secret') }}" autocomplete="off"
+          onblur="saveSetting('google_oauth_client_secret',this.value,document.getElementById('oauth-google-status'))"/>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+      While your app is in Google's "Testing" publishing status, only Google accounts you've added as Test Users
+      can complete this — that's Google's rule. Submitting for verification removes that limit but takes review time.
+    </p>
+    <div style="margin-top:12px;padding:12px 14px;border-radius:8px;background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.25)">
+      <p style="font-size:12px;color:#facc15;font-weight:600;margin:0 0 6px">If "Connect YouTube" shows an "Access blocked" / "app hasn't completed verification" screen from Google:</p>
+      <ol style="font-size:11px;color:var(--text-muted);line-height:1.8;margin:0 0 0 16px;padding:0">
+        <li>This is Google refusing the login, not a bug on this site — <code>youtube.upload</code> is a "restricted scope" Google gates behind either Test User status or full app verification.</li>
+        <li>Fastest fix: in Google Cloud Console → your project → <strong>OAuth consent screen → Test users</strong>, add the exact Google account you're connecting with, then try again.</li>
+        <li>Permanent fix: submit the OAuth consent screen for verification (Google reviews restricted scopes separately and it can take days to weeks) — required before anyone besides added test users can connect.</li>
+        <li>Double-check the exact redirect URI below is pasted into Console <strong>character-for-character</strong> — a mismatch there shows as "Error 400: redirect_uri_mismatch" rather than "blocked", so if you're seeing that instead, it's this, not verification.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- ── TIKTOK (Content Posting API + Display API) ──
+     Moved from data-settings-tab="system" to "ai": this panel sits right
+     next to the Google/LinkedIn OAuth connections it belongs with, since
+     that's where an admin actually looks for "connect a social account"
+     settings. It was previously filed under System & Security, which is
+     why it read as "not in Settings at all" -- it was just on the wrong
+     tab, not missing. ── -->
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">TikTok Connection</div>
+    <span id="oauth-tiktok-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Lets you connect your site's own TikTok account under Social Channels, to post videos and pull real
+      view/like/comment/share analytics from Content Studio.
+    </p>
+    <ol style="font-size:12px;color:var(--text-muted);line-height:1.9;margin:0 0 14px 18px;padding:0">
+      <li>Create an app at <a href="https://developers.tiktok.com/apps" target="_blank" style="color:var(--cyan)">developers.tiktok.com/apps</a>,
+        add the <strong>Login Kit</strong> and <strong>Content Posting API</strong> products, and get it approved</li>
+      <li>Add this exact Redirect URI:
+        <code style="display:block;margin-top:4px;padding:6px 10px;background:rgba(255,255,255,0.04);border-radius:6px;word-break:break-all;color:var(--cyan)">{{ url_for('admin.tiktok_oauth_callback', _external=True) }}</code>
+      </li>
+      <li>To post by video URL (used here) rather than uploading raw files, verify the domain your videos are
+        hosted on in the app's settings — TikTok requires this before PULL_FROM_URL posts will work</li>
+      <li>Paste the Client Key and Client Secret below</li>
+    </ol>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">TikTok Client Key</label>
+        <input type="text" class="a-input" style="margin-top:6px" value="{{ sv('tiktok_client_key') }}"
+          onblur="saveSetting('tiktok_client_key',this.value,document.getElementById('oauth-tiktok-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">TikTok Client Secret</label>
+        <input type="password" class="a-input" style="margin-top:6px" value="{{ sv('tiktok_client_secret') }}" autocomplete="off"
+          onblur="saveSetting('tiktok_client_secret',this.value,document.getElementById('oauth-tiktok-status'))"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── INTEGRATIONS ── -->
+<div class="a-panel" data-settings-tab="system" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Integrations</div>
+    <span id="integrations-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      Powers the "Append Row to Google Sheet" action in Automation Studio. This uses a Google <strong>service
+      account</strong>, not a per-user Google login — create one free in Google Cloud Console, enable the
+      Google Sheets API for it, download its JSON key, paste the whole file below, then share your target
+      Google Sheet with that key's <code style="color:var(--cyan)">client_email</code> address (Editor access)
+      the same way you'd share it with a person. That's the entire setup.
+    </p>
+    <label class="a-label">Google Service Account JSON Key</label>
+    <textarea id="gsheets-key" rows="4" class="a-input" style="margin-top:6px;font-family:monospace;font-size:12px" autocomplete="off"
+      placeholder='{"type": "service_account", "client_email": "...", ...}'
+      onblur="saveSetting('google_service_account_json',this.value,document.getElementById('integrations-status'))">{{ sv('google_service_account_json') }}</textarea>
+
+    <div class="a-grid a-grid-2" style="gap:14px;margin-top:14px;align-items:end">
+      <div>
+        <label class="a-label">Test with a Spreadsheet ID</label>
+        <input type="text" id="gsheets-test-id" class="a-input" style="margin-top:6px" placeholder="Paste a Spreadsheet ID (from its URL)"/>
+      </div>
+      <button type="button" class="a-btn a-btn-secondary a-btn-sm" onclick="testGoogleSheets()">Test Connection</button>
+    </div>
+    <p id="gsheets-test-result" style="font-size:12px;margin-top:10px"></p>
+  </div>
+</div>
+<script>
+
+async function testGoogleSheets() {
+  const resultEl = document.getElementById('gsheets-test-result');
+  const spreadsheetId = document.getElementById('gsheets-test-id').value.trim();
+  if (!spreadsheetId) { resultEl.style.color = 'var(--red, #f87171)'; resultEl.textContent = 'Paste a Spreadsheet ID first.'; return; }
+  resultEl.style.color = 'var(--text-muted)';
+  resultEl.textContent = 'Testing…';
+  try {
+    const res = await fetch('{{ url_for("admin.test_google_sheets") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({ spreadsheet_id: spreadsheetId })
+    });
+    const d = await res.json();
+    if (d.success) {
+      resultEl.style.color = 'var(--green)';
+      resultEl.textContent = `✓ Connected — found sheet "${d.title}"`;
+    } else {
+      resultEl.style.color = 'var(--red, #f87171)';
+      resultEl.textContent = `✕ ${d.error}`;
+    }
+  } catch (e) {
+    resultEl.style.color = 'var(--red, #f87171)';
+    resultEl.textContent = '✕ Network error';
+  }
+}
+</script>
+
+<!-- ── AI TOOLS: BACKGROUND REMOVER ── -->
+<div class="a-panel" data-settings-tab="ai" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Background Remover (AI-quality)</div>
+    <span id="bgremove-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px">
+      The free Background Remover tool always works with no setup (in-browser, no server call). Setting a
+      remove.bg API key here unlocks the higher-quality AI version instead — this setting takes priority over
+      a <code style="color:var(--cyan)">REMOVEBG_API_KEY</code> in your <code style="color:var(--cyan)">.env</code> file if both are set, so you can manage it from here without redeploying.
+    </p>
+    <div class="a-grid a-grid-2" style="gap:14px">
+      <div>
+        <label class="a-label">remove.bg API Key</label>
+        <input type="password" value="{{ sv('removebg_api_key') }}" placeholder="••••••••" class="a-input" autocomplete="off" style="margin-top:6px"
+          onblur="saveSetting('removebg_api_key',this.value,document.getElementById('bgremove-status'))"/>
+      </div>
+      <div>
+        <label class="a-label">Output Size</label>
+        <select class="a-input" style="margin-top:6px" onchange="saveSetting('removebg_size',this.value,document.getElementById('bgremove-status'))">
+          {% for opt in ['auto','preview','full','regular'] %}
+          <option value="{{ opt }}" {% if sv('removebg_size','auto')==opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+      Get a free key (50 free removals/month) at <a href="https://www.remove.bg/api" target="_blank" style="color:var(--cyan)">remove.bg/api</a> —
+      sign up, then copy the key from your dashboard. "auto" picks the best resolution your plan allows automatically; only change it if remove.bg's docs tell you to.
+    </p>
+  </div>
+</div>
+
+<!-- ── SECURITY ── -->
+<div class="a-panel" data-settings-tab="system" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Security</div>
+    <span id="sec-status" style="font-size:12px;color:var(--green)"></span>
+  </div>
+  <div class="a-panel-body">
+    <div class="responsive-grid-2" style="display:grid;gap:14px">
+      <div>
+        <label class="a-label">Admin Allowed IP Addresses</label>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Comma-separated. Leave blank to allow all.</p>
+        <textarea class="a-input" rows="3" placeholder="192.168.1.1, 10.0.0.1"
+          onblur="saveSetting('admin_allowed_ips',this.value,document.getElementById('sec-status'))">{{ sv('admin_allowed_ips') }}</textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        {% for key, label, desc in [
+          ("rate_limiting","Rate Limiting","Limit requests per user to prevent abuse"),
+          ("bot_protection","Bot Protection","Block automated traffic and scrapers"),
+          ("enable_2fa","Two-Factor Auth","Allow users to enable 2FA"),
+        ] %}
+        {% set checked = sv(key)|lower in ('true','1','yes') %}
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px">
+          <label class="a-toggle" style="flex-shrink:0;margin-top:1px">
+            <input type="checkbox" {% if checked %}checked{% endif %}
+              onchange="saveSetting('{{ key }}',this.checked?'true':'false',document.getElementById('sec-status'))"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+          </label>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">{{ label }}</div>
+            <div style="font-size:11px;color:var(--text-muted)">{{ desc }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHANGE ADMIN PASSWORD ── -->
+<div class="a-panel" data-settings-tab="system">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Change Admin Password</div>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-3" style="gap:14px;margin-bottom:16px">
+      <div>
+        <label class="a-label">Current Password</label>
+        <input type="password" id="cur-pwd" class="a-input" placeholder="Current password" autocomplete="current-password"/>
+      </div>
+      <div>
+        <label class="a-label">New Password (min 8 chars)</label>
+        <input type="password" id="new-pwd" class="a-input" placeholder="New password" autocomplete="new-password"/>
+      </div>
+      <div>
+        <label class="a-label">Confirm New Password</label>
+        <input type="password" id="con-pwd" class="a-input" placeholder="Confirm password" autocomplete="new-password"/>
+      </div>
+    </div>
+    <button onclick="changePassword()" class="a-btn a-btn-primary">Update Password</button>
+    <span id="pwd-status" style="font-size:12px;margin-left:12px"></span>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function changePassword() {
+  const cur = document.getElementById('cur-pwd').value;
+  const np  = document.getElementById('new-pwd').value;
+  const cp  = document.getElementById('con-pwd').value;
+  const st  = document.getElementById('pwd-status');
+  if (!cur || !np || !cp) { showToast('All fields required','error'); return; }
+  if (np !== cp)  { showToast('Passwords do not match','error'); return; }
+  if (np.length < 8) { showToast('Minimum 8 characters','error'); return; }
+  try {
+    const res = await fetch('/auth/change-password', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify({current_password:cur, new_password:np})
+    });
+    const d = await res.json();
+    if (d.message) {
+      showToast(d.message,'success');
+      st.textContent='✓ Password updated'; st.style.color='var(--green)';
+      document.getElementById('cur-pwd').value='';
+      document.getElementById('new-pwd').value='';
+      document.getElementById('con-pwd').value='';
+    } else {
+      showToast(d.error||'Failed','error');
+      st.textContent='✕ '+d.error; st.style.color='var(--red)';
+    }
+    setTimeout(()=>st.textContent='',4000);
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+}
+
+// Init tab buttons to match active gateway
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[name="active_gateway"]').forEach(r => {
+    r.closest('label').addEventListener('click', () => {
+      setTimeout(() => switchTab('gw-tabs', r.value), 50);
+    });
+  });
+  const active = document.querySelector('[name="active_gateway"]:checked');
+  if (active) switchTab('gw-tabs', active.value);
+  
+  // Render partners initially
+  renderPartners();
+});
+
+// Partners list array
+var partnersList = [];
+try {
+  var rawPartners = `{{ get_setting('site_partners_json') or '[]' }}`;
+  partnersList = JSON.parse(rawPartners) || [];
+} catch(e) {
+  partnersList = [];
+}
+
+function renderPartners() {
+  var container = document.getElementById('partners-list-container');
+  if (!container) return;
+  if (partnersList.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-3); font-size:12.5px">No custom partners added yet. Default global logos are active.</p>';
+    return;
+  }
+  var html = '';
+  partnersList.forEach(function(p, i) {
+    html += `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:10px; border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img src="${p.logo}" alt="${p.name}" style="height:24px; max-width:80px; object-fit:contain; filter:grayscale(100%);"/>
+          <span style="font-size:13px; font-weight:600; color:var(--text)">${p.name}</span>
+        </div>
+        <button type="button" class="a-btn a-btn-danger a-btn-xs" onclick="deletePartner(${i})">Remove</button>
+      </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function addPartnerRow() {
+  var name = document.getElementById('partner-new-name').value.trim();
+  var logo = document.getElementById('partner-new-logo').value.trim();
+  if (!name || !logo) { alert('Please enter both name and logo URL'); return; }
+  partnersList.push({ name: name, logo: logo });
+  document.getElementById('partner-new-name').value = '';
+  document.getElementById('partner-new-logo').value = '';
+  savePartnersToServer();
+}
+
+function deletePartner(index) {
+  if (!confirm('Remove this partner?')) return;
+  partnersList.splice(index, 1);
+  savePartnersToServer();
+}
+
+function savePartnersToServer() {
+  renderPartners();
+  saveSetting('site_partners_json', JSON.stringify(partnersList), document.getElementById('partners-status'));
+}
+</script>
+{% endblock %}

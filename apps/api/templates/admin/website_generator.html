@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% block page_title %}AI Website Generator{% endblock %}
+{% block page_subtitle %}Describe a page, get a complete standalone HTML site back{% endblock %}
+
+{% block content %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">🌐 Generate a website from a prompt</div>
+    {% if external_configured %}
+    <span style="font-size:11px;color:#38bdf8">Using your configured external Website Builder API</span>
+    {% else %}
+    <span style="font-size:11px;color:var(--text-3)">Using this site's own AI (no external API configured)</span>
+    {% endif %}
+  </div>
+  <div class="a-panel-body">
+    <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">
+      Be specific — business type, sections you want (hero, pricing, contact form, etc), color/style vibe.
+      This generates one complete, self-contained HTML file — it doesn't publish automatically as a live page
+      on this site yet; download it and host it, or hand it to a developer to wire in.
+    </p>
+    <textarea id="wg-prompt" rows="4" class="a-input" placeholder="e.g. A landing page for a boutique coffee roastery — hero with a bold headline, an 'our beans' section with 3 origin cards, a newsletter signup, warm brown/cream color palette, modern serif headings."></textarea>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+      <button type="button" class="a-btn a-btn-primary" onclick="generateSite()" id="wg-btn">✨ Generate Website</button>
+      <span id="wg-status" style="font-size:12px"></span>
+    </div>
+  </div>
+</div>
+
+<div id="wg-result-panel" class="a-panel" style="display:none">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Preview</div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="a-btn a-btn-xs" onclick="downloadSite()">⬇ Download HTML</button>
+      <button type="button" class="a-btn a-btn-xs" onclick="generateSite()">↻ Regenerate</button>
+    </div>
+  </div>
+  <div class="a-panel-body">
+    <p id="wg-note" style="font-size:12px;color:#facc15;margin-bottom:10px;display:none"></p>
+    <iframe id="wg-preview" style="width:100%;height:70vh;border:1px solid #30363d;border-radius:8px;background:#fff"></iframe>
+  </div>
+</div>
+
+<script>
+let currentHtml = '';
+
+async function generateSite() {
+  const prompt = document.getElementById('wg-prompt').value.trim();
+  const status = document.getElementById('wg-status');
+  const btn = document.getElementById('wg-btn');
+  if (!prompt) { status.style.color = '#f87171'; status.textContent = 'Describe the website first.'; return; }
+
+  btn.disabled = true;
+  status.style.color = 'var(--text-2)';
+  status.textContent = 'Generating — this can take up to a minute for a full page...';
+
+  try {
+    const res = await fetch("{{ url_for('admin.website_generator_generate') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      status.style.color = '#f87171';
+      status.textContent = data.error || 'Generation failed.';
+      return;
+    }
+    status.style.color = '#3fb950';
+    status.textContent = 'Generated!';
+    currentHtml = data.html;
+    document.getElementById('wg-result-panel').style.display = 'block';
+    document.getElementById('wg-preview').srcdoc = currentHtml;
+    const noteEl = document.getElementById('wg-note');
+    if (data.note) {
+      noteEl.style.display = 'block';
+      noteEl.textContent = data.note;
+    } else {
+      noteEl.style.display = 'none';
+    }
+  } catch (e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Network error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadSite() {
+  if (!currentHtml) return;
+  const blob = new Blob([currentHtml], { type: 'text/html' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'generated-website.html';
+  link.click();
+}
+</script>
+{% endblock %}

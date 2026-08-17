@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% block page_title %}{{ client.name or client.email }}{% endblock %}
+{% block page_subtitle %}Customer timeline — every real event on record for this client{% endblock %}
+{% block content %}
+
+<div class="a-grid a-grid-3" style="gap:14px;margin-bottom:20px">
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Projects</p>
+    <p style="font-size:22px;font-weight:700">{{ projects|length }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">Wallet Balance</p>
+    <p style="font-size:22px;font-weight:700">{{ (wallet.balance | money(wallet.currency)) if wallet else '—' }}</p>
+  </div></div>
+  <div class="a-panel"><div class="a-panel-body">
+    <p style="font-size:11px;color:var(--text-3)">CRM Pipeline Stage</p>
+    <p style="font-size:22px;font-weight:700">{{ lead.deal_stage|title if lead else 'Not in CRM' }}</p>
+  </div></div>
+</div>
+
+{% if lead and lead.notes %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">CRM Notes</div></div>
+  <div class="a-panel-body"><p style="font-size:12px;white-space:pre-wrap;color:var(--text-2)">{{ lead.notes }}</p></div>
+</div>
+{% endif %}
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Timeline ({{ events|length }} events)</div></div>
+  <div class="a-panel-body">
+    {% if not events %}
+    <p style="color:var(--text-3);font-size:13px">No recorded activity yet for this client.</p>
+    {% endif %}
+    <div style="display:flex;flex-direction:column;gap:2px">
+      {% for e in events %}
+      <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <span style="font-size:18px;flex-shrink:0">{{ e.icon }}</span>
+        <div style="flex:1;min-width:0">
+          <p style="font-size:13px;font-weight:500">{{ e.title }}</p>
+          <p style="font-size:11px;color:var(--text-3)">{{ e.detail }}</p>
+        </div>
+        <span style="font-size:11px;color:var(--text-3);white-space:nowrap">{{ e.date.strftime('%b %d, %Y') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

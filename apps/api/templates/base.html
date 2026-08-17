@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+{% if settings.get('seo_google_verification') %}<meta name="google-site-verification" content="{{ settings.get('seo_google_verification') }}"/>{% endif %}
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}{{ page_seo_title or settings.get('seo_default_title') or site_name }}{% endblock %}</title>
+<meta name="description" content="{% block meta_desc %}{{ page_seo_desc or settings.get('seo_default_description') or site_tagline }}{% endblock %}"/>
+{% if settings.get('seo_robots_override') %}<meta name="robots" content="{{ settings.get('seo_robots_override') }}"/>{% endif %}
+<link rel="canonical" href="{{ request.url_root.rstrip('/') + request.path }}"/>
+{% set favicon = settings.get('seo_favicon_url') or url_for('static', filename='favicon.ico') %}
+<link rel="icon" type="image/x-icon" sizes="48x48" href="{{ favicon }}"/>
+<link rel="icon" type="image/png" sizes="48x48" href="/static/favicon.png"/>
+<link rel="shortcut icon" href="{{ favicon }}"/>
+<link rel="apple-touch-icon" href="/static/favicon.png"/>
+<link rel="manifest" href="/manifest.json"/>
+<meta name="theme-color" content="#0a0a0a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Bazillin"/>
+
+<!-- Open Graph -->
+<meta property="og:type" content="{% block og_type %}website{% endblock %}"/>
+<meta property="og:title" content="{{ page_seo_title or settings.get('seo_default_title') or site_name }}"/>
+<meta property="og:description" content="{{ page_seo_desc or settings.get('seo_default_description') or site_tagline }}"/>
+<meta property="og:url" content="{{ request.url_root.rstrip('/') + request.path }}"/>
+<meta property="og:site_name" content="{{ site_name }}"/>
+{% set og_img = page_og_image or settings.get('seo_og_image') or settings.get('site_logo') %}
+{% if og_img %}<meta property="og:image" content="{{ og_img }}"/>{% endif %}
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image"/>
+{% if settings.get('seo_twitter_handle') %}<meta name="twitter:site" content="@{{ settings.get('seo_twitter_handle')|replace('@','') }}"/>{% endif %}
+<meta name="twitter:title" content="{{ page_seo_title or settings.get('seo_default_title') or site_name }}"/>
+<meta name="twitter:description" content="{{ page_seo_desc or settings.get('seo_default_description') or site_tagline }}"/>
+{% if og_img %}<meta name="twitter:image" content="{{ og_img }}"/>{% endif %}
+
+{% if settings.get('site_logo') %}
+<!-- Organization schema — this is what actually gets a site's logo shown
+     in Google Search results / the Knowledge Panel. An og:image or a
+     favicon alone does NOT do this — Google specifically looks for this
+     Organization structured data with a "logo" property. Was previously
+     entirely missing site-wide. See:
+     https://developers.google.com/search/docs/appearance/structured-data/logo -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": {{ (settings.get('seo_default_title') or site_name)|tojson }},
+  "url": {{ request.url_root.rstrip('/')|tojson }},
+  "logo": {{ settings.get('site_logo')|tojson }}
+}
+</script>
+{% endif %}
+
+{% block structured_data %}{% endblock %}
+
+<meta name="csrf-token" content="{{ csrf_token() }}"/>
+<script>
+  // Global CSRF helper — reads the token from the meta tag above.
+  // Flask-WTF does NOT set a readable csrf_ cookie by default, so any
+  // code reading document.cookie for a csrf token will always get ''
+  // and every AJAX POST/PUT/DELETE will be rejected with 400 CSRF error.
+  function getCsrf() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+  }
+
+  // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then((reg) => console.log('PWA Service Worker registered:', reg.scope))
+        .catch((err) => console.error('PWA Service Worker registration failed:', err));
+    });
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+{% set heading_font = settings.get('theme_font_heading', 'Plus Jakarta Sans') %}
+{% set body_font = settings.get('theme_font_body', 'Inter') %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family={{ heading_font | replace(' ', '+') }}:wght@400;500;600;700;800;900&family={{ body_font | replace(' ', '+') }}:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}"/>
+<style>
+  :root {
+    --c-font-heading: '{{ heading_font }}', -apple-system, sans-serif;
+    --c-font-body: '{{ body_font }}', -apple-system, sans-serif;
+    {% set theme_accent = settings.get('theme_accent', '#2D68FF') %}
+    {% set theme_accent_2 = settings.get('theme_accent_2', '#779DFF') %}
+    --c-accent: {{ theme_accent }};
+    --c-accent-2: {{ theme_accent_2 }};
+  }
+</style>
+<script>
+  (function () {
+    function hexToRgb(hex) {
+      hex = (hex || '').replace('#', '').trim();
+      if (hex.length === 3) hex = hex.split('').map(function(c){ return c + c; }).join('');
+      var n = parseInt(hex, 16);
+      if (isNaN(n)) return null;
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(', ');
+    }
+    var root = document.documentElement.style;
+    var accent = "{{ theme_accent }}";
+    var accent2 = "{{ theme_accent_2 }}";
+    var rgb1 = hexToRgb(accent), rgb2 = hexToRgb(accent2);
+    if (rgb1) root.setProperty('--c-accent-rgb', rgb1);
+    if (rgb2) root.setProperty('--c-accent-2-rgb', rgb2);
+  })();
+</script>
+{% set ga_id = settings.get('seo_google_analytics_id') %}
+{% if ga_id %}<script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>{% endif %}
+{% set seo_img = settings.get('seo_site_image') %}
+{% if seo_img %}
+<meta property="og:image" content="{{ seo_img }}"/>
+<meta name="twitter:image" content="{{ seo_img }}"/>
+{% endif %}
+{% block extra_head %}{% endblock %}
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+// Every text-cyan-400 / border-purple-500 / from-cyan-500 class already used
+// across 30+ templates picks up whatever accent color is chosen in
+// Admin -> Settings -> Theme, by generating a full 50-950 shade ramp from
+// that single hex value. Nobody has to touch the templates when the theme changes.
+function shadeRamp(hex) {
+  hex = (hex || '#2D68FF').replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = parseInt(hex.substr(0, 2), 16) / 255,
+        g = parseInt(hex.substr(2, 2), 16) / 255,
+        b = parseInt(hex.substr(4, 2), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  function hslToHex(h, s, l) {
+    function f(n) {
+      const k = (n + h * 12) % 12;
+      const a = s * Math.min(l, 1 - l);
+      const c = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+      return Math.round(255 * c).toString(16).padStart(2, '0');
+    }
+    return `#${f(0)}${f(8)}${f(4)}`;
+  }
+  const lightness = { 50: 0.95, 100: 0.90, 200: 0.80, 300: 0.68, 400: 0.55, 500: l, 600: Math.max(l - 0.10, 0.15), 700: Math.max(l - 0.20, 0.10), 800: Math.max(l - 0.30, 0.07), 900: Math.max(l - 0.38, 0.05), 950: Math.max(l - 0.44, 0.03) };
+  const ramp = {};
+  for (const [stop, lig] of Object.entries(lightness)) ramp[stop] = hslToHex(h, Math.min(s + 0.05, 1), lig);
+  ramp[500] = `#${hex}`;
+  return ramp;
+}
+const __accent  = "{{ theme_accent }}";
+const __accent2 = "{{ theme_accent_2 }}";
+const __headingFont = getComputedStyle(document.documentElement).getPropertyValue('--c-font-heading').trim().split(',')[0].replace(/['"]/g, '') || 'Plus Jakarta Sans';
+const __bodyFont    = getComputedStyle(document.documentElement).getPropertyValue('--c-font-body').trim().split(',')[0].replace(/['"]/g, '')    || 'Inter';
+
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: {
+        display: [`"${__headingFont}"`, 'system-ui', 'sans-serif'],
+        body: [`"${__bodyFont}"`, 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
+      colors: {
+        background: '#0a0a0a',
+        foreground: '#FFFFFF',
+        primary: __accent,
+        secondary: __accent2,
+        muted: '#B3B3B3',
+        surface: '#121212',
+        cyan: shadeRamp(__accent),
+        purple: shadeRamp(__accent2),
+      },
+    }
+  }
+}
+</script>
+</head>
+<!-- Default text is now 'muted' (Slate Gray) for premium readability, font is Inter -->
+<body class="bg-background text-muted antialiased font-body">
+<div class="site-glow-bg"></div>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div id="flash-container" class="fixed top-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm">
+{% for cat, msg in messages %}
+<div class="flash-msg glass border rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 animate-slide-in
+  {% if cat == 'success' %}border-emerald-500/30 text-emerald-400{% elif cat == 'danger' %}border-red-500/30 text-red-400{% elif cat == 'warning' %}border-amber-500/30 text-amber-400{% else %}border-secondary/30 text-secondary{% endif %}">
+  {% if cat == 'success' %}✓{% elif cat == 'danger' %}✕{% else %}ℹ{% endif %} {{ msg }}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+{% if settings.get('whatsapp_number') and request.blueprint != 'admin' %}
+<a href="https://wa.me/{{ settings.get('whatsapp_number')|replace('+','')|replace(' ','') }}?text={{ 'Hi! I found you on ' ~ site_name ~ ' and would like to chat.' | urlencode }}"
+   target="_blank" rel="noopener" aria-label="Chat on WhatsApp"
+   style="position:fixed;bottom:24px;left:24px;z-index:9998;width:56px;height:56px;border-radius:9999px;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(37,211,102,0.4);transition:transform .2s"
+   onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2C6.478 2 2 6.478 2 12c0 1.85.505 3.583 1.383 5.076L2 22l5.076-1.33A9.958 9.958 0 0012 22c5.522 0 10-4.478 10-10S17.522 2 12.001 2zm0 18.5c-1.639 0-3.176-.446-4.5-1.222l-.322-.19-3.24.85.87-3.166-.209-.325A8.457 8.457 0 013.5 12c0-4.687 3.813-8.5 8.5-8.5s8.5 3.813 8.5 8.5-3.812 8.5-8.499 8.5z"/></svg>
+</a>
+{% endif %}
+{% block body %}{% endblock %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+(function() {
+  try {
+    fetch('{{ url_for("analytics.track") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ path: window.location.pathname })
+    });
+  } catch (e) { /* analytics must never block the page */ }
+})();
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

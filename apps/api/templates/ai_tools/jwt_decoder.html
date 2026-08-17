@@ -1,0 +1,79 @@
+{% extends "public_base.html" %}
+{% block title %}JWT Decoder — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:800px;margin:0 auto;padding:48px 20px }
+textarea.admin-input { width:100%;min-height:90px;font-family:monospace;font-size:12px }
+pre.json-out { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;font-size:12px;color:#cfe6ff;overflow-x:auto;max-height:280px }
+.badge { font-size:11px;padding:3px 8px;border-radius:6px;font-weight:700 }
+.badge.ok { background:rgba(0,255,136,0.12);color:#00ff88 }
+.badge.warn { background:rgba(255,209,42,0.12);color:#ffd12a }
+.badge.err { background:rgba(255,91,126,0.12);color:#ff5b7e }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">JWT Decoder</h1>
+    <p style="color:var(--c-text-2)">Decode header & payload locally. Signature is never verified server-side — your token never leaves the browser.</p>
+  </div>
+
+  <textarea id="jwt-input" class="admin-input" placeholder="Paste a JWT (eyJ...)…"></textarea>
+  <p id="status" style="margin-top:10px;font-size:13px"></p>
+
+  <div style="margin-top:16px">
+    <h3 style="font-size:13px;color:#9fb3d1;margin-bottom:6px">Header</h3>
+    <pre id="header-out" class="json-out"></pre>
+  </div>
+  <div style="margin-top:16px">
+    <h3 style="font-size:13px;color:#9fb3d1;margin-bottom:6px">Payload</h3>
+    <pre id="payload-out" class="json-out"></pre>
+  </div>
+  <div style="margin-top:16px">
+    <h3 style="font-size:13px;color:#9fb3d1;margin-bottom:6px">Expiry</h3>
+    <p id="exp-out" style="font-size:13px;color:#cfe6ff"></p>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function base64UrlDecode(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  return decodeURIComponent(atob(str).split('').map(c =>
+    '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+  ).join(''));
+}
+function decode() {
+  const token = document.getElementById('jwt-input').value.trim();
+  const status = document.getElementById('status');
+  const headerOut = document.getElementById('header-out');
+  const payloadOut = document.getElementById('payload-out');
+  const expOut = document.getElementById('exp-out');
+  if (!token) { status.textContent = ''; headerOut.textContent = ''; payloadOut.textContent = ''; expOut.textContent = ''; return; }
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    status.innerHTML = '<span class="badge err">Invalid format</span> A JWT must have 3 dot-separated parts.';
+    return;
+  }
+  try {
+    const header = JSON.parse(base64UrlDecode(parts[0]));
+    const payload = JSON.parse(base64UrlDecode(parts[1]));
+    headerOut.textContent = JSON.stringify(header, null, 2);
+    payloadOut.textContent = JSON.stringify(payload, null, 2);
+    status.innerHTML = '<span class="badge ok">Decoded</span> Signature not verified (client-side decode only).';
+    if (payload.exp) {
+      const expDate = new Date(payload.exp * 1000);
+      const isExpired = expDate < new Date();
+      expOut.innerHTML = `${expDate.toLocaleString()} <span class="badge ${isExpired ? 'err' : 'ok'}">${isExpired ? 'Expired' : 'Valid'}</span>`;
+    } else {
+      expOut.textContent = 'No exp claim present.';
+    }
+  } catch (e) {
+    status.innerHTML = '<span class="badge err">Decode error</span> ' + e.message;
+  }
+}
+document.getElementById('jwt-input').addEventListener('input', decode);
+</script>
+{% endblock %}

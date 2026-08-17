@@ -1,0 +1,265 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Overview{% endblock %}
+{% block page_subtitle %}Welcome back, {{ current_user.name }} · {{ now.strftime('%A, %B %d %Y') if now else '' }}{% endblock %}
+
+{% block topbar_actions %}
+<button onclick="openModal('broadcast-modal')" class="topbar-btn primary">
+  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+  Broadcast
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── STAT CARDS ── -->
+<div class="a-grid a-grid-6" style="margin-bottom:20px">
+  {% set cards = [
+    ('Total Users',   stats.users,                    'cyan',   'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', url_for('admin.users')),
+    ('Products',      stats.products,                 'purple', 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', url_for('admin.products')),
+    ('Paid Orders',   stats.orders,                   'green',  'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', url_for('admin.orders')),
+    ('Revenue',       stats.total_revenue|int | money, 'yellow', 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', url_for('admin.orders')),
+    ('Blog Posts',    stats.posts,                    'orange', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', url_for('admin.blog')),
+    ('Open Tickets',  stats.tickets,                  'red',    'M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z', url_for('admin.support')),
+  ] %}
+  {% if stats.unconverted_currencies %}
+  <div style="grid-column:1/-1;margin-bottom:2px">
+    <p style="font-size:11px;color:#f59e0b">⚠ Revenue includes {{ stats.unconverted_currencies|join(', ') }} payments counted 1:1 (no manual exchange rate set for {{ 'them' if stats.unconverted_currencies|length > 1 else 'it' }} yet) —
+      set rates in <a href="{{ url_for('admin.payment_config') }}" style="text-decoration:underline">Payment Config</a> for an accurate total.</p>
+  </div>
+  {% endif %}
+  {% for label, value, color, path, href in cards %}
+  <a href="{{ href }}" class="stat-card {{ color }}" style="display:block">
+    <div class="stat-icon {{ color }}">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
+           style="color:var(--{{ color }})">
+        <path stroke-linecap="round" stroke-linejoin="round" d="{{ path }}"/>
+      </svg>
+    </div>
+    <div class="stat-value">{{ value }}</div>
+    <div class="stat-label">{{ label }}</div>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- ── CHARTS ROW ── -->
+<div class="a-grid a-grid-2" style="margin-bottom:20px">
+  <!-- Revenue chart -->
+  <div class="a-panel">
+    <div class="a-panel-header">
+      <div>
+        <div class="a-panel-title">Revenue — Last 7 Days</div>
+        <div class="a-panel-sub">Marketplace orders + project invoices</div>
+      </div>
+      <div style="font-size:22px;font-weight:800;color:var(--green);font-family:'Space Grotesk',sans-serif">
+        {{ chart_data|map(attribute='total_revenue')|sum|int | money }}
+      </div>
+    </div>
+    <div class="a-panel-body">
+      <div class="a-chart-bars" style="height:140px">
+        {% set max_rev = chart_data|map(attribute='total_revenue')|max %}
+        {% for d in chart_data %}
+        {% set pct = ((d.total_revenue / max_rev * 100) if max_rev > 0 else 3)|int %}
+        <div class="a-bar-wrap">
+          <div class="a-bar cyan-bar" style="height:{{ [pct,3]|max }}%" data-tip="{{ d.total_revenue|int | money }} ({{ d.revenue|int | money }} orders + {{ d.project_revenue|int | money }} projects) · {{ d.date }}"></div>
+          <div class="a-bar-label">{{ d.date.split(' ')[0] }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Signups chart -->
+  <div class="a-panel">
+    <div class="a-panel-header">
+      <div>
+        <div class="a-panel-title">New Users — Last 7 Days</div>
+        <div class="a-panel-sub">Registrations by day</div>
+      </div>
+      <div style="font-size:22px;font-weight:800;color:var(--cyan);font-family:'Space Grotesk',sans-serif">
+        {{ chart_data|map(attribute='users')|sum }}
+      </div>
+    </div>
+    <div class="a-panel-body">
+      <div class="a-chart-bars" style="height:140px">
+        {% set max_u = chart_data|map(attribute='users')|max %}
+        {% for d in chart_data %}
+        {% set pct = ((d.users / max_u * 100) if max_u > 0 else 3)|int %}
+        <div class="a-bar-wrap">
+          <div class="a-bar purple-bar" style="height:{{ [pct,3]|max }}%" data-tip="{{ d.users }} users · {{ d.date }}"></div>
+          <div class="a-bar-label">{{ d.date.split(' ')[0] }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── REVENUE BY CLIENT ── -->
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div>
+      <div class="a-panel-title">Revenue by Client</div>
+      <div class="a-panel-sub">Who's paid the most for project work, all-time</div>
+    </div>
+  </div>
+  <div class="a-panel-body" style="padding:0">
+    {% if client_revenue %}
+    <table style="width:100%;border-collapse:collapse">
+      {% for project_title, client_name, client_email, paid_total in client_revenue %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:12px 20px;font-size:13px;color:#fff;font-weight:600">{{ client_name or client_email }}</td>
+        <td style="padding:12px 20px;font-size:12px;color:var(--text-3)">{{ project_title }}</td>
+        <td style="padding:12px 20px;font-size:13px;color:var(--green);font-weight:700;text-align:right">{{ paid_total | money }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p style="font-size:13px;color:var(--text-3);text-align:center;padding:28px 0">No paid project invoices yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── QUICK ACTIONS ── -->
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header">
+    <div class="a-panel-title">Quick Actions</div>
+  </div>
+  <div class="a-panel-body">
+    <div class="a-grid a-grid-4" style="gap:10px">
+      {% for label, href, color, icon_path in [
+        ('Add Product',  url_for('admin.products'),  'cyan',   'M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z'),
+        ('Write Post',   url_for('admin.blog'),      'purple', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'),
+        ('Manage Users', url_for('admin.users'),     'green',  'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'),
+        ('Edit CMS',     url_for('admin.cms'),       'orange', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'),
+        ('Settings',     url_for('admin.settings'),  'yellow', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z'),
+        ('Analytics',    url_for('admin.analytics'), 'cyan',   'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
+        ('Hosting',      url_for('admin.hosting'),   'purple', 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01'),
+        ('Freelancers',  url_for('admin.freelancers'),'green', 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'),
+      ] %}
+      <a href="{{ href }}" style="
+        display:flex;align-items:center;gap:10px;padding:14px 16px;
+        background:rgba(255,255,255,0.03);border:1px solid var(--border);
+        border-radius:12px;transition:all .2s;text-decoration:none;color:var(--text)
+        " onmouseover="this.style.borderColor='rgba(29, 185, 84,0.25)';this.style.background='rgba(29, 185, 84,0.05)'"
+           onmouseout="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,0.03)'">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8" style="color:var(--{{ color }});flex-shrink:0">
+          <path stroke-linecap="round" stroke-linejoin="round" d="{{ icon_path }}"/>
+        </svg>
+        <span style="font-size:13px;font-weight:600">{{ label }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── RECENT ROWS ── -->
+<div class="a-grid a-grid-2">
+  <!-- Recent Users -->
+  <div class="a-panel">
+    <div class="a-panel-header">
+      <div class="a-panel-title">Recent Users</div>
+      <a href="{{ url_for('admin.users') }}" class="a-btn a-btn-ghost a-btn-sm">View All</a>
+    </div>
+    <div class="a-table-wrap">
+      <table class="a-table">
+        <thead><tr>
+          <th>User</th><th>Role</th><th>Joined</th>
+        </tr></thead>
+        <tbody>
+          {% for u in recent_users %}
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="a-avatar-fallback a-avatar-sm">{{ (u.name or u.email or 'U')[0]|upper }}</div>
+                <div>
+                  <div style="font-weight:600;font-size:13px">{{ u.name or '—' }}</div>
+                  <div class="text-muted">{{ u.email }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="badge {% if u.role and u.role.name == 'admin' %}badge-danger{% elif u.role and u.role.name == 'freelancer' %}badge-info{% elif u.role and u.role.name == 'client' %}badge-purple{% else %}badge-muted{% endif %}">
+                {{ u.role.name if u.role else 'user' }}
+              </span>
+            </td>
+            <td><span class="text-muted">{{ u.created_at | timeago }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3"><div class="a-empty"><div class="a-empty-desc">No users yet</div></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Orders -->
+  <div class="a-panel">
+    <div class="a-panel-header">
+      <div class="a-panel-title">Recent Orders</div>
+      <a href="{{ url_for('admin.orders') }}" class="a-btn a-btn-ghost a-btn-sm">View All</a>
+    </div>
+    <div class="a-table-wrap">
+      <table class="a-table">
+        <thead><tr>
+          <th>Product</th><th>Amount</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          {% for o in recent_orders %}
+          <tr>
+            <td>
+              <div style="font-weight:600;font-size:13px">{{ o.product.title if o.product else 'Order #'+o.id|string }}</div>
+              <div class="text-muted">{{ o.created_at | timeago }}</div>
+            </td>
+            <td><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--text)">{{ o.amount|int | money }}</span></td>
+            <td>
+              <span class="badge {% if o.status=='paid' %}badge-success{% elif o.status=='pending' %}badge-warning{% else %}badge-danger{% endif %}">
+                <span class="badge-dot"></span> {{ o.status }}
+              </span>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3"><div class="a-empty"><div class="a-empty-desc">No orders yet</div></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── BROADCAST MODAL ── -->
+<div id="broadcast-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-md">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Broadcast Notification</div>
+      <button class="a-modal-close" onclick="closeModal('broadcast-modal')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin.broadcast') }}">
+      <div class="a-modal-body" style="display:flex;flex-direction:column;gap:16px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div>
+          <label class="a-label">Title</label>
+          <input name="title" required class="a-input" placeholder="Notification title"/>
+        </div>
+        <div>
+          <label class="a-label">Message</label>
+          <textarea name="message" rows="3" required class="a-input" placeholder="Your message…"></textarea>
+        </div>
+        <div>
+          <label class="a-label">Send To</label>
+          <select name="role" class="a-input">
+            <option value="">All Users</option>
+            <option value="user">Users only</option>
+            <option value="freelancer">Freelancers only</option>
+            <option value="client">Clients only</option>
+          </select>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('broadcast-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Send Notification</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

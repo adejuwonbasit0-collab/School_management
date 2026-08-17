@@ -1,0 +1,26 @@
+<aside class="dashboard-sidebar glass">
+  <div class="sidebar-avatar">
+    <img src="{{ current_user.get_avatar_url() }}" alt="{{ current_user.name }}" class="sidebar-avatar-img"/>
+    <div class="sidebar-name">{{ current_user.name or "User" }}</div>
+    <div class="sidebar-role role-badge role-{{ current_user.role.name if current_user.role else 'user' }}">
+      {{ (current_user.role.name if current_user.role else 'user')|title }}
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="{{ url_for('dashboard.home') }}" class="sidebar-link {% if request.endpoint=='dashboard.home' %}active{% endif %}">🏠 Overview</a>
+    <a href="{{ url_for('marketplace.index') }}" class="sidebar-link">🛒 Marketplace</a>
+    <a href="{{ url_for('hosting.index') }}" class="sidebar-link">🌐 Hosting</a>
+    <a href="{{ url_for('tools.index') }}" class="sidebar-link">🔧 Dev Tools</a>
+    <a href="{{ url_for('ai.index') }}" class="sidebar-link">🤖 AI Hub</a>
+    {% if current_user.is_freelancer() %}
+    <a href="{{ url_for('dashboard.home') }}" class="sidebar-link">💼 Freelancer</a>
+    {% endif %}
+    {% if current_user.is_client() %}
+    <a href="{{ url_for('dashboard.home') }}" class="sidebar-link">🏢 Client Portal</a>
+    {% endif %}
+    {% if current_user.is_admin() %}
+    <a href="{{ url_for('admin.dashboard') }}" class="sidebar-link sidebar-link-admin">⚙️ Admin Panel</a>
+    {% endif %}
+    <a href="{{ url_for('auth.logout') }}" class="sidebar-link sidebar-link-logout">🚪 Logout</a>
+  </nav>
+</aside>

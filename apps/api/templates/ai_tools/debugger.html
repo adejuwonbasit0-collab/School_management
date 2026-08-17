@@ -1,0 +1,73 @@
+{% extends "public_base.html" %}
+{% block title %}AI Debugger — {{ site_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-12">
+  <div class="flex items-center justify-between mb-8">
+    <div><h1 class="text-3xl font-bold font-display gradient-text">AI Debugger</h1><p class="text-gray-400 text-sm mt-1">Get root cause + exact fix in seconds</p></div>
+    <a href="{{ url_for('ai.index') }}" class="admin-btn-ghost text-sm">← AI Hub</a>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="glass-card rounded-2xl p-6 space-y-4">
+      <div><label class="admin-label">Error Message *</label><textarea name="error" id="f-error" rows="4" class="input-field w-full mt-1 resize-none font-mono text-sm" placeholder="TypeError: Cannot read properties of undefined (reading 'map')"></textarea></div>
+<div><label class="admin-label">Your Code *</label><textarea name="code" id="f-code" rows="4" class="input-field w-full mt-1 resize-none font-mono text-sm" placeholder="const items = data.items.map(i => i.name)"></textarea></div>
+<div><label class="admin-label">Language</label><input name="language" id="f-language" class="input-field w-full mt-1" placeholder="JavaScript"/></div>
+<div><label class="admin-label">Context</label><input name="context" id="f-context" class="input-field w-full mt-1" placeholder="This happens when the API returns empty data"/></div>
+
+      <button onclick="runTool()" id="run-btn" class="w-full btn-neon justify-center py-3">✨ AI Debugger</button>
+    </div>
+    <div>
+      <div id="result-placeholder" class="glass-card rounded-2xl p-10 text-center h-full flex flex-col items-center justify-center">
+        <div class="text-5xl mb-4">✨</div>
+        <p class="text-gray-400">Fill in the fields and click the button to generate</p>
+      </div>
+      <div id="result-box" class="hidden glass-card rounded-2xl p-6 space-y-4">
+        <div id="result-loading" class="hidden text-center py-8">
+          <div class="w-10 h-10 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mx-auto mb-3"></div>
+          <p class="text-gray-400 text-sm">Generating…</p>
+        </div>
+        <div id="result-content" class="hidden">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-white">Result</h3>
+            <div class="flex gap-2">
+              <button onclick="copyResult()" class="admin-btn-ghost text-xs">Copy</button>
+              <button onclick="downloadResult()" class="admin-btn-ghost text-xs">Download</button>
+            </div>
+          </div>
+          <div id="result-output" class="prose text-sm max-h-[600px] overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+async function runTool() {
+  {% if not current_user.is_authenticated %}return showToast('Please sign in to use AI tools', 'error');{% endif %}
+  const data = {};
+  document.querySelectorAll('[id^="f-"]').forEach(el => { data[el.id.slice(2)] = el.value; });
+  document.getElementById('result-placeholder').classList.add('hidden');
+  document.getElementById('result-box').classList.remove('hidden');
+  document.getElementById('result-loading').classList.remove('hidden');
+  document.getElementById('result-content').classList.add('hidden');
+  document.getElementById('run-btn').disabled = true;
+  try {
+    const res = await fetch('{{ url_for("ai.api_debug") }}', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+      body: JSON.stringify(data)
+    });
+    const d = await res.json();
+    document.getElementById('result-loading').classList.add('hidden');
+    if (d.error) { showToast(d.error,'error'); }
+    else { document.getElementById('result-content').classList.remove('hidden'); document.getElementById('result-output').innerHTML = marked.parse(d.response); }
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+  document.getElementById('run-btn').disabled = false;
+}
+function copyResult() { navigator.clipboard.writeText(document.getElementById('result-output').textContent); showToast('Copied!','success'); }
+function downloadResult() {
+  const blob = new Blob([document.getElementById('result-output').textContent], {type:'text/plain'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='output.txt'; a.click();
+}
+</script>
+{% endblock %}

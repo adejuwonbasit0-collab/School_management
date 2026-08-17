@@ -1,0 +1,72 @@
+{% extends "public_base.html" %}
+{% block title %}JSON Diff — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:900px;margin:0 auto;padding:48px 20px }
+.grid2 { display:grid;grid-template-columns:1fr 1fr;gap:16px }
+textarea.admin-input { width:100%;min-height:240px;font-family:monospace;font-size:12px }
+.diff-line { font-family:monospace;font-size:12px;padding:2px 8px;white-space:pre-wrap;word-break:break-all }
+.diff-add { background:rgba(0,255,136,0.1);color:#00ff88 }
+.diff-remove { background:rgba(255,91,126,0.1);color:#ff5b7e }
+.diff-change { background:rgba(255,209,42,0.1);color:#ffd12a }
+@media (max-width:700px){ .grid2{grid-template-columns:1fr} }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">JSON Diff</h1>
+    <p style="color:var(--c-text-2)">Structural comparison of two JSON documents — finds added, removed, and changed keys at any depth.</p>
+  </div>
+
+  <div class="grid2">
+    <textarea id="json-a" class="admin-input" placeholder='{"a": 1, "b": 2}'></textarea>
+    <textarea id="json-b" class="admin-input" placeholder='{"a": 1, "b": 3, "c": 4}'></textarea>
+  </div>
+  <div style="text-align:center;margin:16px 0"><button class="btn-neon" id="diff-btn">Compare</button></div>
+  <div id="diff-output"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+function diffObjects(a, b, path = '') {
+  const results = [];
+  const allKeys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  for (const key of allKeys) {
+    const fullPath = path ? `${path}.${key}` : key;
+    const inA = a && Object.prototype.hasOwnProperty.call(a, key);
+    const inB = b && Object.prototype.hasOwnProperty.call(b, key);
+    if (!inA) { results.push({ type: 'add', path: fullPath, value: b[key] }); continue; }
+    if (!inB) { results.push({ type: 'remove', path: fullPath, value: a[key] }); continue; }
+    const av = a[key], bv = b[key];
+    const bothObjects = typeof av === 'object' && av !== null && !Array.isArray(av) &&
+                         typeof bv === 'object' && bv !== null && !Array.isArray(bv);
+    if (bothObjects) {
+      results.push(...diffObjects(av, bv, fullPath));
+    } else if (JSON.stringify(av) !== JSON.stringify(bv)) {
+      results.push({ type: 'change', path: fullPath, from: av, to: bv });
+    }
+  }
+  return results;
+}
+
+document.getElementById('diff-btn').addEventListener('click', () => {
+  const out = document.getElementById('diff-output');
+  let a, b;
+  try { a = JSON.parse(document.getElementById('json-a').value || '{}'); }
+  catch (e) { out.innerHTML = `<p style="color:#ff5b7e;font-size:13px">Left JSON is invalid: ${e.message}</p>`; return; }
+  try { b = JSON.parse(document.getElementById('json-b').value || '{}'); }
+  catch (e) { out.innerHTML = `<p style="color:#ff5b7e;font-size:13px">Right JSON is invalid: ${e.message}</p>`; return; }
+
+  const diffs = diffObjects(a, b);
+  if (!diffs.length) { out.innerHTML = '<p style="color:#00ff88;font-size:13px">No differences — the documents are structurally identical.</p>'; return; }
+
+  out.innerHTML = diffs.map(d => {
+    if (d.type === 'add') return `<div class="diff-line diff-add">+ ${d.path}: ${JSON.stringify(d.value)}</div>`;
+    if (d.type === 'remove') return `<div class="diff-line diff-remove">- ${d.path}: ${JSON.stringify(d.value)}</div>`;
+    return `<div class="diff-line diff-change">~ ${d.path}: ${JSON.stringify(d.from)} → ${JSON.stringify(d.to)}</div>`;
+  }).join('');
+});
+</script>
+{% endblock %}

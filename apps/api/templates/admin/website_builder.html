@@ -1,0 +1,1080 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}Website Builder{% endblock %}
+{% block page_subtitle %}Create stunning websites with AI{% endblock %}
+
+{% block content %}
+<div class="h-[calc(100vh-140px)] flex flex-col overflow-hidden bg-black/40 rounded-xl border border-white/5 backdrop-blur-sm">
+    
+    <!-- Toolbar -->
+    <div class="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-white/5">
+        <div class="flex items-center space-x-4">
+            <button onclick="newWebsite()" class="flex items-center space-x-2 px-3 py-1.5 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 rounded-lg transition-colors">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">New Website</span>
+            </button>
+            <div class="h-4 w-px bg-white/10"></div>
+            <!-- Viewport Controls -->
+            <div class="flex items-center space-x-1 bg-black/50 p-1 rounded-lg">
+                <button onclick="setViewport('desktop')" id="btn-desktop" class="p-1.5 rounded-md bg-white/10 text-white hover:bg-white/20 transition-colors tooltip" data-tip="Desktop">
+                    <i data-lucide="monitor" class="w-4 h-4"></i>
+                </button>
+                <button onclick="setViewport('tablet')" id="btn-tablet" class="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors tooltip" data-tip="Tablet">
+                    <i data-lucide="tablet" class="w-4 h-4"></i>
+                </button>
+                <button onclick="setViewport('mobile')" id="btn-mobile" class="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors tooltip" data-tip="Mobile">
+                    <i data-lucide="smartphone" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <div class="h-4 w-px bg-white/10"></div>
+            
+            <span id="current-site-title" class="text-sm font-medium text-gray-300">
+                {% if editing %}{{ editing.title }}{% else %}Draft Site{% endif %}
+            </span>
+
+            <!-- Page switcher: was buried in the Properties panel only -->
+            <!-- before -- this is the fast way to jump between pages. -->
+            <div class="h-4 w-px bg-white/10" id="page-switcher-divider" style="display:none"></div>
+            <div class="relative" id="page-switcher-wrap" style="display:none">
+                <select id="page-switcher" onchange="switchSitePage(this.value)"
+                    class="appearance-none bg-black/50 border border-white/10 rounded-lg pl-3 pr-7 py-1.5 text-xs text-white focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] outline-none cursor-pointer">
+                </select>
+                <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center bg-black/50 p-1 rounded-lg mr-1">
+                <button onclick="setPaneView('preview')" id="btn-view-preview" class="px-3 py-1 rounded-md text-xs font-medium bg-white/10 text-white transition-colors">Preview</button>
+                <button onclick="setPaneView('code')" id="btn-view-code" class="px-3 py-1 rounded-md text-xs font-medium text-gray-400 hover:text-white transition-colors">Code</button>
+            </div>
+            <button onclick="pushToGithub()" id="github-btn" class="flex items-center space-x-2 px-4 py-1.5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <i data-lucide="github" class="w-4 h-4"></i>
+                <span class="text-sm">GitHub</span>
+            </button>
+            <button onclick="downloadWebsiteZip()" id="download-btn" class="flex items-center space-x-2 px-4 py-1.5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                <span class="text-sm">Download ZIP</span>
+            </button>
+            <button onclick="saveWebsite()" id="save-btn" class="flex items-center space-x-2 px-4 py-1.5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                <span class="text-sm">Save</span>
+            </button>
+            <button onclick="publishWebsite()" id="publish-btn" class="flex items-center space-x-2 px-4 py-1.5 bg-gradient-to-r from-[#1DB954] to-[#1ed760] text-black font-semibold rounded-lg hover:shadow-lg hover:shadow-[#1DB954]/20 transition-all">
+                <i data-lucide="globe" class="w-4 h-4"></i>
+                <span class="text-sm">Publish</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Left Panel: Site List -->
+        <div class="w-64 border-r border-white/5 bg-black/20 flex flex-col overflow-y-auto hidden md:flex">
+            <div class="p-4 border-b border-white/5">
+                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">My Sites</h3>
+            </div>
+            <div class="flex-1 p-2 space-y-1">
+                {% if websites %}
+                    {% for site in websites %}
+                    <div class="group flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors {% if editing and editing.id == site.id %}bg-white/5 border border-white/10{% endif %}">
+                        <button onclick="loadWebsite({{ site.id }})" class="flex-1 flex items-center space-x-3 text-left overflow-hidden">
+                            <div class="w-8 h-8 flex-shrink-0 rounded-md bg-gradient-to-br from-[#1DB954]/20 to-black/50 border border-white/10 flex items-center justify-center">
+                                <i data-lucide="layout-template" class="w-4 h-4 text-[#1DB954]"></i>
+                            </div>
+                            <div class="overflow-hidden w-full">
+                                <p class="text-sm font-medium text-gray-200 truncate">{{ site.title }}</p>
+                                <div class="flex items-center space-x-1 mt-0.5">
+                                    <div class="w-1.5 h-1.5 rounded-full {% if site.published %}bg-[#1DB954]{% else %}bg-yellow-500{% endif %}"></div>
+                                    <span class="text-xs text-gray-500">{% if site.published %}Published{% else %}Draft{% endif %}</span>
+                                </div>
+                            </div>
+                        </button>
+                        <button onclick="deleteWebsite({{ site.id }})" class="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="p-4 text-center mt-4">
+                        <div class="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i data-lucide="folder-open" class="w-5 h-5 text-gray-500"></i>
+                        </div>
+                        <p class="text-sm text-gray-400 mb-4">No websites yet</p>
+                        <button onclick="newWebsite()" class="text-xs text-[#1DB954] font-medium hover:underline">Create your first site</button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Center: Chat + Editor/Preview -->
+        <div class="flex-1 relative overflow-hidden">
+
+            <!-- Empty state: first thing you see for a brand-new site -- -->
+            <!-- one big centered prompt, like Lovable's landing, with no -->
+            <!-- chat sidebar or preview chrome yet. The chat sidebar only -->
+            <!-- shows up once there's an actual conversation to continue -->
+            <!-- (i.e. after the first page is generated). -->
+            <div id="builder-empty" class="absolute inset-0 flex flex-col items-center justify-center px-6">
+                <div class="w-full max-w-xl text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#F2C94C] flex items-center justify-center mx-auto mb-5">
+                        <i data-lucide="sparkles" class="w-7 h-7 text-black"></i>
+                    </div>
+                    <h2 class="text-2xl font-semibold text-white mb-2">What do you want to build?</h2>
+                    <p class="text-sm text-gray-400 mb-6">Describe the site or app you want — the chat opens up here once it's generated, so you can keep refining it.</p>
+                    <div class="relative group text-left">
+                        <div class="absolute -inset-0.5 bg-gradient-to-r from-[#1DB954] to-[#F2C94C] rounded-xl opacity-20 group-focus-within:opacity-50 blur transition duration-500"></div>
+                        <div class="relative flex items-end space-x-2 bg-black rounded-xl p-2 border border-white/10">
+                            <textarea id="ai-prompt-empty" rows="3" class="flex-1 bg-transparent border-0 focus:ring-0 text-white placeholder-gray-500 resize-none p-2 text-sm" placeholder="A modern portfolio for a freelance photographer with a dark theme and masonry gallery..."></textarea>
+                            <button onclick="generateFromEmptyState()" id="generate-btn-empty" class="mb-1 px-4 py-2.5 rounded-lg bg-[#1DB954] text-black font-semibold hover:bg-[#1ed760] transition-colors flex items-center space-x-2">
+                                <i data-lucide="sparkles" class="w-4 h-4"></i><span class="text-sm">Build</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="builder-split" class="hidden h-full flex overflow-hidden">
+
+            <!-- Chat Sidebar: the actual continuing conversation -- every -->
+            <!-- prompt and what the AI did in response to it, plus a live -->
+            <!-- status line while a generation is in flight (real pipeline -->
+            <!-- stages streamed from the server, not a fake progress bar). -->
+            <div class="w-80 flex-shrink-0 border-r border-white/5 bg-black/30 flex flex-col overflow-hidden">
+                <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-white">Chat</h3>
+                    <span id="chat-page-label" class="text-[11px] text-gray-500 truncate max-w-[120px]">Home</span>
+                </div>
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar"></div>
+                <div class="p-3 border-t border-white/5 bg-black/40">
+                    <div class="relative group">
+                        <div class="absolute -inset-0.5 bg-gradient-to-r from-[#1DB954] to-[#F2C94C] rounded-xl opacity-20 group-focus-within:opacity-50 blur transition duration-500"></div>
+                        <div class="relative flex items-end space-x-2 bg-black rounded-xl p-2 border border-white/10">
+                            <textarea id="ai-prompt" rows="2" class="flex-1 bg-transparent border-0 focus:ring-0 text-white placeholder-gray-500 resize-none p-2 text-sm" placeholder="Describe the page, or ask for a change (e.g. 'make the header sticky')..."></textarea>
+                            <button onclick="generateWebsite()" id="generate-btn" class="mb-1 p-2 rounded-lg bg-[#1DB954]/20 text-[#1DB954] hover:bg-[#1DB954]/30 transition-colors flex items-center justify-center">
+                                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col relative overflow-hidden bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjMGEwYTBhIiAvPgo8cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjMjIyMiIgLz4KPC9zdmc+')]">
+
+            <!-- Preview Area -->
+            <div id="pane-preview" class="flex-1 overflow-auto p-4 flex justify-center items-start">
+                <div id="preview-container" class="w-full transition-all duration-300 ease-in-out bg-white rounded-lg shadow-2xl shadow-black/50 border border-gray-700 overflow-hidden min-h-full flex flex-col relative mx-auto">
+                    
+                    <!-- Loading Overlay -->
+                    <div id="loading-overlay" class="absolute inset-0 bg-black/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center hidden">
+                        <div class="w-12 h-12 rounded-full border-4 border-white/10 border-t-[#1DB954] animate-spin mb-4"></div>
+                        <p class="text-[#1DB954] font-medium animate-pulse" id="loading-overlay-text">Generating your website...</p>
+                        <p class="text-sm text-gray-400 mt-2">AI is weaving the code</p>
+                    </div>
+
+                    <!-- iframe -->
+                    <iframe id="preview-frame" class="w-full h-full flex-1 border-0 bg-white" sandbox="allow-scripts allow-same-origin"></iframe>
+                </div>
+            </div>
+
+            <!-- Code Area: the file ARCHITECTURE behind this site (like -->
+            <!-- Lovable's file tree) -- every page's index.html/style.css/ -->
+            <!-- script.js as real, individually-downloadable files, not one -->
+            <!-- raw code dump. -->
+            <div id="pane-code" class="flex-1 overflow-hidden hidden">
+                <div class="flex h-full">
+                    <div class="w-56 flex-shrink-0 border-r border-white/5 bg-black/50 overflow-y-auto custom-scrollbar">
+                        <div class="px-3 py-2.5 border-b border-white/5">
+                            <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Project Files</span>
+                        </div>
+                        <div id="file-tree" class="py-1"></div>
+                    </div>
+                    <div class="flex-1 flex flex-col overflow-hidden">
+                        <div class="flex items-center border-b border-white/5 bg-black/40 px-3 py-2">
+                            <i data-lucide="file-code-2" class="w-3.5 h-3.5 text-gray-500 mr-2"></i>
+                            <span id="code-view-filename" class="text-xs font-mono text-gray-300">index.html</span>
+                            <div class="ml-auto flex items-center space-x-3">
+                                <button onclick="downloadCurrentFile()" class="text-xs text-gray-300 hover:text-white flex items-center space-x-1">
+                                    <i data-lucide="download" class="w-3.5 h-3.5"></i><span>Download file</span>
+                                </button>
+                                <button onclick="copyCurrentCode()" class="text-xs text-gray-300 hover:text-white flex items-center space-x-1">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i><span>Copy</span>
+                                </button>
+                            </div>
+                        </div>
+                        <pre class="flex-1 overflow-auto p-4 text-xs font-mono text-gray-200 bg-black/60 whitespace-pre-wrap" id="code-view"></pre>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+
+        <!-- Right Panel: Properties (Hidden on mobile by default) -->
+        <div class="w-64 border-l border-white/5 bg-black/20 p-5 hidden lg:block overflow-y-auto">
+            <h3 class="text-sm font-semibold text-white mb-4">Properties</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Site Title</label>
+                    <input type="text" id="prop-title" value="{% if editing %}{{ editing.title }}{% endif %}" class="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] outline-none transition-colors" placeholder="My Awesome Site" onchange="updateCurrentTitle()">
+                </div>
+                
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Page Name / Slug</label>
+                    <input type="text" id="prop-slug" value="{% if editing and editing.pages %}{{ editing.pages[0].name or 'Home' }}{% else %}Home{% endif %}" class="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] outline-none transition-colors" placeholder="home">
+                </div>
+                
+                {% if editing %}
+                <!-- Multi-Page Manager -->
+                <div class="pt-4 border-t border-white/5">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-gray-400 font-semibold uppercase">Pages</span>
+                        <button onclick="addSitePage()" class="p-1 bg-[#1DB954]/20 text-[#1DB954] hover:bg-[#1DB954]/30 rounded transition-colors" title="Add Page">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                    <div id="pages-list-container" class="space-y-1.5">
+                        {% for page in editing.pages or [{"name": "Home"}] %}
+                        <div class="flex items-center justify-between p-2 rounded bg-white/5 border border-white/5 hover:border-white/10">
+                            <button onclick="switchSitePage('{{ page.name }}')" class="text-xs text-left font-medium text-gray-300 hover:text-white truncate flex-1">
+                                📄 {{ page.name }}
+                            </button>
+                            {% if page.name != "Home" %}
+                            <button onclick="deleteSitePage('{{ page.name }}')" class="text-gray-500 hover:text-red-400 transition-colors p-0.5">
+                                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Form Submissions -->
+                <div class="pt-4 border-t border-white/5">
+                    <span class="text-xs text-gray-400 font-semibold uppercase block mb-2">Form Submissions</span>
+                    <div id="submissions-container" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {% set subs = editing.settings.get("submissions", []) if editing.settings else [] %}
+                        {% if subs %}
+                            {% for s in subs %}
+                            <div class="p-2.5 rounded bg-white/5 border border-white/5 text-[11px] text-gray-400">
+                                <div class="text-white font-bold mb-1">{{ s.get("name", "Name") }}</div>
+                                <div class="mb-0.5">{{ s.get("email", "Email") }}</div>
+                                <div class="italic">"{{ s.get("message", "Message") }}"</div>
+                                <div class="text-[9px] text-gray-600 mt-1">{{ s.get("submitted_at", "")[:16].replace("T", " ") }}</div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-xs text-gray-500 italic text-center py-2">No submissions yet</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Data Collections -- the JSON "mini backend" (products, -->
+                <!-- orders, etc). Only shows up with content if the AI     -->
+                <!-- actually decided this site needed it -- an ordinary    -->
+                <!-- marketing site's data_store just stays empty.         -->
+                {% set collections = editing.data_store if editing.data_store else {} %}
+                {% if collections %}
+                <div class="pt-4 border-t border-white/5">
+                    <span class="text-xs text-gray-400 font-semibold uppercase block mb-2">Data Collections</span>
+                    <div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+                        {% for cname, citems in collections.items() %}
+                        <details class="rounded bg-white/5 border border-white/5">
+                            <summary class="p-2.5 text-[11px] text-gray-300 cursor-pointer flex items-center justify-between">
+                                <span class="font-bold text-white">{{ cname }}</span>
+                                <span class="text-gray-500">{{ citems|length }} item{{ '' if citems|length == 1 else 's' }}</span>
+                            </summary>
+                            <div class="px-2.5 pb-2.5 space-y-1.5">
+                                {% for item in citems[:20] %}
+                                <pre class="text-[10px] text-gray-400 bg-black/40 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ item | tojson(indent=2) }}</pre>
+                                {% endfor %}
+                                {% if citems|length > 20 %}
+                                <div class="text-[10px] text-gray-600 italic">+{{ citems|length - 20 }} more…</div>
+                                {% endif %}
+                            </div>
+                        </details>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+                
+                <div class="pt-4 border-t border-white/5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-300">Status</span>
+                        {% if editing %}
+                            {% if editing.published %}
+                            <span class="px-2 py-0.5 rounded text-xs font-medium bg-[#1DB954]/20 text-[#1DB954]">Published</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-500">Draft</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-400">Unsaved</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Real page data from the DB (was previously read from nonexistent
+    // editing.html_content / editing.page_name fields -- UserWebsite only
+    // ever had `pages`, so on a fixed /edit link those two always came
+    // back Undefined and the editor loaded blank. This is why opening a
+    // saved site "couldn't continue" even once the link itself worked.
+    let editingPages = {% if editing %}{{ editing.pages | tojson | safe }}{% else %}[]{% endif %};
+    // Per-page conversation history from the DB: {"Home": [{"role","content"}, ...], ...}
+    // -- content is a plain prompt / short summary (see _summarize_turn
+    // server-side), not the raw generated source, so this stays small and
+    // is safe to render directly as chat bubbles.
+    let editingChatHistory = {% if editing and editing.chat_history %}{{ editing.chat_history | tojson | safe }}{% else %}{}{% endif %};
+    let currentSiteId = {% if editing %}{{ editing.id }}{% else %}null{% endif %};
+    let currentGithubRepo = {% if editing and editing.github_repo %}{{ editing.github_repo | tojson | safe }}{% else %}null{% endif %};
+    let currentPageName = 'Home';
+
+    const DEFAULT_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draft Website</title>
+    <script src="https://cdn.tailwindcss.com"><\/script>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen">
+    <div class="text-center p-8 bg-white rounded-xl shadow-sm">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">Welcome to your new site</h1>
+        <p class="text-gray-500">Describe what you want to build in the chat to the left.</p>
+    </div>
+</body>
+</html>`;
+
+    function findPage(name) {
+        if (!editingPages || !editingPages.length) return null;
+        const lower = (name || 'Home').toLowerCase();
+        return editingPages.find(p => (p.name || '').toLowerCase() === lower) || editingPages[0];
+    }
+
+    const initialPage = findPage(document.getElementById('prop-slug') ? document.getElementById('prop-slug').value : 'Home');
+    currentPageName = initialPage ? (initialPage.name || 'Home') : 'Home';
+    let currentHtml = initialPage ? (initialPage.html || DEFAULT_HTML) : DEFAULT_HTML;
+    let currentCss = initialPage ? (initialPage.css || '') : '';
+    let currentJs = initialPage ? (initialPage.js || '') : '';
+    let currentPaneView = 'preview';
+    let currentCodeFile = 'html'; // 'html' | 'css' | 'js', for whichever page is selected in the file tree
+    let treeSelectedPage = currentPageName;
+
+    // Initialize iframe + chat + file tree + empty-state vs. split view
+    window.addEventListener('DOMContentLoaded', () => {
+        updateIframe(currentHtml, currentCss, currentJs);
+        renderChatMessages();
+        renderFileTree();
+        renderPageSwitcher();
+        showBuilderView();
+    });
+
+    // Empty state (centered "what do you want to build" prompt) shows for
+    // a brand-new site with no pages yet; the split view (chat sidebar +
+    // preview/code) only takes over once there's an actual page -- and
+    // therefore an actual conversation -- to show.
+    function showBuilderView() {
+        const hasPages = editingPages && editingPages.length > 0;
+        document.getElementById('builder-empty').classList.toggle('hidden', hasPages);
+        document.getElementById('builder-split').classList.toggle('hidden', !hasPages);
+        document.getElementById('page-switcher-wrap').style.display = hasPages ? '' : 'none';
+        document.getElementById('page-switcher-divider').style.display = hasPages ? '' : 'none';
+    }
+
+    function renderPageSwitcher() {
+        const sel = document.getElementById('page-switcher');
+        sel.innerHTML = (editingPages || []).map(p =>
+            `<option value="${escapeHtml(p.name)}" ${p.name === currentPageName ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
+        ).join('');
+    }
+
+    // The empty-state textarea creates the site's first page, then hands
+    // off to the normal chat-driven generateWebsite() flow -- same
+    // request, same SSE status streaming, just a different starting point
+    // in the UI (see the "first impression should be a centered prompt"
+    // ask -- the chat sidebar has nothing to show until this first page
+    // exists, so it stays hidden until then).
+    async function generateFromEmptyState() {
+        const emptyPrompt = document.getElementById('ai-prompt-empty').value;
+        if (!emptyPrompt.trim()) {
+            notify('Please describe what you want to build.', 'warning');
+            return;
+        }
+        document.getElementById('ai-prompt').value = emptyPrompt;
+        await generateWebsite();
+    }
+
+    function combinedDoc(html, css, js) {
+        let doc = html || DEFAULT_HTML;
+        if (css) {
+            doc = doc.includes('</head>') ? doc.replace('</head>', `<style>${css}</style></head>`) : `<style>${css}</style>` + doc;
+        }
+        if (js) {
+            doc = doc.includes('</body>') ? doc.replace('</body>', `<script>${js}<\/script></body>`) : doc + `<script>${js}<\/script>`;
+        }
+        return doc;
+    }
+
+    function updateIframe(html, css, js) {
+        currentHtml = html;
+        if (css !== undefined) currentCss = css;
+        if (js !== undefined) currentJs = js;
+        const doc = combinedDoc(currentHtml, currentCss, currentJs);
+        const iframe = document.getElementById('preview-frame');
+        const frameDoc = iframe.contentWindow || iframe.contentDocument;
+
+        if (frameDoc.document) {
+            frameDoc.document.open();
+            frameDoc.document.write(doc);
+            frameDoc.document.close();
+        }
+    }
+
+    // ── Chat sidebar ─────────────────────────────────────────────────────
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function renderChatMessages() {
+        const container = document.getElementById('chat-messages');
+        document.getElementById('chat-page-label').textContent = currentPageName;
+        const turns = editingChatHistory[currentPageName] || [];
+        if (!turns.length) {
+            container.innerHTML = `<div class="text-center text-xs text-gray-500 py-8 px-2">
+                No messages yet for "${escapeHtml(currentPageName)}". Describe what you want built below to start.
+            </div>`;
+            return;
+        }
+        container.innerHTML = turns.map(t => {
+            if (t.role === 'user') {
+                return `<div class="flex justify-end">
+                    <div class="max-w-[85%] bg-[#1DB954]/15 border border-[#1DB954]/20 text-gray-100 text-xs rounded-lg rounded-tr-sm px-3 py-2">${escapeHtml(t.content)}</div>
+                </div>`;
+            }
+            return `<div class="flex justify-start">
+                <div class="max-w-[85%] bg-white/5 border border-white/10 text-gray-300 text-xs rounded-lg rounded-tl-sm px-3 py-2 flex items-start space-x-1.5">
+                    <i data-lucide="sparkles" class="w-3 h-3 text-[#1DB954] flex-shrink-0 mt-0.5"></i>
+                    <span>${escapeHtml(t.content)}</span>
+                </div>
+            </div>`;
+        }).join('');
+        container.scrollTop = container.scrollHeight;
+        lucide.createIcons();
+    }
+
+    let statusBubbleEl = null;
+    function showStatusBubble(text) {
+        const container = document.getElementById('chat-messages');
+        if (!statusBubbleEl) {
+            statusBubbleEl = document.createElement('div');
+            statusBubbleEl.className = 'flex justify-start';
+            container.appendChild(statusBubbleEl);
+        }
+        statusBubbleEl.innerHTML = `<div class="max-w-[85%] bg-white/5 border border-white/10 text-gray-400 text-xs rounded-lg rounded-tl-sm px-3 py-2 flex items-center space-x-2">
+            <div class="w-3 h-3 rounded-full border-2 border-white/20 border-t-[#1DB954] animate-spin flex-shrink-0"></div>
+            <span>${escapeHtml(text)}</span>
+        </div>`;
+        container.scrollTop = container.scrollHeight;
+    }
+    function clearStatusBubble() {
+        if (statusBubbleEl) { statusBubbleEl.remove(); statusBubbleEl = null; }
+    }
+
+    // ── File tree ("architecture", not a raw code dump) ────────────────
+    function renderFileTree() {
+        const tree = document.getElementById('file-tree');
+        if (!editingPages.length) {
+            tree.innerHTML = `<div class="px-3 py-3 text-[11px] text-gray-500 italic">No files yet -- generate a page first.</div>`;
+            return;
+        }
+        tree.innerHTML = editingPages.map(p => {
+            const folder = (p.name || 'page').toLowerCase().replace(/\s+/g, '-');
+            const files = [
+                { type: 'html', label: 'index.html', icon: 'file-code-2' },
+                { type: 'css', label: 'style.css', icon: 'file-type' },
+                { type: 'js', label: 'script.js', icon: 'file-terminal' },
+            ];
+            return `<div class="mb-1">
+                <div class="flex items-center px-3 py-1.5 text-xs text-gray-300 font-medium">
+                    <i data-lucide="folder" class="w-3.5 h-3.5 mr-1.5 text-[#1DB954]/70"></i>${escapeHtml(p.name)}
+                </div>
+                <div class="pl-6">
+                    ${files.map(f => `
+                        <button onclick="selectTreeFile('${p.name.replace(/'/g, "\\'")}', '${f.type}')"
+                            id="tree-file-${folder}-${f.type}"
+                            class="w-full flex items-center px-2 py-1 rounded text-[11px] font-mono text-gray-400 hover:bg-white/5 hover:text-white transition-colors text-left">
+                            <i data-lucide="${f.icon}" class="w-3 h-3 mr-1.5 flex-shrink-0"></i>${f.label}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>`;
+        }).join('');
+        lucide.createIcons();
+        highlightTreeSelection();
+    }
+
+    function highlightTreeSelection() {
+        document.querySelectorAll('[id^="tree-file-"]').forEach(el => {
+            el.classList.remove('bg-white/10', 'text-white');
+        });
+        const folder = (treeSelectedPage || 'page').toLowerCase().replace(/\s+/g, '-');
+        const el = document.getElementById(`tree-file-${folder}-${currentCodeFile}`);
+        if (el) el.classList.add('bg-white/10', 'text-white');
+    }
+
+    function selectTreeFile(pageName, fileType) {
+        treeSelectedPage = pageName;
+        currentCodeFile = fileType;
+        renderCodeView();
+        highlightTreeSelection();
+    }
+
+    function renderCodeView() {
+        const page = findPage(treeSelectedPage) || {};
+        const map = { html: page.html || '', css: page.css || '', js: page.js || '' };
+        const filenames = { html: 'index.html', css: 'style.css', js: 'script.js' };
+        document.getElementById('code-view').textContent = map[currentCodeFile] || '(empty)';
+        document.getElementById('code-view-filename').textContent = `${(treeSelectedPage || 'page').toLowerCase().replace(/\s+/g, '-')}/${filenames[currentCodeFile]}`;
+    }
+
+    function copyCurrentCode() {
+        const page = findPage(treeSelectedPage) || {};
+        const map = { html: page.html || '', css: page.css || '', js: page.js || '' };
+        navigator.clipboard.writeText(map[currentCodeFile] || '').then(() => notify('Copied to clipboard', 'success'));
+    }
+
+    function downloadCurrentFile() {
+        const page = findPage(treeSelectedPage) || {};
+        const map = { html: page.html || '', css: page.css || '', js: page.js || '' };
+        const filenames = { html: 'index.html', css: 'style.css', js: 'script.js' };
+        const blob = new Blob([map[currentCodeFile] || ''], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(treeSelectedPage || 'page').toLowerCase().replace(/\s+/g, '-')}-${filenames[currentCodeFile]}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function setViewport(size) {
+        const container = document.getElementById('preview-container');
+        const btns = {
+            'desktop': document.getElementById('btn-desktop'),
+            'tablet': document.getElementById('btn-tablet'),
+            'mobile': document.getElementById('btn-mobile')
+        };
+        
+        // Reset buttons
+        Object.values(btns).forEach(btn => {
+            btn.classList.remove('bg-white/10', 'text-white');
+            btn.classList.add('text-gray-400');
+        });
+        
+        // Active button
+        btns[size].classList.remove('text-gray-400');
+        btns[size].classList.add('bg-white/10', 'text-white');
+        
+        // Resize container
+        if (size === 'desktop') {
+            container.style.width = '100%';
+            container.style.maxWidth = '100%';
+        } else if (size === 'tablet') {
+            container.style.width = '768px';
+            container.style.maxWidth = '100%';
+        } else if (size === 'mobile') {
+            container.style.width = '375px';
+            container.style.maxWidth = '100%';
+        }
+    }
+
+    function updateCurrentTitle() {
+        const titleInput = document.getElementById('prop-title').value;
+        document.getElementById('current-site-title').textContent = titleInput || 'Draft Site';
+    }
+
+    function newWebsite() {
+        window.location.href = "{{ url_for('admin.website_builder') }}";
+    }
+
+    // Helper to get CSRF Token
+    function getCsrf() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) {
+            return meta.getAttribute('content');
+        }
+        
+        // Fallback to checking input fields
+        const input = document.querySelector('input[name="csrf_token"]');
+        if (input) {
+            return input.value;
+        }
+        return '';
+    }
+    
+    // Check if toast function exists globally, else basic alert
+    function notify(msg, type='info') {
+        if (typeof showToast === 'function') {
+            showToast(msg, type);
+        } else {
+            alert(msg);
+        }
+    }
+
+    // Prompt box is a real continuing conversation: the server keeps a
+    // chat_history per page (rendered in the sidebar) and feeds it back to
+    // the AI on every request, so a follow-up like "make the header
+    // sticky" edits the existing page instead of the model starting from
+    // zero with no memory of what it already built. Progress is streamed
+    // live from the server via Server-Sent Events -- the lines shown in
+    // the status bubble are the actual pipeline stages generate_site_stream()
+    // goes through server-side, not a fabricated progress bar.
+    let currentTurns = 0;
+
+    async function generateWebsite() {
+        const promptEl = document.getElementById('ai-prompt');
+        const userPrompt = promptEl.value;
+        if (!userPrompt.trim()) {
+            notify('Please enter a description for your website.', 'warning');
+            return;
+        }
+        const pageName = document.getElementById('prop-slug').value || 'Home';
+        currentPageName = pageName;
+
+        const btn = document.getElementById('generate-btn');
+        const overlay = document.getElementById('loading-overlay');
+        const overlayText = document.getElementById('loading-overlay-text');
+
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i>';
+        lucide.createIcons();
+        overlay.classList.remove('hidden');
+        if (overlayText) overlayText.textContent = currentTurns > 0 ? 'Applying your changes...' : 'Generating your website...';
+
+        // Show the user's own message in the sidebar immediately, then a
+        // live status bubble that gets updated in place as real SSE
+        // status events arrive from the server.
+        const container = document.getElementById('chat-messages');
+        if (container.querySelector('.italic')) container.innerHTML = ''; // clear "no messages yet" placeholder
+        const userBubble = document.createElement('div');
+        userBubble.className = 'flex justify-end';
+        userBubble.innerHTML = `<div class="max-w-[85%] bg-[#1DB954]/15 border border-[#1DB954]/20 text-gray-100 text-xs rounded-lg rounded-tr-sm px-3 py-2">${escapeHtml(userPrompt)}</div>`;
+        container.appendChild(userBubble);
+        container.scrollTop = container.scrollHeight;
+        showStatusBubble('Starting...');
+        promptEl.value = '';
+
+        try {
+            const response = await fetch('/admin/website-builder/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrf()
+                },
+                body: JSON.stringify({
+                    prompt: userPrompt,
+                    id: currentSiteId,
+                    page_name: pageName,
+                    title: document.getElementById('prop-title').value,
+                })
+            });
+
+            if (!response.ok || !response.body) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || `Request failed (HTTP ${response.status})`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let finalPayload = null;
+            let streamError = null;
+
+            // Belt-and-suspenders alongside the server-side fix: if a
+            // proxy or connection issue ever swallows the stream after
+            // this request leaves the browser, this guarantees the
+            // spinner still clears with a real message after 90s instead
+            // of spinning forever with no way to tell it's stuck.
+            const STALL_TIMEOUT_MS = 90000;
+            let stalled = false;
+            const stallTimer = setTimeout(() => { stalled = true; reader.cancel().catch(() => {}); }, STALL_TIMEOUT_MS);
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    let idx;
+                    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                        const frame = buffer.slice(0, idx);
+                        buffer = buffer.slice(idx + 2);
+                        const line = frame.split('\n').find(l => l.startsWith('data: '));
+                        if (!line) continue;
+                        const evt = JSON.parse(line.slice(6));
+                        if (evt.type === 'status') {
+                            showStatusBubble(evt.message);
+                            if (overlayText) overlayText.textContent = evt.message;
+                        } else if (evt.type === 'error') {
+                            streamError = evt.error;
+                        } else if (evt.type === 'done') {
+                            finalPayload = evt;
+                        }
+                    }
+                }
+            } finally {
+                clearTimeout(stallTimer);
+            }
+            if (stalled && !finalPayload && !streamError) {
+                streamError = 'The server stopped responding partway through — this is usually a timeout on a slow AI response. Try again, or try a shorter/simpler prompt.';
+            }
+
+            clearStatusBubble();
+
+            if (streamError) {
+                throw new Error(streamError);
+            }
+            if (!finalPayload) {
+                throw new Error('Generation ended with no result.');
+            }
+
+            const data = finalPayload;
+            // The backend can redirect this generate call to a DIFFERENT
+            // page than what was open (see _detect_requested_new_page_name
+            // server-side) — e.g. "create another page for the admin
+            // dashboard" while "Home" was open now lands on a real new
+            // "Admin Dashboard" page instead of getting crammed into
+            // Home's own HTML. data.page_name is whichever page it
+            // actually landed on; data.pages is the full up-to-date page
+            // list so the switcher reflects a newly-created page right
+            // away without a manual reload.
+            const actualPageName = data.page_name || pageName;
+            const pageChanged = actualPageName.toLowerCase() !== pageName.toLowerCase();
+            currentPageName = actualPageName;
+            document.getElementById('prop-slug').value = actualPageName;
+            updateIframe(data.html, data.css, data.js);
+            currentTurns = data.turns || (currentTurns + 1);
+            editingChatHistory[actualPageName] = data.chat_history || [];
+            renderChatMessages();
+
+            if (Array.isArray(data.pages) && data.pages.length) {
+                editingPages = data.pages;
+            } else {
+                const pIdx = editingPages.findIndex(p => (p.name || '').toLowerCase() === actualPageName.toLowerCase());
+                const updatedPage = { name: actualPageName, html: data.html, css: data.css, js: data.js, order: pIdx >= 0 ? editingPages[pIdx].order : editingPages.length };
+                if (pIdx >= 0) editingPages[pIdx] = updatedPage; else editingPages.push(updatedPage);
+            }
+            if (currentPaneView === 'code') { treeSelectedPage = actualPageName; renderFileTree(); renderCodeView(); }
+            renderPageSwitcher();
+            showBuilderView();
+
+            if (pageChanged) {
+                notify(`Created this as a new page — "${actualPageName}" — instead of overwriting "${pageName}".`, 'success');
+            } else {
+                notify(data.mode === 'edit' ? 'Applied your changes.' : 'Website generated successfully!', 'success');
+            }
+            if (!currentSiteId && data.id) {
+                // First generate on a brand-new site auto-creates and
+                // saves it server-side -- move to the canonical /edit
+                // URL now so a refresh (or clicking away and back from
+                // "My Sites") lands on THIS site instead of a blank
+                // builder, which is the exact bug that made continuing
+                // a saved site impossible before.
+                currentSiteId = data.id;
+                window.history.replaceState({}, '', `/admin/website-builder/${data.id}/edit`);
+            }
+            if (!document.getElementById('prop-title').value) {
+                document.getElementById('prop-title').value = "Generated Site";
+                updateCurrentTitle();
+            }
+        } catch (error) {
+            console.error(error);
+            clearStatusBubble();
+            notify(error.message || 'An error occurred during generation.', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="sparkles" class="w-5 h-5"></i>';
+            lucide.createIcons();
+            overlay.classList.add('hidden');
+        }
+    }
+
+    async function saveWebsite() {
+        const title = document.getElementById('prop-title').value || 'Draft Site';
+        const pageName = document.getElementById('prop-slug').value || 'Home';
+
+        const btn = document.getElementById('save-btn');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span class="text-sm">Saving...</span>';
+        lucide.createIcons();
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/admin/website-builder/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrf()
+                },
+                body: JSON.stringify({
+                    id: currentSiteId,
+                    title: title,
+                    page_name: pageName,
+                    html: currentHtml,
+                    css: currentCss,
+                    js: currentJs,
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                const isNew = !currentSiteId;
+                currentSiteId = data.id;
+                notify('Website saved successfully', 'success');
+                if (isNew) {
+                    window.location.href = `/admin/website-builder/${data.id}/edit`;
+                } else {
+                    document.getElementById('current-site-title').textContent = title;
+                }
+            } else {
+                notify(data.error || 'Failed to save', 'danger');
+            }
+        } catch (error) {
+            console.error(error);
+            notify('Error saving website', 'danger');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    }
+
+    async function publishWebsite() {
+        if (!currentSiteId) {
+            notify('Generate at least one page first before publishing.', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('publish-btn');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-black"></i><span class="text-sm text-black">Publishing...</span>';
+        lucide.createIcons();
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/admin/website-builder/publish', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrf()
+                },
+                body: JSON.stringify({ id: currentSiteId })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                notify(`Website published: ${data.url}`, 'success');
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                notify(data.error || 'Failed to publish', 'danger');
+            }
+        } catch (error) {
+            console.error(error);
+            notify('Error publishing website', 'danger');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    }
+
+    async function deleteWebsite(id) {
+        if (!confirm('Are you sure you want to delete this website? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/website-builder/${id}/delete`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrf()
+                }
+            });
+
+            if (response.ok) {
+                notify('Website deleted', 'success');
+                if (currentSiteId === id) {
+                    window.location.href = "{{ url_for('admin.website_builder') }}";
+                } else {
+                    location.reload();
+                }
+            } else {
+                const data = await response.json();
+                notify(data.error || 'Failed to delete', 'danger');
+            }
+        } catch (error) {
+            console.error(error);
+            notify('Error deleting website', 'danger');
+        }
+    }
+
+    function downloadWebsiteZip() {
+        if (!currentSiteId) {
+            notify('Generate at least one page first to download.', 'warning');
+            return;
+        }
+        window.location.href = `/admin/website-builder/${currentSiteId}/download`;
+    }
+
+    async function pushToGithub() {
+        if (!currentSiteId) {
+            notify('Generate at least one page first before pushing to GitHub.', 'warning');
+            return;
+        }
+        const btn = document.getElementById('github-btn');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span class="text-sm">Pushing...</span>';
+        lucide.createIcons();
+        btn.disabled = true;
+        try {
+            const response = await fetch(`/admin/website-builder/${currentSiteId}/github-push`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            });
+            const data = await response.json();
+            if (response.ok) {
+                currentGithubRepo = data.repo_url.replace('https://github.com/', '');
+                notify(`Pushed to ${data.repo_url}`, 'success');
+                window.open(data.repo_url, '_blank');
+            } else {
+                notify(data.error || 'GitHub push failed', 'danger');
+            }
+        } catch (e) {
+            console.error(e);
+            notify('Error pushing to GitHub', 'danger');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+            lucide.createIcons();
+        }
+    }
+
+    // ── Preview / Code panel toggle ─────────────────────────────────────
+    function setPaneView(view) {
+        currentPaneView = view;
+        document.getElementById('pane-preview').classList.toggle('hidden', view !== 'preview');
+        document.getElementById('pane-preview').classList.toggle('flex', view === 'preview');
+        document.getElementById('pane-code').classList.toggle('hidden', view !== 'code');
+        document.getElementById('pane-code').classList.toggle('flex', view === 'code');
+        ['preview', 'code'].forEach(v => {
+            const b = document.getElementById(`btn-view-${v}`);
+            b.classList.toggle('bg-white/10', v === view);
+            b.classList.toggle('text-white', v === view);
+            b.classList.toggle('text-gray-400', v !== view);
+        });
+        if (view === 'code') { treeSelectedPage = currentPageName; renderFileTree(); renderCodeView(); }
+    }
+
+    async function addSitePage() {
+        if (!currentSiteId) {
+            notify('Generate your first page before adding more pages.', 'warning');
+            return;
+        }
+        const name = prompt("Enter new page name (e.g. 'About Us'):");
+        if (!name || !name.trim()) return;
+        const pageSlug = name.trim();
+
+        try {
+            const response = await fetch('/admin/website-builder/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrf()
+                },
+                body: JSON.stringify({
+                    id: currentSiteId,
+                    title: document.getElementById('prop-title').value,
+                    page_name: pageSlug,
+                    html: `<!DOCTYPE html><html><head><title>${name}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-gray-900 text-white flex items-center justify-center h-screen"><h1>${name} Page</h1><p class="ml-2 text-gray-400">Describe this page in the chat to generate real content for it.</p></body></html>`,
+                    css: '', js: '',
+                })
+            });
+            if (response.ok) {
+                notify(`Page "${name}" added! Switch to it and describe what should be on it.`, 'success');
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                notify('Failed to add page', 'danger');
+            }
+        } catch(e) {
+            notify('Error adding page', 'danger');
+        }
+    }
+
+    async function switchSitePage(pageName) {
+        if (!currentSiteId) return;
+        try {
+            const response = await fetch(`/admin/website-builder/${currentSiteId}/pages`);
+            const data = await response.json();
+            editingPages = data.pages || editingPages;
+            const page = editingPages.find(p => p.name === pageName);
+            if (page) {
+                currentPageName = page.name;
+                treeSelectedPage = page.name;
+                document.getElementById('prop-slug').value = page.name;
+                document.getElementById('page-switcher').value = page.name;
+                updateIframe(page.html, page.css || '', page.js || '');
+                renderChatMessages();
+                renderPageSwitcher();
+                if (currentPaneView === 'code') { renderFileTree(); renderCodeView(); }
+                notify(`Switched to page "${pageName}"`, 'success');
+            }
+        } catch(e) {
+            notify('Failed to load page', 'danger');
+        }
+    }
+
+    async function deleteSitePage(pageName) {
+        if (!currentSiteId) return;
+        if (!confirm(`Are you sure you want to delete page "${pageName}"?`)) return;
+        try {
+            const response = await fetch(`/admin/website-builder/${currentSiteId}/pages/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrf()
+                },
+                body: JSON.stringify({ page_name: pageName })
+            });
+            if (response.ok) {
+                notify('Page deleted successfully', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                notify('Failed to delete page', 'danger');
+            }
+        } catch(e) {
+            notify('Error deleting page', 'danger');
+        }
+    }
+
+    // Fixed: used to push a bare ?id= query string that nothing on the
+    // GET / route ever read, so clicking a saved site silently reloaded a
+    // blank builder -- this was the root cause of "I can't continue a
+    // saved site." Now goes straight to the real edit URL.
+    function loadWebsite(id) {
+        window.location.href = `/admin/website-builder/${id}/edit`;
+    }
+</script>
+{% endblock %}

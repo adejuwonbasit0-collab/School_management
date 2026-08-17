@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{{ link.title }} — Pay {{ link.amount }} {{ link.currency }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: #f6f7f9;
+    color: #16181d;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .wrap { max-width: 480px; margin: 40px auto; }
+  .steps { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 20px; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #d8dbe2; transition: background .2s, width .2s; }
+  .step-dot.active { background: #1DB954; width: 22px; border-radius: 5px; }
+  .card {
+    background: #ffffff;
+    border: 1px solid #e7e9ee;
+    border-radius: 20px;
+    padding: 36px 30px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(20,20,30,0.06);
+  }
+  .seller-line { font-size: 0.8rem; color: #6b7280; margin-bottom: 18px; }
+  h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; color: #111318; }
+  p.desc { color: #6b7280; font-size: 0.9rem; margin-bottom: 20px; white-space: pre-line; }
+  .amount { font-size: 2.25rem; font-weight: 800; margin-bottom: 8px; color: #0f172a; }
+  .amount-sub { font-size: 0.8rem; color: #9ca3af; margin-bottom: 24px; }
+  label { display: block; text-align: left; font-size: 0.85rem; color: #374151; margin-bottom: 6px; font-weight: 600; }
+  input[type="text"], input[type="email"], input[type="number"] {
+    width: 100%; padding: 12px 16px; border-radius: 12px;
+    background: #f9fafb; border: 1px solid #e5e7eb;
+    color: #111318; font-size: 0.95rem; margin-bottom: 16px; outline: none; font-family: inherit;
+  }
+  input:focus { border-color: #1DB954; background: #fff; }
+  .btn { width: 100%; padding: 14px 16px; border-radius: 12px; border: none;
+    font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: opacity .15s ease;
+    display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+  .btn-primary { background: #1DB954; color: #08110c; }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-ghost { background: transparent; color: #6b7280; font-weight: 600; }
+  .gateway-btn { background: #111318; color: #fff; }
+  .gateway-btn:hover { opacity: 0.88; }
+  .error-box { color: #dc2626; font-size: 0.85rem; margin-top: 4px; margin-bottom: 10px; display: none; }
+  .amount-input { font-size: 1.5rem; font-weight: 700; text-align: center; }
+  .hint { font-size: 0.75rem; color: #9ca3af; margin-top: -10px; margin-bottom: 16px; }
+  .secure-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #16a34a;
+    background: #f0fdf4; border: 1px solid #dcfce7; padding: 5px 12px; border-radius: 999px; margin-bottom: 20px; }
+  .qr-block { margin-top: 28px; padding-top: 22px; border-top: 1px solid #eef0f3; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .qr-block img { width: 100px; height: 100px; border-radius: 8px; border: 1px solid #eef0f3; padding: 6px; }
+  .qr-block a { font-size: 0.75rem; color: #6b7280; text-decoration: none; }
+  .powered-by { text-align: center; margin-top: 28px; font-size: 0.75rem; color: #9ca3af; }
+  .powered-by strong { color: #6b7280; }
+  .empty-state { color: #dc2626; font-size: 0.95rem; padding: 32px 0; }
+  .step-panel { display: none; }
+  .step-panel.active { display: block; }
+  .bump-box { display: flex; align-items: flex-start; gap: 10px; text-align: left; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin: 14px 0; cursor: pointer; }
+  .bump-box input { width: auto; margin: 3px 0 0; }
+  .bump-desc { font-size: 0.78rem; color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {% if not expired and not sold_out and gateways %}
+  <div class="steps">
+    <div class="step-dot active" data-dot="1"></div>
+    {% if collect_payer_info %}<div class="step-dot" data-dot="2"></div>{% endif %}
+    <div class="step-dot" data-dot="3"></div>
+  </div>
+  {% endif %}
+  <div class="card">
+    {% if seller_bio %}<p class="seller-line">{{ seller_bio }}</p>{% endif %}
+    <h1>{{ link.title }}</h1>
+    {% if link.description %}<p class="desc">{{ link.description }}</p>{% endif %}
+
+    {% if expired %}
+    <p class="empty-state">⏰ This payment link has expired.</p>
+    {% elif sold_out %}
+    <p class="empty-state">🚫 This payment link has reached its purchase limit.</p>
+    {% elif not gateways %}
+    <p class="empty-state" style="font-size:0.9rem;">No payment methods are currently available.</p>
+    {% else %}
+
+    <!-- Step 1: Order summary -->
+    <div class="step-panel active" data-step="1">
+      {% if link_type in ('donation', 'custom_amount') %}
+      <div style="text-align:left; margin-bottom: 8px;">
+        <label>{{ 'Choose your donation amount' if link_type == 'donation' else 'Enter amount' }} ({{ link.currency }})</label>
+        <input type="number" id="custom_amount" step="0.01" min="{{ min_amount or 1 }}" {% if max_amount %}max="{{ max_amount }}"{% endif %} value="{{ min_amount or 1 }}" class="amount-input">
+        <p class="hint">Min {{ min_amount or 1 }}{% if max_amount %}, max {{ max_amount }}{% endif %}</p>
+      </div>
+      {% else %}
+      <div class="amount">{{ link.amount }} {{ link.currency }}</div>
+      <p class="amount-sub">One-time payment</p>
+      {% endif %}
+
+      {% if order_bump and order_bump.enabled %}
+      <label class="bump-box">
+        <input type="checkbox" id="include_bump" checked>
+        <span>
+          <strong>+ {{ order_bump.name }}</strong> — {{ order_bump.price }} {{ link.currency }}<br>
+          <span class="bump-desc">{{ order_bump.description or '' }}</span>
+        </span>
+      </label>
+      {% endif %}
+
+      <div style="text-align:left; margin-top: 10px;">
+        <label>Coupon Code (optional)</label>
+        <input type="text" id="coupon_code" placeholder="Enter code">
+      </div>
+
+      <div class="secure-badge">🔒 Secure checkout</div>
+      <button type="button" class="btn btn-primary" onclick="goToStep({{ '2' if collect_payer_info else '3' }})">Continue</button>
+    </div>
+
+    {% if collect_payer_info %}
+    <!-- Step 2: Buyer info -->
+    <div class="step-panel" data-step="2">
+      <div style="text-align:left;">
+        <label>Your name</label>
+        <input type="text" id="payer_name" placeholder="Jane Doe">
+        <label>Your email (for your receipt)</label>
+        <input type="email" id="payer_email" placeholder="you@example.com" required>
+      </div>
+      <p id="payer-error" class="error-box">Please enter your email to continue.</p>
+      <button type="button" class="btn btn-primary" onclick="tryStep3()">Continue</button>
+      <button type="button" class="btn btn-ghost" onclick="goToStep(1)">Back</button>
+    </div>
+    {% endif %}
+
+    <!-- Step 3: Choose payment method -->
+    <div class="step-panel" data-step="3">
+      {% set icons = {'paystack':'💳','flutterwave':'🌊','paypal':'🅿️','stripe':'💳'} %}
+      {% set labels = {'paystack':'Pay with Paystack','flutterwave':'Pay with Flutterwave','paypal':'Pay with PayPal','stripe':'Pay with Card (Stripe)'} %}
+      {% for g in gateways %}
+      <button type="button" class="btn gateway-btn" onclick="submitPayment('{{ url_for('dashboard.pay_link_checkout', slug=link.slug, gateway=g) }}')">{{ icons.get(g,'💰') }} {{ labels.get(g, g.title()) }}</button>
+      {% endfor %}
+      <button type="button" class="btn btn-ghost" onclick="goToStep({{ '2' if collect_payer_info else '1' }})">Back</button>
+    </div>
+
+    {% if qr_data_uri %}
+    <div class="qr-block">
+      <img src="{{ qr_data_uri }}" alt="QR code for this payment link">
+      <a href="{{ qr_data_uri }}" download="payment-link-qr.png">Download QR Code</a>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+  <p class="powered-by">Powered by <strong>{{ link.user.name if link.user and link.user.name else 'Bazillin Studio' }}</strong></p>
+</div>
+<script>
+const collectInfo = {{ 'true' if collect_payer_info else 'false' }};
+
+function goToStep(n) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.toggle('active', p.dataset.step === String(n)));
+  document.querySelectorAll('.step-dot').forEach(d => d.classList.toggle('active', Number(d.dataset.dot) <= n));
+}
+
+function tryStep3() {
+  const email = document.getElementById('payer_email').value.trim();
+  const err = document.getElementById('payer-error');
+  if (!email) { err.style.display = 'block'; return; }
+  err.style.display = 'none';
+  goToStep(3);
+}
+
+function submitPayment(actionUrl) {
+  const emailEl = document.getElementById('payer_email');
+  const nameEl = document.getElementById('payer_name');
+  const email = collectInfo && emailEl ? emailEl.value.trim() : '';
+  const name = collectInfo && nameEl ? nameEl.value.trim() : '';
+  const amountEl = document.getElementById('custom_amount');
+  const couponEl = document.getElementById('coupon_code');
+  const bumpEl = document.getElementById('include_bump');
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = actionUrl;
+  form.innerHTML = `<input type="hidden" name="payer_name" value="${name.replace(/"/g,'&quot;')}">
+                     <input type="hidden" name="payer_email" value="${email.replace(/"/g,'&quot;')}">
+                     ${amountEl ? `<input type="hidden" name="amount" value="${amountEl.value}">` : ''}
+                     ${couponEl ? `<input type="hidden" name="coupon_code" value="${couponEl.value.replace(/"/g,'&quot;')}">` : ''}
+                     ${bumpEl && bumpEl.checked ? `<input type="hidden" name="include_bump" value="1">` : ''}
+                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`;
+  document.body.appendChild(form);
+  form.submit();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Email Sequences{% endblock %}
+{% block page_subtitle %}Multi-step drip campaigns — Welcome Series, Follow-Up, etc.{% endblock %}
+{% block content %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Create a Sequence</div></div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.create_email_sequence') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="a-grid a-grid-2" style="gap:14px">
+        <div>
+          <label class="a-label">Name</label>
+          <input type="text" name="name" required class="a-input" style="margin-top:6px" placeholder="e.g. New Subscriber Welcome"/>
+        </div>
+        <div>
+          <label class="a-label">Trigger</label>
+          <select name="trigger" class="a-input" style="margin-top:6px">
+            <option value="manual">Manual only (enroll people yourself later)</option>
+            <option value="newsletter_signup">Automatically — when someone subscribes to the newsletter</option>
+          </select>
+        </div>
+      </div>
+      <button class="a-btn a-btn-primary" style="margin-top:14px">Create Sequence</button>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header"><div class="a-panel-title">Your Sequences</div></div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not sequences %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No sequences yet — create one above.</p>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Name</th>
+        <th class="text-left px-3 py-3">Trigger</th>
+        <th class="text-left px-3 py-3">Steps</th>
+        <th class="text-left px-3 py-3">Enrolled</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-right px-5 py-3">Actions</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for seq in sequences %}
+        <tr class="hover:bg-white/3 transition-colors">
+          <td class="px-5 py-3 text-white"><a href="{{ url_for('admin.email_sequence_detail', sid=seq.id) }}" class="hover:underline">{{ seq.name }}</a></td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ 'Auto: newsletter signup' if seq.trigger == 'newsletter_signup' else 'Manual' }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ seq.steps | length }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ enrollment_counts.get(seq.id, 0) }}</td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full {% if seq.active %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">
+              {{ 'Active' if seq.active else 'Paused' }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-right whitespace-nowrap space-x-1">
+            <form method="POST" action="{{ url_for('admin.toggle_email_sequence', sid=seq.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-white/10 text-gray-300 hover:bg-white/5">{{ 'Pause' if seq.active else 'Activate' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.delete_email_sequence', sid=seq.id) }}" class="inline" onsubmit="return confirm('Delete this whole sequence and its steps?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

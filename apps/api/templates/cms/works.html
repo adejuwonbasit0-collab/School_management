@@ -1,0 +1,39 @@
+{% extends "public_base.html" %}
+{% block title %}Works — {{ site_name }}{% endblock %}
+{% block meta_desc %}Selected projects by {{ site_name }}.{% endblock %}
+{% block content %}
+<section class="py-16 px-4" data-aos="fade-up">
+  <div class="max-w-7xl mx-auto">
+    <div class="text-center mb-12">
+      <div class="section-badge mb-4 mx-auto w-fit">✦ Portfolio</div>
+      <h1 class="text-4xl sm:text-5xl font-bold font-display gradient-text mb-4">My Projects</h1>
+      <p class="text-gray-400 max-w-xl mx-auto">A look at what I've shipped — click through for the story behind each one.</p>
+    </div>
+
+    {% if projects %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      {% for p in projects %}
+      <a href="{{ url_for('cms.work_detail', identifier=p.slug or p.id) }}" class="glass-card-premium overflow-hidden group reveal transition-all hover:border-cyan-500/30 hover:-translate-y-1 block h-full flex flex-col" style="animation-delay:{{ loop.index0 * 0.06 }}s">
+        {% if p.image_url %}
+        <div class="aspect-video overflow-hidden"><img src="{{ p.image_url }}" alt="{{ p.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" decoding="async"/></div>
+        {% else %}
+        <div class="aspect-video bg-gradient-to-br from-cyan-500/10 to-purple-500/10 flex items-center justify-center text-4xl">🚀</div>{% endif %}
+        <div class="p-5 flex-1 flex flex-col justify-between">
+          <div>
+            {% if p.featured %}<span class="text-[10px] font-bold text-cyan-400 uppercase tracking-wide">Featured</span>{% endif %}
+            <h3 class="font-semibold text-white mb-1 group-hover:text-cyan-300 transition-colors">{{ p.title }}</h3>
+            <p class="text-xs text-gray-400 mb-3 line-clamp-3">{{ p.description }}</p>
+          </div>
+          <div>
+            {% if p.tags %}<div class="flex flex-wrap gap-1 mb-3">{% for t in (p.tags or [])[:3] %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">{{ t }}</span>{% endfor %}</div>{% endif %}
+            <span class="text-xs text-cyan-400 group-hover:text-cyan-300">View Project →</span>
+          </div>
+        </div>
+      </a>{% endfor %}
+    </div>
+    {% else %}
+    <p class="text-center text-gray-500">Projects coming soon — add them in Admin → Portfolio → Projects.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block title %}Bank Transfer — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-16">
+  <h1 class="text-2xl font-bold text-white mb-2">Pay via Bank Transfer</h1>
+  <p class="text-gray-400 text-sm mb-8">{{ label }} — <span class="text-white font-semibold">{{ amount | money }}</span></p>
+
+  <div class="glass border border-white/10 rounded-2xl p-6 mb-6">
+    <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Transfer to</h3>
+    <div class="space-y-3 text-sm">
+      <div class="flex justify-between"><span class="text-gray-500">Bank</span><span class="text-white font-medium">{{ bank_details.bank_name or '—' }}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500">Account Name</span><span class="text-white font-medium">{{ bank_details.account_name or '—' }}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500">Account Number</span><span class="text-white font-mono">{{ bank_details.account_number or '—' }}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500">Routing / SWIFT</span><span class="text-white font-mono">{{ bank_details.routing_swift or '—' }}</span></div>
+    </div>
+    {% if bank_details.instructions %}
+    <p class="text-xs text-gray-500 mt-4 pt-4 border-t border-white/10">{{ bank_details.instructions }}</p>
+    {% endif %}
+  </div>
+
+  <form method="POST" enctype="multipart/form-data" class="glass border border-white/10 rounded-2xl p-6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <label class="block text-sm font-medium text-gray-300 mb-2">Once you've sent the transfer, enter a reference</label>
+    <input type="text" name="sender_reference" required class="input-field w-full mb-4" placeholder="Transaction ID, your bank name, or note used"/>
+    
+    <label class="block text-sm font-medium text-gray-300 mb-2">Upload Proof of Payment (Image Receipt)</label>
+    <input type="file" name="proof_image" accept="image/*" class="input-field w-full mb-4" required/>
+    
+    <p class="text-xs text-gray-500 mb-4">We'll confirm this against our bank statement — usually within one business day. You'll get a notification either way.</p>
+    <button class="btn-neon w-full justify-center py-3">Submit for Review</button>
+  </form>
+</div>
+{% endblock %}

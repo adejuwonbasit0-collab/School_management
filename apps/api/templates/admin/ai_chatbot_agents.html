@@ -1,0 +1,179 @@
+{% extends "admin/base.html" %}
+{% block title %}AI Chatbot Agents{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-8 px-4">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-white">AI Chatbot Agents</h1>
+      <p class="text-sm text-gray-400 mt-1">
+        Buying "AI Chatbot" only unlocks the customer's dashboard page — the agent itself has to be built here.
+        Once you create it below, it appears in their dashboard automatically and starts answering for real.
+      </p>
+    </div>
+  </div>
+
+  {% if not ai_provider %}
+  <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-4 mb-6 text-sm text-red-300">
+    <strong>No AI provider is configured.</strong> Agents created below will save fine, but replies will fall back
+    to a generic message until you set an API key under <a href="{{ url_for('admin.settings') }}" class="underline">Settings → AI Providers</a>
+    (Anthropic, OpenAI, Gemini, Groq, or OpenRouter — any one of them).
+  </div>
+  {% else %}
+  <div class="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 mb-6 text-sm text-emerald-300">
+    AI provider connected: <strong>{{ ai_provider }}</strong>. Every agent below uses this automatically — customers never need their own API key.
+  </div>
+  {% endif %}
+
+  {% if pending %}
+  <div class="mb-8">
+    <h2 class="text-sm font-semibold text-amber-400 mb-3">Waiting on you ({{ pending|length }})</h2>
+    <div class="space-y-2">
+      {% for u in pending %}
+      <div class="flex items-center justify-between bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
+        <div>
+          <p class="text-sm text-white font-medium">{{ u.name or u.email }}</p>
+          <p class="text-xs text-gray-500">{{ u.email }} · purchased, no agent built yet</p>
+        </div>
+        <button onclick="openCreateModal({{ u.id }}, {{ (u.name or u.email)|tojson|forceescape }})" class="text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-black font-semibold hover:bg-amber-400 transition-colors">
+          Build Agent
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold text-gray-300">All Agents ({{ agents|length }})</h2>
+    <button onclick="openCreateModal()" class="text-xs px-3 py-1.5 rounded-lg bg-[#1DB954] text-black font-semibold hover:bg-[#1ed760] transition-colors">
+      + New Agent
+    </button>
+  </div>
+
+  <div class="space-y-2">
+    {% for a in agents %}
+    <div class="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-4">
+      <div class="min-w-0">
+        <p class="text-sm text-white font-medium">{{ a.name }}</p>
+        <p class="text-xs text-gray-500 truncate">{{ a.user.email if a.user else 'unknown user' }} · {{ a.message_count or 0 }} messages handled</p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="text-xs px-2 py-0.5 rounded-full {{ 'bg-green-500/15 text-green-400' if a.active else 'bg-gray-500/15 text-gray-400' }}">{{ 'Active' if a.active else 'Paused' }}</span>
+        <button onclick="editAgent({{ a.id }}, {{ a.user_id }}, {{ a.name|tojson|forceescape }}, {{ (a.greeting or '')|tojson|forceescape }}, {{ (a.ai_instructions or '')|tojson|forceescape }})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors">Edit</button>
+        <button onclick="toggleAgent({{ a.id }})" class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors">{{ 'Pause' if a.active else 'Resume' }}</button>
+        <button onclick="deleteAgent({{ a.id }})" class="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors">Delete</button>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-500 text-center py-10">No AI Chatbot agents built yet.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Create / Edit Modal -->
+<div id="agent-modal" class="fixed inset-0 z-[200] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-lg p-6">
+    <h3 id="agent-modal-title" class="text-white font-semibold mb-4">New AI Agent</h3>
+    <form id="agent-form" class="space-y-4">
+      <input type="hidden" id="a-user-id">
+      <div id="a-user-select-wrap">
+        <label class="block text-xs text-gray-400 mb-1">Customer Email</label>
+        <input type="email" id="a-user-email" placeholder="customer@example.com" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+        <p class="text-xs text-gray-600 mt-1">The account that purchased AI Chatbot.</p>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Agent Name</label>
+        <input type="text" id="a-name" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" placeholder="e.g. Sarah's Boutique Assistant">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Greeting Message</label>
+        <input type="text" id="a-greeting" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" placeholder="Hi! How can I help you today?">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Instructions (what it knows, how it should behave)</label>
+        <textarea id="a-instructions" rows="6" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono"
+                  placeholder="You are the support assistant for [business]. Answer questions about our products, prices, and hours using only what's below. If you don't know something, say so and offer to connect them with a human.
+
+Business info:
+- ..."></textarea>
+      </div>
+    </form>
+    <div class="flex justify-end gap-3 mt-5">
+      <button type="button" onclick="closeAgentModal()" class="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
+      <button type="button" id="a-save-btn" onclick="saveAgent()" class="px-5 py-2 bg-[#1DB954] text-black font-semibold rounded-lg text-sm hover:bg-[#1ed760]">Save Agent</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function getCsrf() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.content : '';
+}
+
+function openCreateModal(userId, userLabel) {
+  document.getElementById('agent-modal-title').textContent = 'New AI Agent';
+  document.getElementById('a-user-id').value = userId || '';
+  document.getElementById('a-user-email').value = userLabel || '';
+  document.getElementById('a-name').value = '';
+  document.getElementById('a-greeting').value = '';
+  document.getElementById('a-instructions').value = '';
+  document.getElementById('agent-modal').classList.remove('hidden');
+}
+
+function editAgent(id, userId, name, greeting, instructions) {
+  document.getElementById('agent-modal-title').textContent = 'Edit AI Agent';
+  document.getElementById('a-user-id').value = userId;
+  document.getElementById('a-name').value = name;
+  document.getElementById('a-greeting').value = greeting;
+  document.getElementById('a-instructions').value = instructions;
+  document.getElementById('agent-modal').classList.remove('hidden');
+}
+
+function closeAgentModal() {
+  document.getElementById('agent-modal').classList.add('hidden');
+}
+
+function saveAgent() {
+  const payload = {
+    user_id: document.getElementById('a-user-id').value,
+    user_email: document.getElementById('a-user-email').value,
+    name: document.getElementById('a-name').value,
+    greeting: document.getElementById('a-greeting').value,
+    ai_instructions: document.getElementById('a-instructions').value,
+  };
+  const btn = document.getElementById('a-save-btn');
+  if (btn) { btn.disabled = true; btn.dataset.origText = btn.textContent; btn.textContent = 'Saving…'; }
+  fetch('{{ url_for("admin.ai_chatbot_agents_create") }}', {
+    method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+    body: JSON.stringify(payload),
+  }).then(async r => {
+    let data = {};
+    try { data = await r.json(); } catch (e) { /* non-JSON response, e.g. a server error page */ }
+    if (!r.ok || data.error) {
+      alert(data.error || `Something went wrong (HTTP ${r.status}). Please try again.`);
+      return;
+    }
+    location.reload();
+  }).catch(() => {
+    alert('Network error — please check your connection and try again.');
+  }).finally(() => {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.origText; }
+  });
+}
+
+function toggleAgent(id) {
+  fetch(`/admin/ai-chatbot-agents/${id}/toggle`, { method: 'POST', headers: {'X-CSRFToken': getCsrf()} })
+    .then(r => { if (!r.ok) throw new Error(); location.reload(); })
+    .catch(() => alert('Could not update this agent — please try again.'));
+}
+
+function deleteAgent(id) {
+  if (!confirm('Delete this agent?')) return;
+  fetch(`/admin/ai-chatbot-agents/${id}/delete`, { method: 'POST', headers: {'X-CSRFToken': getCsrf()} })
+    .then(r => { if (!r.ok) throw new Error(); location.reload(); })
+    .catch(() => alert('Could not delete this agent — please try again.'));
+}
+</script>
+{% endblock %}

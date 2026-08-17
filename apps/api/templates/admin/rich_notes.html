@@ -1,0 +1,475 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Enterprise Word Replica Notebook & Prompt Library{% endblock %}
+{% block page_subtitle %}Full MS Word document editor with ribbon controls, shapes, saved document library, .docx export, and prompt library integration.{% endblock %}
+
+{% block content %}
+<style>
+  .word-editor-container {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    gap: 20px;
+  }
+  @media(max-width: 1024px) {
+    .word-editor-container { grid-template-columns: 1fr; }
+  }
+
+  .ribbon-wrapper {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .ribbon-tabs {
+    display: flex;
+    background: #0d1117;
+    border-bottom: 1px solid #30363d;
+    border-radius: 14px 14px 0 0;
+    padding: 4px 12px 0;
+    gap: 4px;
+  }
+  .ribbon-tab-btn {
+    padding: 8px 16px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #8b949e;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .ribbon-tab-btn:hover { color: #c9d1d9; background: rgba(255,255,255,0.03); }
+  .ribbon-tab-btn.active {
+    color: #38bdf8;
+    background: #161b22;
+    border-color: #30363d;
+  }
+
+  .ribbon-panel {
+    display: none;
+    padding: 10px 16px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .ribbon-panel.active { display: flex; }
+
+  .ribbon-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 12px;
+    border-right: 1px solid #30363d;
+  }
+  .ribbon-group:last-child { border-right: none; padding-right: 0; }
+
+  .r-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+  }
+  .r-btn:hover { background: #30363d; color: #fff; border-color: #58a6ff; }
+
+  .word-paper-view {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 0 0 14px 14px;
+    padding: 40px 60px;
+    min-height: 650px;
+    color: #e6edf3;
+    font-size: 15px;
+    line-height: 1.7;
+    outline: none;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+  }
+
+  .word-paper-view h1 { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 16px; border-bottom: 1px solid #30363d; pb: 8px; }
+  .word-paper-view h2 { font-size: 20px; font-weight: 700; color: #38bdf8; margin-top: 20px; margin-bottom: 10px; }
+  .word-paper-view p { margin-bottom: 14px; }
+  .word-paper-view ul { list-style: disc; padding-left: 24px; margin-bottom: 14px; }
+  .word-paper-view ol { list-style: decimal; padding-left: 24px; margin-bottom: 14px; }
+  .word-paper-view table { width: 100%; border-collapse: collapse; margin: 16px 0; border: 1px solid #30363d; }
+  .word-paper-view th, .word-paper-view td { border: 1px solid #30363d; padding: 10px 14px; text-align: left; }
+  .word-paper-view th { background: #21262d; font-weight: 700; color: #fff; }
+
+  .doc-shape-pill { display: inline-block; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 6px 0; }
+  .doc-shape-callout { background: rgba(168, 85, 247, 0.1); border-left: 4px solid #a855f7; padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 14px 0; color: #e9d5ff; }
+</style>
+
+<div class="word-editor-container">
+  <!-- Left Side: MS Word Replica Canvas -->
+  <div>
+    <div class="ribbon-wrapper">
+      <!-- Ribbon Tabs Navigation -->
+      <div class="ribbon-tabs">
+        <button class="ribbon-tab-btn active" onclick="switchRibbonTab('tab-home', this)">Home</button>
+        <button class="ribbon-tab-btn" onclick="switchRibbonTab('tab-insert', this)">Insert</button>
+        <button class="ribbon-tab-btn" onclick="switchRibbonTab('tab-shapes', this)">Shapes & Callouts</button>
+        <button class="ribbon-tab-btn" onclick="switchRibbonTab('tab-library', this)">My Library</button>
+        <button class="ribbon-tab-btn" onclick="switchRibbonTab('tab-export', this)">Export</button>
+      </div>
+
+      <!-- Tab: Home -->
+      <div id="tab-home" class="ribbon-panel active">
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="execCmd('undo')" title="Undo">↩️ Undo</button>
+          <button class="r-btn" onclick="execCmd('redo')" title="Redo">↪️ Redo</button>
+        </div>
+
+        <div class="ribbon-group">
+          <select class="a-input" style="font-size:12px;padding:4px 8px;width:120px" onchange="execCmd('fontName', this.value)">
+            <option value="Calibri">Calibri</option>
+            <option value="Inter">Inter</option>
+            <option value="Arial">Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+            <option value="Georgia">Georgia</option>
+          </select>
+
+          <select class="a-input" style="font-size:12px;padding:4px 8px;width:80px" onchange="execCmd('fontSize', this.value)">
+            <option value="3">12pt</option>
+            <option value="1">8pt</option>
+            <option value="2">10pt</option>
+            <option value="4">14pt</option>
+            <option value="5">18pt</option>
+            <option value="6">24pt</option>
+            <option value="7">36pt</option>
+          </select>
+        </div>
+
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="execCmd('bold')"><b>B</b></button>
+          <button class="r-btn" onclick="execCmd('italic')"><i>I</i></button>
+          <button class="r-btn" onclick="execCmd('underline')"><u>U</u></button>
+          <button class="r-btn" onclick="execCmd('strikeThrough')"><s>S</s></button>
+        </div>
+
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="execCmd('justifyLeft')">⬅️ Left</button>
+          <button class="r-btn" onclick="execCmd('justifyCenter')">↔️ Center</button>
+          <button class="r-btn" onclick="execCmd('justifyRight')">➡️ Right</button>
+        </div>
+
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="execCmd('insertUnorderedList')">• Bullet</button>
+          <button class="r-btn" onclick="execCmd('insertOrderedList')">1. Number</button>
+        </div>
+      </div>
+
+      <!-- Tab: Insert -->
+      <div id="tab-insert" class="ribbon-panel">
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="insertTable(2,2)">📊 2x2 Table</button>
+          <button class="r-btn" onclick="insertTable(3,3)">📊 3x3 Table</button>
+          <button class="r-btn" onclick="insertTable(4,4)">📊 4x4 Table</button>
+        </div>
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="promptInsertLink()">🔗 Insert Link</button>
+          <button class="r-btn" onclick="promptInsertImage()">🖼️ Insert Image URL</button>
+          <button class="r-btn" onclick="insertHorizontalRule()">➖ Divider</button>
+        </div>
+      </div>
+
+      <!-- Tab: Shapes & Callouts -->
+      <div id="tab-shapes" class="ribbon-panel">
+        <div class="ribbon-group">
+          <button class="r-btn" onclick="insertShape('pill')">🏷️ Badge Pill</button>
+          <button class="r-btn" onclick="insertShape('info_box')">🔷 Info Callout Box</button>
+          <button class="r-btn" onclick="insertShape('warning_box')">⚠️ Warning Box</button>
+          <button class="r-btn" onclick="insertShape('tip_box')">💡 Tip Callout</button>
+        </div>
+      </div>
+
+      <!-- Tab: Library -->
+      <div id="tab-library" class="ribbon-panel">
+        <input id="doc-title-input" class="a-input" style="font-size:12px;padding:4px 8px;width:200px" placeholder="Document Title..." value="Brand Workspace Guide"/>
+        <button class="r-btn" onclick="saveToLibrary()">💾 Save to Library</button>
+        <button class="r-btn" onclick="loadLibraryModal()">📂 Open Saved Library</button>
+      </div>
+
+      <!-- Tab: Export -->
+      <div id="tab-export" class="ribbon-panel">
+        <button class="r-btn" style="border-color:rgba(56,189,248,0.4);color:#38bdf8" onclick="exportToDocx()">📄 Export to Word (.doc)</button>
+        <button class="r-btn" onclick="exportToHTML()">🌐 Export HTML</button>
+        <button class="r-btn" onclick="window.print()">🖨️ Print Document</button>
+      </div>
+    </div>
+
+    <!-- Word Paper Page Canvas -->
+    <div class="word-paper-view" id="editor-content" contenteditable="true">
+      {{ brand_notebook_html | safe if brand_notebook_html else '<h1>Brand Workspace & Corporate Guidelines</h1><p>Welcome to your central Enterprise Word Document Editor. Type your text here, apply formatting, add shape callouts, or pick reusable prompt templates from the sidebar.</p><div class="doc-shape-callout">🔷 <b>Callout Note:</b> All documents saved here sync automatically across your platform AI assistants.</div>' }}
+    </div>
+  </div>
+
+  <!-- Right Side: Prompt Library & Presets Sidebar -->
+  <div>
+    <div class="a-panel" style="margin-bottom:20px">
+      <div class="a-panel-header"><div class="a-panel-title">💡 Prompt Library & Snippets</div></div>
+      <div class="a-panel-body">
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Select a prompt snippet below to 1-click insert directly into your document:</p>
+        
+        <div class="space-y-2 mb-4">
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="insertPromptSnippet('sales')">💼 Sales Cold Outreach Email</button>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="insertPromptSnippet('proposal')">📝 Executive Project Proposal</button>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="insertPromptSnippet('sop')">⚙️ Standard Operating Procedure (SOP)</button>
+          <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="width:100%;text-align:left;justify-content:flex-start" onclick="insertPromptSnippet('faq')">❓ Product FAQ Template</button>
+        </div>
+
+        <div style="border-top:1px solid #30363d;padding-top:12px">
+          <p style="font-size:11px;color:var(--cyan);font-weight:700" id="library-status"></p>
+          <button class="a-btn a-btn-primary a-btn-xs" style="width:100%" onclick="saveNotebook()">💾 Quick Save Note</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchRibbonTab(tabId, btn) {
+  document.querySelectorAll('.ribbon-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.ribbon-tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  btn.classList.add('active');
+}
+
+function execCmd(command, arg = null) {
+  document.execCommand(command, false, arg);
+  document.getElementById('editor-content').focus();
+}
+
+function insertTable(rows, cols) {
+  let html = '<table><thead><tr>';
+  for (let c = 0; c < cols; c++) html += `<th>Header ${c+1}</th>`;
+  html += '</tr></thead><tbody>';
+  for (let r = 0; r < rows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < cols; c++) html += '<td>Cell Content</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table><p></p>';
+  execCmd('insertHTML', html);
+}
+
+function insertShape(type) {
+  let html = '';
+  if (type === 'pill') {
+    html = '<span class="doc-shape-pill">STATUS BADGE</span>&nbsp;';
+  } else if (type === 'info_box') {
+    html = '<div class="doc-shape-callout">🔷 <b>Info Note:</b> Enter your key information note here.</div><p></p>';
+  } else if (type === 'warning_box') {
+    html = '<div class="doc-shape-callout" style="border-left-color:#eab308;background:rgba(234,179,8,0.1);color:#fef08a">⚠️ <b>Warning:</b> Enter important warning or alert notice.</div><p></p>';
+  } else if (type === 'tip_box') {
+    html = '<div class="doc-shape-callout" style="border-left-color:#22c55e;background:rgba(34,197,94,0.1);color:#bbf7d0">💡 <b>Pro Tip:</b> Enter optimization tip or recommendation.</div><p></p>';
+  }
+  execCmd('insertHTML', html);
+}
+
+function insertHorizontalRule() {
+  execCmd('insertHTML', '<hr style="border:0; border-top:1px solid #30363d; margin:20px 0;"/><p></p>');
+}
+
+function promptInsertLink() {
+  const url = prompt("Enter website URL:");
+  if (url) execCmd('createLink', url);
+}
+
+function promptInsertImage() {
+  const url = prompt("Enter Image URL:");
+  if (url) execCmd('insertImage', url);
+}
+
+function insertPromptSnippet(type) {
+  let html = '';
+  if (type === 'sales') {
+    html = `<h2>💼 Cold Outreach Email Template</h2><p><b>Subject:</b> Streamlining operations for {{ company_name }}</p><p>Hi {{ contact_name }},</p><p>I noticed your work at {{ company_name }} and wanted to share how we helped similar teams scale efficiency by 40%.</p><p>Would you be open for a brief 10-minute call this Thursday?</p><p>Best regards,<br/>Your Name</p>`;
+  } else if (type === 'proposal') {
+    html = `<h1>📝 Executive Project Proposal</h1><h2>1. Executive Summary</h2><p>This proposal outlines the strategic roadmap, deliverables, and timeline for executing the project.</p><h2>2. Scope & Deliverables</h2><ul><li>Deliverable A: Platform Core Setup</li><li>Deliverable B: Automation Pipelines</li></ul>`;
+  } else if (type === 'sop') {
+    html = `<h1>⚙️ Standard Operating Procedure (SOP)</h1><p><b>Procedure Name:</b> Client Onboarding</p><p><b>Department:</b> Customer Success</p><h2>Steps:</h2><ol><li>Verify account setup in Admin panel.</li><li>Send welcome notification email.</li><li>Schedule kickoff meeting.</li></ol>`;
+  } else if (type === 'faq') {
+    html = `<h2>❓ Frequently Asked Questions</h2><p><b>Q: How long does setup take?</b><br/>A: Initial setup takes less than 5 minutes.</p><p><b>Q: Is technical support available?</b><br/>A: Yes, 24/7 dedicated support is included.</p>`;
+  }
+  execCmd('insertHTML', html);
+}
+
+async function exportToDocx() {
+  const title = document.getElementById('doc-title-input').value.trim() || 'Document';
+  const html = document.getElementById('editor-content').innerHTML;
+  
+  try {
+    const res = await fetch('/admin/rich-notes/export-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ title, html })
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = title.replace(/[^a-z0-9_-]/gi, '_') + '.doc';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert("Failed to export Word document: " + e.message);
+  }
+}
+
+function exportToHTML() {
+  const html = document.getElementById('editor-content').innerHTML;
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'document.html';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function saveToLibrary() {
+  const title = document.getElementById('doc-title-input').value.trim() || 'Untitled Document';
+  const html = document.getElementById('editor-content').innerHTML;
+  const status = document.getElementById('library-status');
+  status.textContent = "Saving to library...";
+  try {
+    const res = await fetch('/admin/rich-notes/library', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ title, html, id: currentLibraryDocId })
+    });
+    const data = await res.json();
+    if(data.success) {
+      status.style.color = '#3fb950';
+      status.textContent = "✓ Saved to Document Library!";
+      // Whichever doc we just saved (new or existing) becomes "current" so
+      // saving again updates it instead of creating a duplicate.
+      const saved = (data.docs || []).find(d => d.title === title && d.html === html);
+      if (saved) currentLibraryDocId = saved.id;
+    } else {
+      status.style.color = '#f87171';
+      status.textContent = data.error || 'Save failed.';
+    }
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = "Failed: " + e.message;
+  }
+}
+
+// ── Document Library modal — open a previously-saved document for editing ──
+let currentLibraryDocId = null;
+
+function ensureLibraryModal() {
+  if (document.getElementById('library-modal')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'library-modal';
+  wrap.className = 'a-modal-overlay';
+  wrap.innerHTML = `
+    <div class="a-modal">
+      <div class="a-modal-header">
+        <div class="a-modal-title">📂 Saved Document Library</div>
+        <button class="a-modal-close" onclick="closeModal('library-modal')">✕</button>
+      </div>
+      <div class="a-modal-body">
+        <div id="library-list" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow:auto"></div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" class="a-btn a-btn-ghost" onclick="closeModal('library-modal')">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+}
+
+async function loadLibraryModal() {
+  ensureLibraryModal();
+  const listEl = document.getElementById('library-list');
+  listEl.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Loading your saved documents…</p>';
+  openModal('library-modal');
+  try {
+    const res = await fetch('/admin/rich-notes/library');
+    const data = await res.json();
+    const docs = (data.docs || []).slice().sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+    if (!docs.length) {
+      listEl.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">No saved documents yet — use "Save to Library" to create one.</p>';
+      return;
+    }
+    listEl.innerHTML = docs.map(d => {
+      const safeTitle = (d.title || 'Untitled Document').replace(/'/g, "&#39;");
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid #30363d;border-radius:10px">
+          <div style="min-width:0">
+            <div style="font-weight:600;font-size:13px;color:var(--text)">${safeTitle}</div>
+            <div style="font-size:11px;color:var(--text-muted)">Last updated ${d.updated_at || 'unknown'}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick='openLibraryDoc(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Open</button>
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="deleteLibraryDoc('${d.id}')">Delete</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    listEl.innerHTML = `<p style="font-size:12px;color:#f87171">Failed to load library: ${e.message}</p>`;
+  }
+}
+
+function openLibraryDoc(doc) {
+  document.getElementById('editor-content').innerHTML = doc.html || '';
+  document.getElementById('doc-title-input').value = doc.title || 'Untitled Document';
+  currentLibraryDocId = doc.id;
+  closeModal('library-modal');
+  const status = document.getElementById('library-status');
+  status.style.color = '#3fb950';
+  status.textContent = `✓ Opened "${doc.title}" — further saves will update this document.`;
+}
+
+async function deleteLibraryDoc(docId) {
+  if (!confirm('Delete this document from your library? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/admin/rich-notes/library/${docId}/delete`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() }
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (currentLibraryDocId === docId) currentLibraryDocId = null;
+      loadLibraryModal();
+    }
+  } catch (e) {
+    alert('Failed to delete: ' + e.message);
+  }
+}
+
+async function saveNotebook() {
+  const status = document.getElementById('library-status');
+  const html = document.getElementById('editor-content').innerHTML;
+  status.textContent = "Saving note...";
+  try {
+    const res = await fetch("{{ url_for('admin.save_notebook') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ html })
+    });
+    const data = await res.json();
+    if(data.success) {
+      status.style.color = '#3fb950';
+      status.textContent = "✓ Saved!";
+    }
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = "Error: " + e.message;
+  }
+}
+</script>
+{% endblock %}

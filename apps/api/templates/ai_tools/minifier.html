@@ -1,0 +1,80 @@
+{% extends "public_base.html" %}
+{% block title %}Code Minifier — {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tool-shell { max-width:900px;margin:0 auto;padding:48px 20px }
+.grid2 { display:grid;grid-template-columns:1fr 1fr;gap:16px }
+textarea.admin-input { width:100%;min-height:280px;font-family:monospace;font-size:13px }
+.opt-row { display:flex;gap:10px;align-items:center;margin-bottom:14px }
+@media (max-width:700px){ .grid2{grid-template-columns:1fr} }
+</style>
+{% endblock %}
+{% block content %}
+<div class="tool-shell">
+  <div style="text-align:center;margin-bottom:32px">
+    <a href="{{ url_for('ai.index') }}" style="font-size:12px;color:var(--c-text-3);text-decoration:none">← AI Tools Hub</a>
+    <h1 style="font-size:38px;font-weight:900;font-family:'Space Grotesk',sans-serif;background:linear-gradient(135deg,var(--c-accent),var(--c-accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:12px 0 6px">Code Minifier</h1>
+    <p style="color:var(--c-text-2)">Strip whitespace and comments from CSS, JS, or HTML — entirely in your browser.</p>
+  </div>
+
+  <div class="opt-row">
+    <label style="font-size:13px;color:#9fb3d1">Language:
+      <select id="lang" class="admin-input" style="width:120px">
+        <option value="css">CSS</option>
+        <option value="js" selected>JavaScript</option>
+        <option value="html">HTML</option>
+      </select>
+    </label>
+    <button class="btn-neon" id="minBtn">Minify</button>
+    <button class="btn-ghost-neon" id="copyBtn">Copy Output</button>
+    <span id="stats" style="font-size:12px;color:var(--c-text-2);margin-left:auto"></span>
+  </div>
+
+  <div class="grid2">
+    <textarea id="input" class="admin-input" placeholder="Paste code here…"></textarea>
+    <textarea id="output" class="admin-input" readonly placeholder="Minified output…"></textarea>
+  </div>
+</div>
+<script>
+function minifyCSS(s) {
+  return s.replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\s+/g, ' ')
+          .replace(/\s*([{}:;,])\s*/g, '$1')
+          .replace(/;}/g, '}')
+          .trim();
+}
+function minifyJS(s) {
+  // Conservative: strip // and /* */ comments (not inside strings) and collapse blank lines/extra whitespace.
+  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
+  s = s.split('\n').map(line => {
+    // crude: only strip // comment if no quote chars precede it on the line
+    const idx = line.indexOf('//');
+    if (idx === -1) return line;
+    const before = line.slice(0, idx);
+    const quoteCount = (before.match(/['"`]/g) || []).length;
+    return quoteCount % 2 === 0 ? before : line;
+  }).join('\n');
+  return s.replace(/^\s+|\s+$/gm, '').replace(/\n{2,}/g, '\n').trim();
+}
+function minifyHTML(s) {
+  return s.replace(/<!--[\s\S]*?-->/g, '')
+          .replace(/>\s+</g, '><')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+}
+document.getElementById('minBtn').addEventListener('click', () => {
+  const lang = document.getElementById('lang').value;
+  const input = document.getElementById('input').value;
+  let out = '';
+  if (lang === 'css') out = minifyCSS(input);
+  else if (lang === 'js') out = minifyJS(input);
+  else out = minifyHTML(input);
+  document.getElementById('output').value = out;
+  const pct = input.length ? Math.round((1 - out.length / input.length) * 100) : 0;
+  document.getElementById('stats').textContent = `${input.length} → ${out.length} chars (-${pct}%)`;
+});
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('output').value);
+});
+</script>
+{% endblock %}

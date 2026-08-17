@@ -1,0 +1,170 @@
+{% extends "public_base.html" %}
+{% block title %}Color Picker — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-12">
+  <div class="flex justify-between items-center mb-8">
+    <h1 class="text-3xl font-bold font-display gradient-text">Color Picker</h1>
+    <a href="{{ url_for('tools.index') }}" class="admin-btn-ghost text-sm">← Tools</a>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- picker -->
+    <div class="glass-card rounded-2xl p-6">
+      <div id="color-preview" class="w-full h-40 rounded-xl mb-5 transition-colors" style="background:var(--c-accent)"></div>
+      <input type="color" id="color-input" value="var(--c-accent)" class="w-full h-12 rounded-xl cursor-pointer border-0 outline-none mb-4" oninput="updateColor(this.value)"/>
+      <div class="space-y-3">
+        {% for format in [('HEX','hex-val'),('RGB','rgb-val'),('HSL','hsl-val'),('RGBA','rgba-val')] %}
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-500 w-10">{{ format[0] }}</span>
+          <input id="{{ format[1] }}" class="input-field flex-1 font-mono text-sm" readonly/>
+          <button onclick="copyField('{{ format[1] }}')" class="admin-btn-ghost text-xs px-3">Copy</button>
+        </div>{% endfor %}
+      </div>
+    </div>
+    <!-- palette & shades -->
+    <div class="space-y-5">
+      <!-- shades -->
+      <div class="glass-card rounded-2xl p-5">
+        <h3 class="font-semibold text-white mb-3">Tints & Shades</h3>
+        <div id="shades-grid" class="grid grid-cols-5 gap-2"></div>
+      </div>
+      <!-- harmony -->
+      <div class="glass-card rounded-2xl p-5">
+        <h3 class="font-semibold text-white mb-3">Color Harmony</h3>
+        <div class="flex gap-2 mb-3">
+          {% for mode in ['Complementary','Triadic','Analogous','Split','Square'] %}
+          <button onclick="setHarmony('{{ mode }}')" class="harmony-btn text-[10px] px-2 py-1 rounded border border-white/10 text-gray-400 hover:text-white transition-all" data-mode="{{ mode }}">{{ mode }}</button>{% endfor %}
+        </div>
+        <div id="harmony-colors" class="flex gap-3 flex-wrap"></div>
+      </div>
+      <!-- css output -->
+      <div class="glass-card rounded-2xl p-5">
+        <h3 class="font-semibold text-white mb-3">CSS Variables</h3>
+        <pre id="css-vars" class="text-xs font-mono text-gray-300 bg-black/30 rounded-lg p-3 overflow-auto"></pre>
+        <button onclick="copyCSSVars()" class="btn-ghost-neon text-xs py-1.5 px-4 mt-3">Copy CSS</button>
+      </div>
+      <!-- saved palette -->
+      <div class="glass-card rounded-2xl p-5">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-semibold text-white">Saved Colors</h3>
+          <button onclick="saveColor()" class="btn-neon text-xs py-1.5 px-3">+ Save</button>
+        </div>
+        <div id="saved-colors" class="flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+  </div>
+  <!-- preset palettes -->
+  <div class="glass-card rounded-2xl p-6 mt-6">
+    <h3 class="font-semibold text-white mb-4">Preset Palettes</h3>
+    <div class="space-y-3">
+      {% for name, colors in [
+        ("Bazillin Neon", ["var(--c-accent)","var(--c-accent-2)","#00ff88","#ff6b35","#7c3aed"]),
+        ("Pastel Dream",  ["#ffd6e0","#ffefba","#c2f0c2","#c2e6ff","#e8c2ff"]),
+        ("Dark Mode",     ["#0f172a","#1e293b","#334155","#475569","#94a3b8"]),
+        ("Sunset",        ["#ff6b6b","#ee5a24","#f9ca24","#6ab04c","#1289a7"]),
+        ("Ocean",         ["#006994","#0099cc","#00c8ff","#7ecef4","#e0f4ff"]),
+      ] %}
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-500 w-28">{{ name }}</span>
+        <div class="flex gap-1">
+          {% for c in colors %}
+          <button onclick="updateColor('{{ c }}')" title="{{ c }}"
+            class="w-8 h-8 rounded-lg hover:scale-110 transition-transform border-2 border-transparent hover:border-white/30"
+            style="background:{{ c }}"></button>{% endfor %}
+        </div>
+      </div>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let currentHarmony = 'Complementary';
+let savedColors = JSON.parse(localStorage.getItem('saved_colors') || '[]');
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+function rgbToHsl(r,g,b) {
+  r/=255;g/=255;b/=255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);
+  let h,s,l=(max+min)/2;
+  if(max===min){h=s=0;}else{const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break;}h/=6;}
+  return{h:Math.round(h*360),s:Math.round(s*100),l:Math.round(l*100)};
+}
+function hslToHex(h,s,l) {
+  s/=100;l/=100;const a=s*Math.min(l,1-l);
+  const f=n=>{const k=(n+h/30)%12;const c=l-a*Math.max(Math.min(k-3,9-k,1),-1);return Math.round(255*c).toString(16).padStart(2,'0');};
+  return '#'+f(0)+f(8)+f(4);
+}
+function updateColor(hex) {
+  if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return;
+  document.getElementById('color-input').value = hex;
+  document.getElementById('color-preview').style.background = hex;
+  const {r,g,b} = hexToRgb(hex);
+  const {h,s,l} = rgbToHsl(r,g,b);
+  document.getElementById('hex-val').value = hex.toUpperCase();
+  document.getElementById('rgb-val').value = `rgb(${r}, ${g}, ${b})`;
+  document.getElementById('hsl-val').value = `hsl(${h}, ${s}%, ${l}%)`;
+  document.getElementById('rgba-val').value = `rgba(${r}, ${g}, ${b}, 1)`;
+  generateShades(hex);
+  generateHarmony(hex);
+  generateCSSVars(hex);
+}
+function generateShades(hex) {
+  const {h,s} = (() => { const {r,g,b}=hexToRgb(hex); return rgbToHsl(r,g,b); })();
+  const shades = [10,20,30,40,50,60,70,80,90,95].map(l => hslToHex(h,s,l));
+  document.getElementById('shades-grid').innerHTML = shades.map((c,i)=>`
+    <div onclick="updateColor('${c}')" title="${c}" class="cursor-pointer rounded-lg hover:scale-105 transition-transform"
+         style="background:${c};height:40px"></div>`).join('');
+}
+function generateHarmony(hex) {
+  const {r,g,b}=hexToRgb(hex);const {h,s,l}=rgbToHsl(r,g,b);
+  let angles = { Complementary:[h,(h+180)%360], Triadic:[h,(h+120)%360,(h+240)%360],
+    Analogous:[h,(h+30)%360,(h-30+360)%360], Split:[h,(h+150)%360,(h+210)%360],
+    Square:[h,(h+90)%360,(h+180)%360,(h+270)%360] };
+  const colors = (angles[currentHarmony]||[h]).map(a=>hslToHex(a,s,l));
+  document.getElementById('harmony-colors').innerHTML = colors.map(c=>`
+    <div onclick="updateColor('${c}')" title="${c}" style="background:${c};width:48px;height:48px"
+         class="rounded-xl cursor-pointer hover:scale-110 transition-transform border border-white/10"></div>`).join('');
+}
+function setHarmony(mode) {
+  currentHarmony = mode;
+  document.querySelectorAll('.harmony-btn').forEach(b=>{b.classList.toggle('border-cyan-500',b.dataset.mode===mode);b.classList.toggle('text-cyan-400',b.dataset.mode===mode);});
+  generateHarmony(document.getElementById('hex-val').value||'var(--c-accent)');
+}
+function generateCSSVars(hex) {
+  const {h,s,l}=(() => { const {r,g,b}=hexToRgb(hex); return rgbToHsl(r,g,b); })();
+  document.getElementById('css-vars').textContent = `:root {
+  --color-primary:     ${hex};
+  --color-light:       ${hslToHex(h,s,Math.min(l+20,95))};
+  --color-dark:        ${hslToHex(h,s,Math.max(l-20,5))};
+  --color-muted:       ${hslToHex(h,Math.max(s-30,0),l)};
+  --color-h: ${h};
+  --color-s: ${s}%;
+  --color-l: ${l}%;
+}`;
+}
+function copyCSSVars() { navigator.clipboard.writeText(document.getElementById('css-vars').textContent); showToast('CSS copied!','success'); }
+function copyField(id) { navigator.clipboard.writeText(document.getElementById(id).value); showToast('Copied!','success'); }
+function saveColor() {
+  const hex = document.getElementById('hex-val').value;
+  if (hex && !savedColors.includes(hex)) {
+    savedColors.push(hex);
+    localStorage.setItem('saved_colors', JSON.stringify(savedColors));
+    renderSaved();
+  }
+}
+function renderSaved() {
+  document.getElementById('saved-colors').innerHTML = savedColors.map((c,i)=>`
+    <div class="relative group">
+      <div onclick="updateColor('${c}')" style="background:${c};width:36px;height:36px" class="rounded-lg cursor-pointer hover:scale-110 transition-transform border border-white/10"></div>
+      <button onclick="savedColors.splice(${i},1);localStorage.setItem('saved_colors',JSON.stringify(savedColors));renderSaved()"
+        class="absolute -top-1.5 -right-1.5 hidden group-hover:flex w-4 h-4 rounded-full bg-red-500 text-[8px] text-white items-center justify-center">✕</button>
+    </div>`).join('');
+}
+renderSaved();
+updateColor('var(--c-accent)');
+</script>
+{% endblock %}

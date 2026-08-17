@@ -1,0 +1,36 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Client Projects{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <p class="text-gray-400 text-sm">{{ projects|length }} active project(s)</p>
+  <a href="{{ url_for('admin.project_requests') }}" class="ds-btn ds-btn-secondary ds-btn-sm">📋 View Requests</a>
+</div>
+{% if projects %}
+<div class="space-y-3">
+  {% for p in projects %}
+  {% set status_map = {'planning':'gray','in_progress':'blue','review':'yellow','completed':'green','on_hold':'red'} %}
+  <a href="{{ url_for('admin.admin_project_detail', pid=p.id) }}" style="text-decoration:none">
+    <div class="ds-card" style="padding:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <p class="font-semibold text-white text-sm mb-0.5">{{ p.title }}</p>
+        <p class="text-xs text-gray-500">{{ p.client.email if p.client else '—' }}</p>
+      </div>
+      <div style="min-width:120px">
+        <div class="flex justify-between text-xs text-gray-500 mb-1"><span>Progress</span><span class="text-accent font-mono">{{ p.progress_pct }}%</span></div>
+        <div class="ds-progress"><div class="ds-progress-fill" style="width:{{ p.progress_pct }}%"></div></div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="ds-badge ds-badge-{{ status_map.get(p.status,'gray') }}">{{ p.status | replace('_',' ') | title }}</span>
+        <span class="text-xs text-gray-500 font-mono">{{ p.updated_at | timeago }}</span>
+        <span style="color:var(--c-accent)">›</span>
+      </div>
+    </div>
+  </a>{% endfor %}
+</div>
+{% else %}
+<div class="ds-card" style="padding:64px;text-align:center">
+  <div style="font-size:48px;margin-bottom:12px">🚀</div>
+  <p class="text-gray-400 mb-4">No active projects yet. Accept a project request to create one.</p>
+  <a href="{{ url_for('admin.project_requests') }}" class="ds-btn ds-btn-primary ds-btn-sm">View Requests →</a>
+</div>{% endif %}
+{% endblock %}

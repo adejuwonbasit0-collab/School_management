@@ -1,0 +1,33 @@
+<nav class="navbar" id="navbar">
+  <div class="navbar-inner">
+    <a href="{{ url_for('cms.home') }}" class="navbar-brand">
+      {% if site_logo %}<img src="{{ site_logo }}" alt="{{ site_name }}" class="navbar-logo"/>{% endif %}
+      <span class="navbar-brand-text">{{ site_name or "Bazillin Studio" }}</span>
+    </a>
+    <div class="navbar-links" id="navLinks">
+      <a href="{{ url_for('cms.home') }}" class="nav-link {% if request.endpoint=='cms.home' %}active{% endif %}">Home</a>
+      <a href="{{ url_for('cms.about') }}" class="nav-link">About</a>
+      <a href="{{ url_for('marketplace.index') }}" class="nav-link">Marketplace</a>
+      <a href="{{ url_for('freelance.index') }}" class="nav-link">Hire</a>
+      <a href="{{ url_for('hosting.index') }}" class="nav-link">Hosting</a>
+      <a href="{{ url_for('tools.index') }}" class="nav-link">Tools</a>
+      <a href="{{ url_for('ai.index') }}" class="nav-link">AI Hub</a>
+      <a href="{{ url_for('cms.blog') }}" class="nav-link">Blog</a>
+    </div>
+    <div class="navbar-actions">
+      {% if current_user.is_authenticated %}
+        {% if current_user.is_admin() %}
+        <a href="{{ url_for('admin.dashboard') }}" class="btn-nav-secondary">Admin</a>
+        {% endif %}
+        <a href="{{ url_for('dashboard.home') }}" class="btn-nav-secondary">Dashboard</a>
+        <a href="{{ url_for('auth.logout') }}" class="btn-nav-ghost">Logout</a>
+      {% else %}
+        <a href="{{ url_for('auth.login') }}" class="btn-nav-ghost">Login</a>
+        <a href="{{ url_for('auth.register') }}" class="btn-nav-primary">Get Started</a>
+      {% endif %}
+    </div>
+    <button class="navbar-toggle" id="navToggle" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>

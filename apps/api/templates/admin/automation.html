@@ -1,0 +1,326 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Automation Center{% endblock %}
+{% block page_subtitle %}When something happens on your site, automatically do something about it{% endblock %}
+{% block content %}
+<style>
+.action-row { display:flex; gap:8px; align-items:flex-start; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; margin-bottom:8px; }
+.action-row select, .action-row input, .action-row textarea { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#e2e8f0; padding:6px 8px; font-size:12px; }
+</style>
+
+{% set active_tab = 'workflows' %}
+{% include "admin/partials/automation_tabs.html" with context %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <div class="a-panel-title">Starter Templates</div>
+    <form method="POST" action="{{ url_for('admin.import_workflow') }}" enctype="multipart/form-data" style="display:flex;gap:6px;align-items:center">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="file" name="workflow_file" accept="application/json" required style="font-size:11px;color:var(--text-3)"/>
+      <button class="a-btn a-btn-ghost a-btn-xs">⬆️ Import Workflow (.json)</button>
+    </form>
+  </div>
+  <div class="a-panel-body">
+    <p class="text-xs" style="color:var(--text-3);margin-bottom:12px">One-click starting points — clones a ready-made workflow (paused) into your list so you can review and adjust it before turning it on.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {% for tpl in [
+        {"key":"lead_email","title":"New Hire Request → Email Me","desc":"Emails you the moment someone submits the hire-me form.","trigger":"hire_request_submitted"},
+        {"key":"bot_slack","title":"Bot Message → Notify Slack","desc":"Posts to a Slack/Discord webhook whenever a customer messages any connected bot.","trigger":"channel_message_received"},
+        {"key":"meeting_notify","title":"Meeting Scheduled → Admin Alert","desc":"Creates an in-app notification whenever a customer meeting is booked.","trigger":"meeting_scheduled"},
+      ] %}
+      <div class="ds-card" style="padding:14px;background:rgba(255,255,255,0.02)">
+        <p class="text-sm text-white font-medium">{{ tpl.title }}</p>
+        <p class="text-xs text-gray-500 mt-1 mb-3">{{ tpl.desc }}</p>
+        <form method="POST" action="{{ url_for('admin.use_workflow_template', key=tpl.key) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button class="a-btn a-btn-ghost a-btn-xs">Use This Template</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if saved_templates %}
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Your Saved Templates</div></div>
+  <div class="a-panel-body">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {% for tpl in saved_templates %}
+      <div class="ds-card" style="padding:14px;background:rgba(255,255,255,0.02)">
+        <p class="text-sm text-white font-medium">{{ tpl.name }}</p>
+        {% if tpl.description %}<p class="text-xs text-gray-500 mt-1 mb-2">{{ tpl.description }}</p>{% endif %}
+        <p class="text-xs text-gray-600 mb-3">Trigger: {{ triggers.get(tpl.trigger_type, tpl.trigger_type) }} · {{ tpl.actions|length }} action(s)</p>
+        <div style="display:flex;gap:6px">
+          <form method="POST" action="{{ url_for('admin.use_saved_template', tid=tpl.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button class="a-btn a-btn-ghost a-btn-xs">Use</button>
+          </form>
+          <form method="POST" action="{{ url_for('admin.delete_saved_template', tid=tpl.id) }}" class="inline" onsubmit="return confirm('Delete this saved template?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button class="a-btn a-btn-ghost a-btn-xs" style="color:#ff5b7e">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header" style="display:flex;justify-content:space-between;align-items:center">
+    <div class="a-panel-title">New Workflow</div>
+    <a href="{{ url_for('admin.automation_canvas') }}" class="a-btn a-btn-ghost a-btn-xs">🧩 Open Visual Canvas Builder</a>
+  </div>
+  <div class="a-panel-body">
+    <form method="POST" action="{{ url_for('admin.create_workflow') }}" id="wf-form" onsubmit="return prepareSubmit()">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="actions_json" id="actions_json" value="[]"/>
+
+      <div class="a-grid a-grid-2" style="gap:14px;margin-bottom:14px">
+        <div>
+          <label class="a-label">Workflow Name</label>
+          <input type="text" name="name" required class="a-input" placeholder="Notify me of new hire requests"/>
+        </div>
+        <div>
+          <label class="a-label">Trigger — "When this happens…"</label>
+          <select id="trigger_type" name="trigger_type" class="a-input" required>
+            {% for key, label in triggers.items() %}
+            <option value="{{ key }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <label class="a-label">Actions — "…do this" (runs in order)</label>
+      <p class="text-xs" style="color:var(--text-3);margin:2px 0 6px">Need an If/Else branch? Use the <a href="{{ url_for('admin.automation_canvas') }}" style="color:#38bdf8">Visual Canvas Builder</a> instead — branching needs its two-column condition editor, which doesn't fit this simple list form.</p>
+      <div id="actions-list" style="margin-top:8px"></div>
+      <button type="button" onclick="addAction()" class="admin-btn-ghost text-xs" style="margin-top:4px">+ Add Action</button>
+
+      <div style="margin-top:16px">
+        <button class="a-btn a-btn-primary">Create Workflow</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="a-panel" style="margin-bottom:20px">
+  <div class="a-panel-header"><div class="a-panel-title">Workflows ({{ workflows|length }})</div></div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not workflows %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No workflows yet — create one above. Try: trigger "New Hire-Me Request" → action "Send Email" to yourself.</p>
+    {% else %}
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-white/10 text-xs text-gray-500 uppercase">
+        <th class="text-left px-5 py-3">Name</th>
+        <th class="text-left px-3 py-3">Trigger</th>
+        <th class="text-left px-3 py-3 hidden md:table-cell">Actions</th>
+        <th class="text-left px-3 py-3 hidden lg:table-cell">Runs</th>
+        <th class="text-left px-3 py-3">Status</th>
+        <th class="text-right px-5 py-3">Manage</th>
+      </tr></thead>
+      <tbody class="divide-y divide-white/5">
+        {% for wf in workflows %}
+        <tr class="hover:bg-white/3 transition-colors">
+          <td class="px-5 py-3 text-white">{{ wf.name }}</td>
+          <td class="px-3 py-3 text-gray-400 text-xs">{{ triggers.get(wf.trigger_type, wf.trigger_type) }}</td>
+          <td class="px-3 py-3 hidden md:table-cell text-gray-400 text-xs">{{ wf.actions|length }} action{{ 's' if wf.actions|length != 1 }}</td>
+          <td class="px-3 py-3 hidden lg:table-cell text-gray-500 text-xs">{{ wf.run_count }}{% if wf.last_run_at %} · last {{ wf.last_run_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
+          <td class="px-3 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full {% if wf.active %}bg-green-500/20 text-green-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">{{ 'active' if wf.active else 'paused' }}</span>
+            {% set h = workflow_health.get(wf.id, {}) %}
+            {% if h.status == 'failing' %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400" title="Last runs failed">⚠ failing</span>
+            {% elif h.status == 'warning' %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400" title="{{ h.recent_fail_count }} of last {{ h.recent_total }} runs failed">⚠ {{ h.recent_fail_count }} recent fail(s)</span>
+            {% elif h.status == 'never_run' %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-500">never run</span>
+            {% else %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-500" title="No failed runs in recent history">✓ healthy</span>
+            {% endif %}
+            {% if wf.client_project %}
+            <div class="text-[10px] text-gray-500 mt-1">for {{ wf.client_project.title }}</div>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-right whitespace-nowrap space-x-1">
+            <a href="{{ url_for('admin.automation_canvas', wid=wf.id) }}" class="text-xs px-2 py-1 rounded border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10">Canvas</a>
+            <a href="{{ url_for('admin.export_workflow', wid=wf.id) }}" class="text-xs px-2 py-1 rounded border border-blue-500/30 text-blue-400 hover:bg-blue-500/10">Export</a>
+            <form method="POST" action="{{ url_for('admin.clone_workflow', wid=wf.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-blue-500/30 text-blue-400 hover:bg-blue-500/10">Clone</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.save_workflow_as_template', wid=wf.id) }}" class="inline" onsubmit="return confirmSaveTemplate(this, {{ wf.name|tojson }});">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <input type="hidden" name="name" value="{{ wf.name }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10">Save as Template</button>
+            </form>
+            <button type="button" class="text-xs px-2 py-1 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10" onclick="document.getElementById('billing-row-{{ wf.id }}').classList.toggle('hidden')">💵 Billing</button>
+            <form method="POST" action="{{ url_for('admin.test_workflow', wid=wf.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-purple-500/30 text-purple-400 hover:bg-purple-500/10">Test</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.toggle_workflow', wid=wf.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">{{ 'Pause' if wf.active else 'Resume' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.delete_workflow', wid=wf.id) }}" class="inline" onsubmit="return confirm('Delete this workflow?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="text-xs px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10">Delete</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="billing-row-{{ wf.id }}" class="hidden bg-white/2">
+          <td colspan="6" class="px-5 py-3">
+            <p class="text-xs text-gray-500 mb-2">Running this automation for a customer? This workflow's webhook (if any) is already its own URL, isolated from every other workflow — this just assigns it to a customer for billing.</p>
+            <form method="POST" action="{{ url_for('admin.update_workflow_billing', wid=wf.id) }}" class="inline-grid" style="grid-template-columns:1fr 140px auto auto;gap:8px;align-items:end;display:inline-grid">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <div>
+                <label class="a-label">Customer</label>
+                <select name="client_project_id" class="a-input" style="margin-top:4px">
+                  <option value="">— not billed —</option>
+                  {% for cp in client_projects %}
+                  <option value="{{ cp.id }}" {% if wf.client_project_id == cp.id %}selected{% endif %}>{{ cp.title }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="a-label">Monthly Fee ($)</label>
+                <input type="number" step="0.01" min="0" name="monthly_fee" value="{{ wf.monthly_fee or '' }}" class="a-input" style="margin-top:4px"/>
+              </div>
+              <button type="submit" class="a-btn a-btn-ghost a-btn-xs">Save</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.invoice_workflow', wid=wf.id) }}" class="inline" style="margin-left:8px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="a-btn a-btn-ghost a-btn-xs" style="border-color:rgba(74,222,128,0.4);color:#4ade80">Invoice this month</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<div class="a-panel">
+  <div class="a-panel-header" style="display:flex;justify-content:space-between;align-items:center">
+    <div class="a-panel-title">Recent Runs</div>
+    <a href="{{ url_for('admin.automation_executions') }}" class="a-btn a-btn-ghost a-btn-xs">View all executions →</a>
+  </div>
+  <div class="a-panel-body" style="padding:0">
+    {% if not recent_runs %}
+    <p style="padding:24px;color:var(--text-3);font-size:13px">No runs yet.</p>
+    {% else %}
+    <div style="max-height:280px;overflow-y:auto">
+    {% for run in recent_runs[:8] %}
+    <div style="padding:10px 20px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="min-width:0">
+        <span style="color:#e2e8f0;font-weight:600">{{ run.workflow.name if run.workflow else 'deleted workflow' }}</span>
+        <span style="color:#6b7a9a;margin-left:8px">{{ run.created_at.strftime('%b %d, %H:%M') }}</span>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded-full {% if run.status=='success' %}bg-green-500/20 text-green-400{% elif run.status=='partial' %}bg-yellow-500/20 text-yellow-400{% else %}bg-red-500/20 text-red-400{% endif %}">{{ run.status }}</span>
+    </div>
+    {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function confirmSaveTemplate(form, defaultName) {
+  const name = prompt('Save as a template named:', defaultName);
+  if (!name) return false;
+  form.querySelector('[name="name"]').value = name;
+  return true;
+}
+const ACTION_TYPES = {{ action_types | tojson }};
+const CHANNELS = {{ channels_json | tojson }};
+const AGENTS = {{ agents_json | tojson }};
+let actionCount = 0;
+
+function addAction() {
+  const id = actionCount++;
+  const div = document.createElement('div');
+  div.className = 'action-row';
+  div.id = 'action-' + id;
+  const options = Object.entries(ACTION_TYPES).filter(([k]) => k !== 'condition').map(([k,v]) => `<option value="${k}">${v}</option>`).join('');
+  div.innerHTML = `
+    <div style="flex:1">
+      <select onchange="renderActionFields(${id})" class="w-full" data-role="type">${options}</select>
+      <div id="fields-${id}" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+    <button type="button" onclick="document.getElementById('action-${id}').remove()" style="color:#f87171;background:none;border:none;cursor:pointer;font-size:14px">✕</button>
+  `;
+  document.getElementById('actions-list').appendChild(div);
+  renderActionFields(id);
+}
+
+function renderActionFields(id) {
+  const row = document.getElementById('action-' + id);
+  const type = row.querySelector('[data-role="type"]').value;
+  const fieldsDiv = document.getElementById('fields-' + id);
+  if (type === 'send_email') {
+    fieldsDiv.innerHTML = `
+      <input data-key="to" placeholder="Send to (email, or 'admin', or {{ '{{email}}' }} to reply to the trigger)" value="admin"/>
+      <input data-key="subject" placeholder="Subject — you can use {{ '{{name}}' }}, {{ '{{email}}' }}, etc."/>
+      <textarea data-key="body" rows="3" placeholder="Email body (HTML) — same {{ '{{variables}}' }} available"></textarea>
+      <input data-key="from_name" placeholder="Display name override — optional, e.g. a customer's business name"/>
+      <input data-key="reply_to" placeholder="Reply-To address — optional, e.g. the customer's own email"/>`;
+  } else if (type === 'webhook') {
+    fieldsDiv.innerHTML = `<input data-key="url" placeholder="https://hooks.zapier.com/... or your n8n/Make/Slack/Discord webhook URL"/>`;
+  } else if (type === 'notify_admin') {
+    fieldsDiv.innerHTML = `<input data-key="message" placeholder="Notification text — {{ '{{variables}}' }} available"/>`;
+  } else if (type === 'send_channel_reply') {
+    const channelOptions = CHANNELS.map(c => `<option value="${c.id}">${c.label} (${c.platform})</option>`).join('');
+    fieldsDiv.innerHTML = `
+      <select data-key="channel_id">${channelOptions || '<option value="">No channels connected yet — connect one under Social Bots first</option>'}</select>
+      <input data-key="to" placeholder="Recipient — leave blank to use {{ '{{contact}}' }} from the trigger, or set a fixed number/chat ID"/>
+      <textarea data-key="message" rows="3" placeholder="Message — {{ '{{variables}}' }} available, e.g. New lead: {{ '{{name}}' }}"></textarea>`;
+  } else if (type === 'post_to_linkedin') {
+    const liOptions = CHANNELS.filter(c => c.platform === 'linkedin').map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+    fieldsDiv.innerHTML = `
+      <select data-key="channel_id">${liOptions || '<option value="">No LinkedIn channel connected yet — connect one under Social Channels first</option>'}</select>
+      <textarea data-key="message" rows="3" placeholder="Post text — {{ '{{variables}}' }} available, e.g. New review from {{ '{{name}}' }}!"></textarea>`;
+  } else if (type === 'ai_agent') {
+    const agentOptions = AGENTS.map(a => `<option value="${a.id}">${a.label}</option>`).join('');
+    fieldsDiv.innerHTML = `
+      <select data-key="agent_id">${agentOptions || '<option value="">No active agents yet — create one under AI Agents first</option>'}</select>
+      <textarea data-key="message" rows="3" placeholder="What should the agent do? — {{ '{{variables}}' }} available, e.g. A new hire-me request came in from {{ '{{name}}' }}: {{ '{{message}}' }}. Draft a follow-up email."></textarea>
+      <p style="font-size:11px;color:var(--text-muted);margin:2px 0 0">
+        The agent runs unattended — anything it creates (blog drafts, to-dos, etc) stays inactive/unpublished for you to review.
+      </p>`;
+  } else if (type === 'append_google_sheet') {
+    const gsOptions = CHANNELS.filter(c => c.platform === 'google_sheets').map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+    fieldsDiv.innerHTML = `
+      <select data-key="channel_id">
+        <option value="">Use your site-wide service account (default)</option>
+        ${gsOptions}
+      </select>
+      <input data-key="spreadsheet_id" placeholder="Spreadsheet ID — the long ID from the sheet's URL between /d/ and /edit"/>
+      <input data-key="sheet_range" placeholder="Sheet + range, e.g. Sheet1!A:Z" value="Sheet1!A:Z"/>
+      <input data-key="values" placeholder="Columns separated by | — e.g. {{ '{{name}}' }} | {{ '{{email}}' }} | {{ '{{message}}' }}"/>
+      <p style="font-size:11px;color:var(--text-muted);margin:2px 0 0">
+        Leave the connection on "site-wide service account" unless a client has connected their own Google account
+        (Client Portal → My Bots) — pick theirs to write into a sheet THEY own instead of one you control.
+      </p>`;
+  }
+}
+
+function prepareSubmit() {
+  const actions = [];
+  document.querySelectorAll('.action-row').forEach(row => {
+    const type = row.querySelector('[data-role="type"]').value;
+    const config = {};
+    row.querySelectorAll('[data-key]').forEach(el => config[el.dataset.key] = el.value);
+    actions.push({ type, config });
+  });
+  document.getElementById('actions_json').value = JSON.stringify(actions);
+  if (actions.length === 0) {
+    alert('Add at least one action.');
+    return false;
+  }
+  return true;
+}
+
+addAction(); // start with one action row
+</script>
+{% endblock %}

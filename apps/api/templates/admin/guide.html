@@ -1,0 +1,295 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Site Guide & Operations Manual{% endblock %}
+{% block page_subtitle %}Central documentation for all built-in features, automations, and AI tools.{% endblock %}
+{% block content %}
+
+<!-- Premium Styles for Site Guide -->
+<style>
+  .guide-grid {
+    display: grid;
+    grid-template-columns: 1fr 3fr;
+    gap: 24px;
+  }
+  @media(max-width: 992px) {
+    .guide-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Sidebar navigation */
+  .guide-nav-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+    position: sticky;
+    top: 20px;
+    height: fit-content;
+  }
+  .guide-nav-link {
+    display: block;
+    padding: 8px 12px;
+    color: #8b949e;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    margin-bottom: 4px;
+  }
+  .guide-nav-link:hover, .guide-nav-link.active {
+    background: #21262d;
+    color: #58a6ff;
+  }
+
+  /* Main content panels */
+  .guide-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    scroll-margin-top: 20px;
+  }
+  .guide-h {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #21262d;
+    padding-bottom: 8px;
+  }
+  .guide-p {
+    font-size: 13.5px;
+    color: #8b949e;
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .guide-list {
+    font-size: 13.5px;
+    color: #8b949e;
+    line-height: 1.8;
+    padding-left: 20px;
+    list-style-type: disc;
+    margin-bottom: 14px;
+  }
+  .guide-list b {
+    color: #fff;
+  }
+  .guide-link {
+    color: #58a6ff;
+    text-decoration: none;
+  }
+  .guide-link:hover {
+    text-decoration: underline;
+  }
+
+  .video-slot {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .video-slot iframe {
+    width: 100%;
+    aspect-ratio: 16/9;
+    border: 0;
+    border-radius: 6px;
+  }
+</style>
+
+<div class="guide-grid">
+  <!-- Left Side: Nav Menu -->
+  <div>
+    <div class="guide-nav-card">
+      <strong style="display:block; font-size:11px; text-transform:uppercase; color:#8b949e; margin-bottom:12px; padding-left:12px">Sections</strong>
+      <a href="#section-video" class="guide-nav-link active">🎥 Video Tutorials</a>
+      <a href="#section-public" class="guide-nav-link">🏠 Public Site</a>
+      <a href="#section-flows" class="guide-nav-link">🎯 Client Lifecycle Flows</a>
+      <a href="#section-studio" class="guide-nav-link">📡 Content Studio & AI</a>
+      <a href="#section-inbox" class="guide-nav-link">💬 Unified Inbox & Sentiment</a>
+      <a href="#section-notebook" class="guide-nav-link">📝 Brand Workspace Note</a>
+      <a href="#section-devconsole" class="guide-nav-link">🛠️ AI Developer Console</a>
+      <a href="#section-popups" class="guide-nav-link">🪧 Site Popups</a>
+      <a href="#section-sequences" class="guide-nav-link">📧 Email Drip Sequences</a>
+      <a href="#section-partners" class="guide-nav-link">🤝 Partners & Settings</a>
+    </div>
+  </div>
+
+  <!-- Right Side: Content -->
+  <div>
+    <!-- Section: Videos -->
+    <div class="guide-card" id="section-video">
+      <div class="guide-h">🎥 Video Tutorials</div>
+      <p class="guide-p">Paste any YouTube walkthrough link to embed tutorials directly into this operations manual for easy onboarding.</p>
+      
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px">
+        {% set default_videos = {
+          "automation": ("Automation Canvas & n8n Studio", "eIrMbAQSU34"),
+          "social_bots": ("Social Auto-Reply Bots", "_tA5cinv0U8"),
+          "leads": ("Google Niche Lead Prospecting", "g98XQZzG7kY"),
+          "brand_editor": ("Brand Workspace & Word Replica", "uW8bIe2392M")
+        } %}
+        {% for key, (label, default_id) in default_videos.items() %}
+        {% set vid_id = video_urls[key] or default_id %}
+        <div class="video-slot">
+          <strong style="font-size:12px; color:#fff; display:block; margin-bottom:8px">📺 {{ label }}</strong>
+          <iframe src="https://www.youtube.com/embed/{{ vid_id }}" allowfullscreen style="width:100%; aspect-ratio:16/9; border:0; border-radius:6px"></iframe>
+          <div style="display:flex; gap:6px; margin-top:8px">
+            <input class="a-input" id="video-url-{{ key }}" placeholder="Paste custom YouTube URL" style="font-size:11px"/>
+            <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="saveGuideVideo('{{ key }}')">Set</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Section: Public Site -->
+    <div class="guide-card" id="section-public">
+      <div class="guide-h">🏠 Public Site Structure</div>
+      <p class="guide-p">What your visitors and customers interact with. Managed directly from the Admin Dashboard:</p>
+      <ul class="guide-list">
+        <li><b>Home Page</b> — Displays the hero section (supporting slideshow carousel with manual next/prev buttons and background video), client projects list, dev trends, and testimonials.</li>
+        <li><b>Portfolio & About</b> — Displays bio profile info, experience milestones, certifications, and developer skills.</li>
+        <li><b>Hire Me Intake</b> — Customer-facing project onboarding form. Submissions populate the admin Project Requests funnel automatically.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Lifecycle Flows -->
+    <div class="guide-card" id="section-flows">
+      <div class="guide-h">🎯 Client Lifecycle Flows</div>
+      <p class="guide-p">The complete customer engagement cycle in one unified platform:</p>
+      <ul class="guide-list">
+        <li><b>Request Intake</b> — Client submits a project inquiry via the "Hire Me" form.</li>
+        <li><b>Proposal & Quote</b> — Admin reviews the request, drafts a timeline, sets a proposal amount, and sends the proposal. Currency formats (USD/NGN) align with site configurations dynamically.</li>
+        <li><b>Acceptance & Setup</b> — Client accepts the quote, selecting their preferred payment cycle (Full, Split, or After-service). An active Client Project with tracking milestones is generated.</li>
+        <li><b>Payment Verification</b> — Client submits transaction references (for manual Bank Transfer or Cryptocurrencies) with uploaded image screenshots as receipt proof. Admin verifies the proof in <a class="guide-link" href="{{ url_for('admin.confirm_payments') }}">Confirm Payments</a> and approves.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Content Studio -->
+    <div class="guide-card" id="section-studio">
+      <div class="guide-h">📡 Content Studio & AI Generators</div>
+      <p class="guide-p">Create content variations, script briefs, and custom graphics in <a class="guide-link" href="{{ url_for('admin.content_studio') }}">Admin → Content Studio</a>:</p>
+      <ul class="guide-list">
+        <li><b>Website Scanner</b> — Continuously parses blog articles, services, and products (including pricing, tags, links) to propose custom target post opportunities automatically.</li>
+        <li><b>Copy Composer & Optimizer</b> — Drafts captions, emails, or blogs. The "Optimize Copy" tool parses drafts to recommend variations and trending hashtags.</li>
+        <li><b>Short Video Outliner</b> — Creates Reels/Shorts script breakdowns (Hook, visual scene cues, CTA outliners) matching specified topics.</li>
+        <li><b>DALL-E Graphics</b> — Generates custom graphics with OpenAI DALL-E and downloads them to your local assets folder instantly.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Unified Inbox -->
+    <div class="guide-card" id="section-inbox">
+      <div class="guide-h">💬 Unified Inbox & Sentiment Analytics</div>
+      <p class="guide-p">Communicate across platforms in <a class="guide-link" href="{{ url_for('admin.social_inbox') }}">Admin → Conversation Inbox</a>:</p>
+      <ul class="guide-list">
+        <li><b>Omnichannel Messages</b> — Syncs communications from Telegram, WhatsApp, and Facebook Messenger.</li>
+        <li><b>Sentiment Analysis</b> — Categorizes customer moods (Positive, Neutral, Negative) and displays visual progress bars of customer happiness.</li>
+        <li><b>AI Suggested Replies</b> — Drafts quick replies using brand guidelines, target audience restrictions, and forbidden vocabulary.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Rich Notebook -->
+    <div class="guide-card" id="section-notebook">
+      <div class="guide-h">📝 Rich Notebook Workspace</div>
+      <p class="guide-p">Write corporate guidelines, draft blogs, and structure guidelines in <a class="guide-link" href="{{ url_for('admin.rich_notes') }}">Admin → Notebook Workspace</a>:</p>
+      <ul class="guide-list">
+        <li><b>Word-like Toolbar</b> — Includes formatting (bold/italic/strikethrough), paragraph headers, lists, custom tables builder, and horizontal dividers.</li>
+        <li><b>Inset Note Boxes</b> — Insert beautiful blue notification callouts or yellow warning boxes into notebooks.</li>
+        <li><b>Ready Templates</b> — Insert pre-formatted checklist structures or pricing tables instantly.</li>
+      </ul>
+    </div>
+
+    <!-- Section: AI Developer Console -->
+    <div class="guide-card" id="section-devconsole">
+      <div class="guide-h">🛠️ AI Developer Console</div>
+      <p class="guide-p">Perform codebase updates, binding verifications, and asset configurations in <a class="guide-link" href="{{ url_for('admin.ai_developer_tool') }}">Admin → AI Developer Tool</a>:</p>
+      <ul class="guide-list">
+        <li><b>Hero Video BG</b> — Toggle background types between particles, slideshows, and video streams.</li>
+        <li><b>Verification Checks</b> — Run integrity tests on payment proofs, balanced bento card columns, and custom skill badges.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Popups -->
+    <div class="guide-card" id="section-popups">
+      <div class="guide-h">🪧 Site Popups (Website Automation)</div>
+      <p class="guide-p">Show overlay modals to site visitors without loading external libraries in <a class="guide-link" href="{{ url_for('admin.site_popups') }}">Admin → Site Popups</a>:</p>
+      <ul class="guide-list">
+        <li><b>Trigger Options</b> — Show popups after a time delay, on exit-intent (mouse moves out of viewport), or scroll completion.</li>
+        <li><b>Targeting & Frequency</b> — Limit overlays to specific URL patterns (like `/blog`) and frequency rules.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Drip Campaigns -->
+    <div class="guide-card" id="section-sequences">
+      <div class="guide-h">📧 Email Drip Sequences</div>
+      <p class="guide-p">Build multi-step automated email funnels in <a class="guide-link" href="{{ url_for('admin.email_sequences') }}">Admin → Email Sequences</a>:</p>
+      <ul class="guide-list">
+        <li><b>Enrollment Triggers</b> — Enroll users manually or automate triggers upon new newsletter signups.</li>
+        <li><b>Sequence Steps</b> — Draft emails with dynamic variables like <code>{% raw %}{{name}}{% endraw %}</code>.</li>
+      </ul>
+    </div>
+
+    <!-- Section: Partners Directory -->
+    <div class="guide-card" id="section-partners">
+      <div class="guide-h">🤝 Partners & Custom Settings</div>
+      <p class="guide-p">Configure global features and brand logos in <a class="guide-link" href="{{ url_for('admin.settings') }}">Admin → Site Settings</a>:</p>
+      <ul class="guide-list">
+        <li><b>Partners upload</b> — Manage corporate partner logos (names, image links) to display on the home page.</li>
+        <li><b>Site Currency & Config</b> — Update regional currencies (USD, NGN, EUR, etc.) and configure payment details.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// Extract YouTube Video ID
+function extractYouTubeId(url) {
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+async function saveGuideVideo(key) {
+  const input = document.getElementById('video-url-' + key);
+  const id = extractYouTubeId(input.value.trim());
+  if (!id) { alert('Invalid YouTube URL.'); return; }
+  await saveSetting('guide_video_' + key, id, null);
+  location.reload();
+}
+
+async function clearGuideVideo(key) {
+  if (!confirm('Replace this video?')) return;
+  await saveSetting('guide_video_' + key, '', null);
+  location.reload();
+}
+
+// Sidebar Scroll Spy Highlight
+document.addEventListener('DOMContentLoaded', () => {
+  const sections = document.querySelectorAll('.guide-card');
+  const navLinks = document.querySelectorAll('.guide-nav-link');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(section => {
+      const top = section.offsetTop;
+      const height = section.clientHeight;
+      if (pageYOffset >= top - 60) {
+        current = section.getAttribute('id');
+      }
+    });
+
+    navLinks.forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === '#' + current) {
+        link.classList.add('active');
+      }
+    });
+  });
+});
+</script>
+{% endblock %}

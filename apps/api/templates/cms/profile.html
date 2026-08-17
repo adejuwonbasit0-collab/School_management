@@ -1,0 +1,80 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block title %}Profile Settings — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="legacy-content-wrapper">
+  <h1 class="text-2xl font-bold text-white mb-2">Profile Settings</h1>
+  <p class="text-gray-400 text-sm mb-8">Manage your account details.</p>
+
+  <div class="glass-card-premium rounded-2xl p-6 mb-6">
+    <form method="POST" enctype="multipart/form-data" class="space-y-5">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="flex items-center gap-4">
+        <img src="{{ current_user.get_avatar_url() }}" alt="" class="w-16 h-16 rounded-full object-cover border border-white/10"/>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Profile Photo</label>
+          <input type="file" name="avatar" accept="image/*" class="text-xs text-gray-400"/>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Name</label>
+        <input type="text" name="name" value="{{ current_user.name or '' }}" class="input-field w-full" placeholder="Your name"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Email</label>
+        <input type="text" value="{{ current_user.email }}" disabled class="input-field w-full opacity-50 cursor-not-allowed"/>
+        <p class="text-xs text-gray-600 mt-1">Contact support to change your email address.</p>
+      </div>
+      <button class="btn-neon px-6 py-2.5">Save Changes</button>
+    </form>
+  </div>
+
+  <div class="glass-card-premium rounded-2xl p-6 mb-6">
+    <h3 class="text-sm font-semibold text-white mb-4">Account Summary</h3>
+    <div class="grid grid-cols-2 gap-4">
+      <div><p class="text-xs text-gray-500">Orders</p><p class="text-xl font-bold text-white">{{ order_count }}</p></div>
+      <div><p class="text-xs text-gray-500">Projects</p><p class="text-xl font-bold text-white">{{ project_count }}</p></div>
+    </div>
+  </div>
+
+  <div class="glass-card-premium rounded-2xl p-6">
+    <h3 class="text-sm font-semibold text-white mb-4">Change Password</h3>
+    <form id="pw-form" class="space-y-4">
+      <input type="password" id="current-password" placeholder="Current password" class="input-field w-full" required/>
+      <input type="password" id="new-password" placeholder="New password" class="input-field w-full" required minlength="8"/>
+      <button type="submit" class="btn-ghost-neon px-6 py-2.5">Update Password</button>
+      <p id="pw-status" class="text-xs mt-2"></p>
+    </form>
+  </div>
+  </div>
+</div>
+<script>
+document.getElementById('pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('pw-status');
+  status.textContent = 'Saving…';
+  status.style.color = '#888';
+  try {
+    const res = await fetch('{{ url_for("auth.change_password") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({
+        current_password: document.getElementById('current-password').value,
+        new_password: document.getElementById('new-password').value,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      status.textContent = 'Password updated!';
+      status.style.color = '#1DB954';
+      document.getElementById('pw-form').reset();
+    } else {
+      status.textContent = data.error || data.message || 'Failed to update password.';
+      status.style.color = '#ff5b7e';
+    }
+  } catch (err) {
+    status.textContent = 'Something went wrong.';
+    status.style.color = '#ff5b7e';
+  }
+});
+</script>
+{% endblock %}

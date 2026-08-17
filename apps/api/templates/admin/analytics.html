@@ -1,0 +1,139 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Analytics{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div class="flex gap-2">
+    {% for d in [7,14,30,90] %}
+    <a href="{{ url_for('admin.analytics', days=d) }}" class="text-xs px-4 py-2 rounded-lg border {% if days==d %}border-cyan-500 text-cyan-400{% else %}border-white/10 text-gray-400 hover:border-white/20{% endif %} transition-all">{{ d }}d</a>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('admin.export_analytics_csv', days=days) }}" class="text-xs px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:border-cyan-500/40 hover:text-cyan-400 transition-all">⬇ Export CSV</a>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-5 gap-4 mb-4">
+  <div class="glass border border-white/10 rounded-2xl p-5"><p class="text-xs text-gray-500 mb-1">New Signups</p><p class="text-3xl font-bold font-display text-white">{{ signups }}</p></div>
+  <div class="glass border border-white/10 rounded-2xl p-5">
+    <p class="text-xs text-gray-500 mb-1">Revenue <span class="text-gray-600">(products + projects, in {{ display_currency }})</span></p>
+    <p class="text-3xl font-bold font-display gradient-text">{{ revenue | int | money }}</p>
+    <p class="text-[11px] text-gray-500 mt-1">{{ product_revenue | int | money }} products · {{ project_revenue | int | money }} projects</p>
+    {% if unconverted_currencies %}<p class="text-[11px] text-amber-400 mt-1">⚠ {{ unconverted_currencies|join(', ') }} revenue in this window has no manual exchange rate set, so it's counted 1:1 above — set rates in <a href="{{ url_for('admin.payment_config') }}" class="underline">Payment Config</a> for an accurate total. See <a href="{{ url_for('admin.financials') }}" class="underline">Financials</a> for the true unconverted per-currency breakdown.</p>{% endif %}
+  </div>
+  <div class="glass border border-white/10 rounded-2xl p-5"><p class="text-xs text-gray-500 mb-1">Paid Orders + Invoices</p><p class="text-3xl font-bold font-display text-white">{{ order_count }}</p></div>
+  <div class="glass border border-white/10 rounded-2xl p-5"><p class="text-xs text-gray-500 mb-1">Unique Visitors</p><p class="text-3xl font-bold font-display text-white">{{ unique_visitors }}</p></div>
+  <div class="glass border border-white/10 rounded-2xl p-5"><p class="text-xs text-gray-500 mb-1">Page Views</p><p class="text-3xl font-bold font-display text-white">{{ total_views }}</p></div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+  <div class="glass border border-white/10 rounded-2xl p-5"><p class="text-xs text-gray-500 mb-1">Conversions <span class="text-gray-600">(leads, signups, purchases, contact forms)</span></p><p class="text-3xl font-bold font-display text-white">{{ total_conversions }}</p></div>
+  <div class="glass border border-white/10 rounded-2xl p-5"><p class="text-xs text-gray-500 mb-1">Conversion Rate <span class="text-gray-600">(conversions ÷ page views)</span></p><p class="text-3xl font-bold font-display text-white">{{ conversion_rate }}%</p></div>
+</div>
+
+<div class="glass border border-white/10 rounded-2xl p-6 mb-6">
+  <h3 class="font-semibold text-white mb-4">Revenue over {{ days }} days</h3>
+  <div style="height:280px"><canvas id="revenueChart"></canvas></div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+  <div class="glass border border-white/10 rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Top Pages</h3>
+    {% if top_pages %}
+    <div style="height:220px"><canvas id="topPagesChart"></canvas></div>
+    {% else %}<p class="text-sm text-gray-500">No page view data yet for this period.</p>{% endif %}
+  </div>
+
+  <div class="glass border border-white/10 rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Devices</h3>
+    {% if device_breakdown %}
+    <div style="height:220px"><canvas id="deviceChart"></canvas></div>
+    {% else %}<p class="text-sm text-gray-500">No device data yet.</p>{% endif %}
+  </div>
+
+  <div class="glass border border-white/10 rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Top Referrers</h3>
+    {% if top_referrers %}
+    <div style="height:220px"><canvas id="referrersChart"></canvas></div>
+    {% else %}<p class="text-sm text-gray-500">No referrer data yet (mostly direct traffic).</p>{% endif %}
+  </div>
+
+  <div class="glass border border-white/10 rounded-2xl p-6">
+    <h3 class="font-semibold text-white mb-4">Conversions by Type</h3>
+    {% if event_breakdown %}
+    {% set event_labels = {"purchase":"Product Purchase","invoice_payment":"Invoice Payment","hire_me_lead":"Hire-Me Lead","contact_submit":"Contact Form","newsletter_signup":"Newsletter Signup","signup":"Account Signup"} %}
+    {% set max_count = event_breakdown[0][1] if event_breakdown else 1 %}
+    <div class="space-y-3">
+      {% for ev, count in event_breakdown %}
+      <div>
+        <div class="flex justify-between text-xs text-gray-400 mb-1">
+          <span>{{ event_labels.get(ev, ev|replace('_',' ')|title) }}</span><span class="text-white font-mono">{{ count }}</span>
+        </div>
+        <div class="h-1.5 rounded-full bg-white/5 overflow-hidden"><div class="h-full rounded-full" style="width:{{ (count / max_count * 100)|round }}%;background:linear-gradient(90deg,#bf00ff,#00d4ff)"></div></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="text-sm text-gray-500">No conversion events recorded yet for this period.</p>{% endif %}
+  </div>
+</div>
+
+<script>
+Chart.defaults.color = '#8899b0';
+Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+const revLabels = {{ daily | map(attribute='date') | list | tojson }};
+const revData = {{ daily | map(attribute='revenue') | list | tojson }};
+new Chart(document.getElementById('revenueChart'), {
+  type: 'line',
+  data: { labels: revLabels, datasets: [{
+    label: 'Revenue', data: revData, fill: true, tension: 0.35,
+    borderColor: '#00f5ff', backgroundColor: 'rgba(0,245,255,0.08)',
+    pointRadius: 0, pointHoverRadius: 5, pointBackgroundColor: '#00f5ff', borderWidth: 2,
+  }]},
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '$' + c.parsed.y.toFixed(2) } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } }, x: { ticks: { maxTicksLimit: 10 } } },
+  }
+});
+
+{% if top_pages %}
+new Chart(document.getElementById('topPagesChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ top_pages | map(attribute=0) | list | tojson }},
+    datasets: [{ data: {{ top_pages | map(attribute=1) | list | tojson }}, backgroundColor: '#bf00ff', borderRadius: 6 }]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { beginAtZero: true } },
+  }
+});
+{% endif %}
+
+{% if device_breakdown %}
+new Chart(document.getElementById('deviceChart'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ device_breakdown | map(attribute=0) | list | tojson }},
+    datasets: [{ data: {{ device_breakdown | map(attribute=1) | list | tojson }},
+      backgroundColor: ['#00f5ff', '#bf00ff', '#4ade80', '#facc15', '#f87171'], borderWidth: 0 }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12 } } } }
+});
+{% endif %}
+
+{% if top_referrers %}
+new Chart(document.getElementById('referrersChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ top_referrers | map(attribute=0) | list | tojson }},
+    datasets: [{ data: {{ top_referrers | map(attribute=1) | list | tojson }}, backgroundColor: '#00f5ff', borderRadius: 6 }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+});
+{% endif %}
+</script>
+{% endblock %}

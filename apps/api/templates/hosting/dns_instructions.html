@@ -1,0 +1,46 @@
+{% extends "public_base.html" %}
+{% block title %}Connect {{ sub.domain }} — {{ site_name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-16">
+  <h1 class="text-3xl font-bold font-display gradient-text mb-2">Connect {{ sub.domain }}</h1>
+  <p class="text-gray-400 mb-8">Add these records at your domain registrar (wherever you bought <strong class="text-white">{{ sub.domain }}</strong>) to point it at your hosting.</p>
+
+  <div class="glass border border-white/10 rounded-2xl overflow-hidden mb-8">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-white/10">
+          <th class="px-4 py-3 font-medium">Type</th>
+          <th class="px-4 py-3 font-medium">Host</th>
+          <th class="px-4 py-3 font-medium">Value</th>
+        </tr>
+      </thead>
+      <tbody class="font-mono text-xs sm:text-sm">
+        <tr class="border-b border-white/5">
+          <td class="px-4 py-3 text-cyan-400">A</td>
+          <td class="px-4 py-3 text-gray-300">@</td>
+          <td class="px-4 py-3 text-gray-300 break-all">{{ server_ip }}</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 text-cyan-400">CNAME</td>
+          <td class="px-4 py-3 text-gray-300">www</td>
+          <td class="px-4 py-3 text-gray-300 break-all">{{ sub.domain }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="glass border border-white/10 rounded-2xl p-6 mb-8">
+    <p class="text-sm text-gray-400">
+      DNS changes usually take effect within a few hours (can take up to 48h).
+      Once your domain resolves to us, an admin will verify it and your site goes live.
+    </p>
+  </div>
+
+  <div class="flex items-center gap-3 text-sm">
+    <span class="w-2.5 h-2.5 rounded-full {% if sub.dns_verified %}bg-green-400{% else %}bg-yellow-400{% endif %}"></span>
+    <span class="text-gray-300">{{ 'DNS verified — your site is live' if sub.dns_verified else 'Waiting for DNS to propagate' }}</span>
+  </div>
+
+  <a href="{{ url_for('dashboard.home') }}" class="btn-ghost-neon mt-10 inline-block">← Back to Dashboard</a>
+</div>
+{% endblock %}

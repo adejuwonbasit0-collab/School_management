@@ -1,0 +1,3145 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Automation Studio — Graph Canvas{% endblock %}
+{% block page_subtitle %}Build advanced multi-node event pipelines with logical branching, data conversion, database queries, and AI tasks.{% endblock %}
+{% block content %}
+<style>
+  :root {
+    --canvas-bg: #0d1117;
+    --grid-color: rgba(56, 189, 248, 0.04);
+    --node-bg: #161b22;
+    --node-border: #30363d;
+    --node-header-bg: #21262d;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-yellow: #d29922;
+    --accent-red: #f85149;
+  }
+
+  #canvas-layout {
+    display: block;
+  }
+  #node-sidebar {
+    width: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 4px 2px;
+  }
+  #node-sidebar .sidebar-header {
+    font-size: 10px; font-weight: 700; color: var(--text-secondary);
+    text-transform: uppercase; padding: 8px 8px 4px; letter-spacing: 0.03em;
+  }
+  #node-sidebar .sidebar-item {
+    display: block; padding: 7px 8px; border-radius: 6px; font-size: 12.5px;
+    color: var(--text-primary); text-decoration: none; cursor: pointer;
+  }
+  #node-sidebar .sidebar-item:hover { background: rgba(56,189,248,0.1); }
+
+  /* Root category picker — the "What happens next?" style list. Each row
+     needs real card presence (padding, icon badge, hover state) or it
+     just reads as plain unstyled text, which is what shipped before this
+     fix — the CSS for this block simply never made it into the file. */
+  .picker-category-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 12px; margin-bottom: 4px; border-radius: 10px;
+    cursor: pointer; border: 1px solid transparent;
+    transition: background 0.12s, border-color 0.12s;
+    position: relative;
+  }
+  .picker-category-row:hover {
+    background: rgba(255,255,255,0.05);
+    border-color: var(--node-border);
+  }
+  .picker-category-row::after {
+    content: '→'; position: absolute; right: 12px; top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    color: var(--text-secondary); opacity: 0; font-size: 14px;
+    transition: opacity 0.12s, transform 0.12s;
+  }
+  .picker-category-row:hover::after {
+    opacity: 1; transform: translateY(-50%) translateX(0);
+  }
+  .picker-category-icon {
+    width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; background: rgba(56,189,248,0.12);
+  }
+  .picker-category-title {
+    font-weight: 600; font-size: 14px; color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+  .picker-category-desc {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.4;
+    padding-right: 18px;
+  }
+  /* Level 1 app browser row — icon, name, op count, arrow. One row per
+     APP (e.g. "Gmail · 26 actions"), not one row per operation. */
+  .picker-app-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 10px; margin-bottom: 2px; border-radius: 8px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .picker-app-row:hover { background: rgba(255,255,255,0.05); border-color: var(--node-border); }
+  .picker-app-meta { flex: 1; min-width: 0; }
+  .picker-app-title { font-weight: 600; font-size: 13px; color: var(--text-primary); }
+  .picker-app-desc { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+  .picker-app-arrow { color: var(--text-secondary); font-size: 13px; flex-shrink: 0; }
+
+  /* Level 2 — one app's operations. */
+  .picker-ops-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 4px 14px; border-bottom: 1px solid var(--node-border); margin-bottom: 8px;
+  }
+  .picker-ops-title { font-weight: 700; font-size: 15px; color: var(--text-primary); }
+  .picker-ops-count { font-size: 11px; color: var(--text-secondary); }
+  .picker-op-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 9px 10px; margin-bottom: 2px; border-radius: 7px; font-size: 12.5px;
+    color: var(--text-primary); text-decoration: none; cursor: pointer;
+  }
+  .picker-op-row:hover { background: rgba(56,189,248,0.1); }
+  .picker-op-fav { cursor: pointer; opacity: 0.5; flex-shrink: 0; }
+  .picker-op-group-header {
+    font-size: 10.5px; font-weight: 700; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 12px 10px 4px; border-top: 1px solid var(--node-border); margin-top: 4px;
+  }
+  .picker-op-group-header:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
+
+  /* A search box you can actually SEE — icon prefix, real border, bigger
+     type, instead of a thin unlabeled input easy to miss entirely. */
+  .picker-search-wrap { position: relative; margin: 6px 0 12px; }
+  .picker-search-wrap i[data-lucide] {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    width: 15px; height: 15px; color: var(--text-secondary); pointer-events: none;
+  }
+  .picker-search-wrap input {
+    width: 100%; box-sizing: border-box; padding: 10px 12px 10px 34px; font-size: 13px;
+    background: var(--bg-secondary); border: 1.5px solid var(--node-border); border-radius: 9px;
+    color: var(--text-primary);
+  }
+  .picker-search-wrap input:focus { outline: none; border-color: var(--accent-blue); }
+  .picker-search-wrap input::placeholder { color: var(--text-secondary); }
+
+  #picker-simple-list-items .sidebar-item,
+  #picker-search-results .sidebar-item {
+    padding: 10px 10px; font-size: 13px; border-radius: 8px;
+    margin-bottom: 2px;
+  }
+  #picker-search-results .sidebar-header,
+  #picker-simple-list .sidebar-header { margin-top: 10px; }
+
+  /* Slide-in right panel — used for BOTH the "+ Add Node" picker and an
+     existing node's settings. Only one of the two is ever showing. */
+  #side-panel-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 400; display: none;
+  }
+  #side-panel-overlay.open { display: block; }
+  #side-panel {
+    position: fixed; top: 0; right: -420px; width: 420px; height: 100vh;
+    background: var(--node-bg); border-left: 1px solid var(--node-border);
+    box-shadow: -12px 0 32px rgba(0,0,0,0.5);
+    z-index: 401; transition: right 0.2s ease;
+    display: flex; flex-direction: column;
+  }
+  #side-panel.open { right: 0; }
+  /* Editing a node used to widen this panel to fit Input | Parameters |
+     Output side-by-side — that's exactly the "why is this the size of
+     my whole screen" complaint. It's back to the SAME 420px width as
+     the Add Node picker, always. Input/Parameters/Output now stack
+     vertically instead of sitting in columns — see .node-editor-grid
+     below, which no longer branches on viewport width, because the
+     narrow width is now a deliberate choice, not a phone-screen fallback. */
+  #side-panel-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--node-border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    flex-shrink: 0;
+  }
+  #side-panel-title { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  #side-panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+  #side-panel-body.no-pad { padding: 0; overflow: hidden; }
+
+  /* Node settings panel — Parameters/Settings tabs + Docs link + a real
+     "Execute step" test, matching a proper node inspector instead of a
+     bare form floating in the drawer. */
+  .node-panel-tabs {
+    display: flex; align-items: center; gap: 4px; margin: -4px -4px 12px;
+    padding: 0 4px 8px; border-bottom: 1px solid var(--node-border);
+    flex-wrap: wrap; row-gap: 6px;
+  }
+  .node-panel-tab {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 12.5px; font-weight: 600; padding: 6px 10px; cursor: pointer;
+    border-radius: 6px;
+  }
+  .node-panel-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+  .node-panel-tab.active { color: var(--accent-blue); background: rgba(56,189,248,0.12); }
+  .node-panel-tabs-spacer { flex: 1; }
+  .node-panel-docs { font-size: 11.5px; color: var(--text-secondary); text-decoration: none; padding: 6px 4px; }
+  .node-panel-docs:hover { color: var(--accent-blue); }
+  .node-tab-content { margin-bottom: 4px; }
+  .node-panel-io {
+    margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--node-border);
+  }
+  .node-panel-io-header { font-size: 10.5px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
+  .node-mock-input {
+    width: 100%; box-sizing: border-box; min-height: 64px; padding: 8px;
+    font-size: 11.5px; font-family: ui-monospace, monospace; resize: vertical;
+    background: var(--bg-secondary, #0d1117); border: 1px solid var(--node-border);
+    border-radius: 8px; color: var(--text-primary);
+  }
+  .node-panel-io-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .node-execute-meta { font-size: 11px; color: var(--text-secondary); }
+  .node-execute-output {
+    background: var(--node-header-bg); border: 1px solid var(--node-border);
+    border-radius: 8px; padding: 10px; min-height: 40px; max-height: 260px; overflow: auto;
+  }
+  .node-io-empty { font-size: 11.5px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+  .node-io-error { font-size: 12px; color: var(--accent-red); margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .node-io-success { font-size: 11.5px; color: var(--accent-green); margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; }
+
+  /* Node editor — Input (mock) / Parameters+Settings+Execute step /
+     Output — stacked in that order in the SAME 420px panel width as
+     Add Node, not side-by-side columns. Side-by-side is what was making
+     this feel like it took over the screen; stacked is what actually
+     fits a 420px panel without cramming three panes into ~140px each. */
+  .node-editor-grid { display: block; height: 100%; }
+  .node-editor-col { overflow-y: auto; padding: 14px; min-width: 0; }
+  .node-editor-col + .node-editor-col { border-left: none; border-top: 1px solid var(--node-border); }
+  .node-editor-col-label {
+    font-size: 10px; font-weight: 700; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;
+  }
+
+  /* "..." node context menu (matches the canvas-node hover toolbar). */
+  .node-context-menu {
+    position: fixed; z-index: 500; background: #161b22; border: 1px solid var(--node-border);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 4px; min-width: 170px;
+  }
+  .node-context-menu button {
+    display: flex; width: 100%; align-items: center; gap: 8px; text-align: left;
+    background: none; border: none; color: var(--text-primary); font-size: 12.5px;
+    padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .node-context-menu button i[data-lucide] { width: 14px; height: 14px; flex-shrink: 0; }
+  .node-context-menu button:hover { background: rgba(56,189,248,0.12); }
+  .node-context-menu button.danger:hover { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+  .node-context-menu hr { border: none; border-top: 1px solid var(--node-border); margin: 4px 2px; }
+
+  /* Node status dot — real success/error indicator left over from the
+     last "Execute step" or workflow test run against this node. */
+  .node-status-dot {
+    position: absolute; top: 4px; right: 4px;
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+    background: var(--text-secondary); opacity: 0.35; border: 2px solid var(--node-bg);
+  }
+  .node-status-dot.ok { background: var(--accent-green); opacity: 1; box-shadow: 0 0 0 2px rgba(63,185,80,0.2); }
+  .node-status-dot.error { background: var(--accent-red); opacity: 1; box-shadow: 0 0 0 2px rgba(248,81,73,0.2); }
+  #side-panel-footer {
+    padding: 12px 16px; border-top: 1px solid var(--node-border);
+    display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0;
+  }
+  #canvas-container {
+    position: relative;
+    width: auto;
+    flex: 1;
+    min-width: 0;
+    height: 72vh;
+    min-height: 520px;
+    background-color: var(--canvas-bg);
+    background-image: 
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+    background-size: 20px 20px;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    overflow: hidden;
+    touch-action: none;
+    box-shadow: inset 0 4px 20px rgba(0,0,0,0.4);
+  }
+
+  #canvas-world {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    transform-origin: 0 0;
+  }
+
+  #canvas-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* Icon-tile node design — was a 168px text-forward box with the app
+     name and a raw-detail subtitle baked into a header bar; now a
+     compact icon square with the name as a caption underneath, matching
+     the reference screenshots (n8n-style: icon tile above, label below,
+     nothing else visible until you actually open the node). */
+  .canvas-node {
+    position: absolute;
+    width: 88px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: inherit;
+    color: var(--text-primary);
+    z-index: 10;
+  }
+
+  .canvas-node.node-disabled { opacity: 0.45; }
+
+  .canvas-node-header {
+    width: 88px;
+    height: 88px;
+    background: var(--node-bg);
+    border: 1px solid var(--node-border);
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  /* Direct child only — .node-hover-actions (edit/pause/delete/more) also
+     lives inside .canvas-node-header and contains its own i[data-lucide]
+     icons a few levels deeper. The old selector below matched those too,
+     so this !important forced every hover-popup icon to 34px as well,
+     blowing that tiny popup apart — which is why edit/pause/delete looked
+     like they'd vanished. They were there; they were just each rendered
+     34x34px stacked in a popup sized for 13px icons. */
+  .canvas-node-header > i[data-lucide] {
+    width: 34px !important; height: 34px !important;
+  }
+  .canvas-node.selected .canvas-node-header {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.4), 0 8px 24px rgba(0,0,0,0.5);
+  }
+  /* The old header held icon+title side by side (flex-row, left-aligned
+     text) — title now lives in .canvas-node-caption below, so this only
+     needs to center a single icon. */
+  .canvas-node-header .node-title-text { display: none; }
+  .canvas-node-caption {
+    width: 116px;
+    margin-top: 6px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .canvas-node-caption .node-title-text {
+    display: block;
+    font-weight: 600;
+    font-size: 11.5px;
+    line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .canvas-node-subtitle {
+    font-size: 10px; color: var(--text-secondary); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .node-hover-actions {
+    position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
+    display: none; gap: 6px;
+    background: #161b22; border: 1px solid var(--node-border); border-radius: 7px;
+    padding: 5px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); z-index: 30;
+  }
+  .canvas-node:hover .node-hover-actions { display: flex; }
+  .node-hover-actions button {
+    background: none; border: none; cursor: pointer; padding: 4px;
+    border-radius: 5px; line-height: 1; display: flex; align-items: center;
+    min-width: 22px; min-height: 22px; justify-content: center;
+  }
+  .node-hover-actions button i[data-lucide] { width: 15px; height: 15px; color: var(--text-secondary); }
+  .node-hover-actions button:hover i[data-lucide] { color: var(--text-primary); }
+  .node-hover-actions button:hover { background: rgba(255,255,255,0.1); }
+  .canvas-node-body-wrap { display: none; }
+
+  .canvas-node-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .canvas-node-body select, 
+  .canvas-node-body input, 
+  .canvas-node-body textarea {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 5px 8px;
+    width: 100%;
+    font-size: 11.5px;
+    outline: none;
+  }
+
+  .canvas-node-body select:focus, 
+  .canvas-node-body input:focus, 
+  .canvas-node-body textarea:focus {
+    border-color: var(--accent-blue);
+  }
+
+  .anchor {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #21262d;
+    border: 2px solid var(--accent-blue);
+    border-radius: 50%;
+    cursor: crosshair;
+    z-index: 20;
+    transition: background 0.15s, transform 0.15s;
+  }
+
+  .anchor:hover {
+    background: var(--accent-blue);
+    transform: scale(1.2) translateY(-50%);
+  }
+
+  .anchor.in {
+    left: -7px;
+    top: 44px;
+    transform: translateY(-50%);
+    border-color: var(--accent-green);
+  }
+
+  .anchor.in:hover {
+    background: var(--accent-green);
+    transform: scale(1.2) translateY(-50%);
+  }
+
+  .anchor.out {
+    right: -7px;
+    top: 44px;
+    transform: translateY(-50%);
+  }
+
+  /* Condition / Switch multi-anchors */
+  .anchor.out-true {
+    right: -7px;
+    top: 30px;
+    transform: translateY(-50%);
+    border-color: var(--accent-green);
+  }
+  .anchor.out-false {
+    right: -7px;
+    top: 58px;
+    transform: translateY(-50%);
+    border-color: var(--accent-red);
+  }
+
+  .anchor-label {
+    position: absolute;
+    font-size: 9px;
+    color: var(--text-secondary);
+    pointer-events: none;
+  }
+
+  /* Per-node "+" — sits just past each output anchor (out / out-true /
+     out-false) and adds a new node pre-connected to that exact output,
+     same interaction as the reference screenshots. This is the real
+     replacement for a single floating "add node" button: with it, every
+     node's own output is always a valid place to keep building from, so
+     a separate global FAB isn't needed once the first node exists. */
+  .anchor-add {
+    position: absolute;
+    width: 16px; height: 16px;
+    right: -30px;
+    transform: translateY(-50%);
+    background: var(--bg-secondary, #161b22);
+    border: 1.5px dashed var(--node-border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 12px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 20; padding: 0;
+  }
+  .anchor-add:hover { border-color: var(--accent-blue); border-style: solid; color: var(--accent-blue); background: rgba(56,189,248,0.08); }
+  .anchor-add.out-true-add { border-color: rgba(74,222,128,0.5); }
+  .anchor-add.out-false-add { border-color: rgba(248,113,113,0.5); }
+
+  /* Sticky Notes */
+  .canvas-note {
+    position: absolute;
+    width: 220px;
+    min-height: 140px;
+    background: #fef5c1;
+    border: 1px solid #fadc41;
+    border-radius: 4px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    color: #333;
+    font-size: 13px;
+    z-index: 5;
+  }
+  .canvas-note textarea {
+    background: transparent;
+    border: none;
+    width: 100%;
+    height: 100%;
+    resize: none;
+    font-family: inherit;
+    outline: none;
+    color: #333;
+    font-size: 13px;
+  }
+
+  /* Group Box */
+  .canvas-group {
+    position: absolute;
+    border: 2px dashed rgba(255,255,255,0.15);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.01);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .canvas-group-header {
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* Canvas Controls Toolbar */
+  /* Empty-canvas placeholder — replaces an always-on-canvas Trigger node
+     for a workflow that doesn't have one yet, matching a real "what
+     starts this workflow?" first step instead of a card nobody asked
+     for being there by default. */
+  #canvas-empty-state {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    display: none; align-items: center; gap: 18px; z-index: 5;
+  }
+  #canvas-empty-state.show { display: flex; }
+  .canvas-empty-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    width: 96px; padding: 18px 8px; background: var(--node-header-bg, #161b22);
+    border: 1.5px dashed var(--node-border); border-radius: 12px; cursor: pointer;
+    color: var(--text-primary); font-size: 12px; font-weight: 600;
+  }
+  .canvas-empty-btn:hover { border-color: var(--accent-blue); background: rgba(56,189,248,0.06); }
+  .canvas-empty-btn-ai:hover { border-color: #a78bfa; background: rgba(167,139,250,0.08); }
+  .canvas-empty-icon { font-size: 22px; line-height: 1; color: var(--text-secondary); }
+  .canvas-empty-btn-ai .canvas-empty-icon { color: #a78bfa; }
+  .canvas-empty-icon i[data-lucide] { width: 20px; height: 20px; }
+  .canvas-empty-or { font-size: 11px; color: var(--text-secondary); }
+
+  .canvas-controls {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    gap: 8px;
+    background: rgba(22, 27, 34, 0.95);
+    border: 1px solid var(--node-border);
+    border-radius: 8px;
+    padding: 6px;
+    z-index: 100;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  }
+
+  /* "Test workflow" run button + execution log drawer — runs the whole
+     graph exactly as currently on canvas (unsaved edits included) through
+     the same GraphExecutor a real trigger uses, via /automation/graph/test.
+     Mirrors the per-node "Execute step" pattern already used inside the
+     node panel, just for the full graph instead of one node. */
+  .canvas-run-btn {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 100; display: flex; align-items: center; gap: 8px;
+    background: #f43f5e; color: #fff; border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 4px 15px rgba(244,63,94,0.35);
+  }
+  .canvas-run-btn:hover { background: #e11d48; }
+  .canvas-run-btn:disabled { opacity: 0.6; cursor: default; }
+  .canvas-run-btn i[data-lucide] { width: 15px; height: 15px; }
+
+  #execution-log-panel {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 110;
+    max-height: 40%; display: none; flex-direction: column;
+    background: rgba(13, 17, 23, 0.98); border-top: 1px solid var(--node-border);
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
+  }
+  #execution-log-panel.open { display: flex; }
+  .exec-log-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--node-border); flex-shrink: 0;
+  }
+  .exec-log-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+  .exec-log-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .exec-log-status.success { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .exec-log-status.partial { background: rgba(250,204,21,0.15); color: #facc15; }
+  .exec-log-status.failed { background: rgba(244,63,94,0.15); color: #fb7185; }
+  .exec-log-body { padding: 10px 16px; overflow-y: auto; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; line-height: 1.7; }
+  .exec-log-line { white-space: pre-wrap; word-break: break-word; }
+  .exec-log-line.is-success { color: #4ade80; }
+  .exec-log-line.is-failed { color: #fb7185; }
+  .exec-log-line.is-skipped { color: #94a3b8; }
+  .exec-log-line.is-info { color: var(--text-secondary); }
+
+  .canvas-minimap {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    width: 160px;
+    height: 110px;
+    background: rgba(22, 27, 34, 0.95);
+    border: 1px solid var(--node-border);
+    border-radius: 8px;
+    z-index: 100;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    pointer-events: none;
+    opacity: 0.85;
+  }
+  .canvas-minimap-viewport {
+    position: absolute;
+    border: 1px solid var(--accent-blue);
+    background: rgba(88, 166, 255, 0.1);
+  }
+
+  /* Top Sidebar Tools */
+  #toolbar-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    padding: 10px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+</style>
+
+{% set active_tab = 'studio' %}
+{% include "admin/partials/automation_tabs.html" with context %}
+
+<div id="toolbar-panel">
+  <input id="wf-name" class="a-input" style="max-width:240px;" placeholder="Workflow Name" value="{{ wf.name if wf else '' }}"/>
+  <span style="border-left:1px solid #30363d; height:24px;"></span>
+  
+  <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="openTriggerOrPicker()" style="display:flex;align-items:center;gap:6px">
+    <i data-lucide="zap" style="width:13px;height:13px"></i> Trigger
+  </button>
+
+  <div style="position:relative;">
+    <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="border-color:rgba(168,85,247,0.4);color:#c084fc" onclick="toggleDropdown('preset-dropdown')">⚡ Load n8n Preset</button>
+    <div id="preset-dropdown" class="a-dropdown" style="display:none; position:absolute; top:28px; left:0; z-index:200; background:#161b22; border:1px solid #30363d; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.4); padding:4px; width:260px;">
+      <div class="dropdown-header" style="font-size:10px; font-weight:700; color:var(--text-secondary); padding:4px 8px; text-transform:uppercase;">n8n Ready Workflows</div>
+      <a href="#" class="dropdown-item" onclick="loadN8NPreset('lead_outreach')">🎯 Google Lead Prospecting & Email Outreach</a>
+      <a href="#" class="dropdown-item" onclick="loadN8NPreset('social_bot')">🤖 Social Multi-Platform Auto-Reply Bot</a>
+      <a href="#" class="dropdown-item" onclick="loadN8NPreset('client_onboarding')">📝 Client Onboarding & Proposal Pipeline</a>
+      <a href="#" class="dropdown-item" onclick="loadN8NPreset('system_monitor')">🚨 System Health Monitor & Alert Webhook</a>
+    </div>
+  </div>
+
+  <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="border-color:rgba(56,189,248,0.4);color:#38bdf8" onclick="openImportN8NModal()">📥 Import n8n JSON</button>
+  {% if wf %}
+  <button type="button" class="a-btn a-btn-ghost a-btn-xs" style="border-color:rgba(34,197,94,0.4);color:#4ade80" onclick="exportN8NWorkflow({{ wf.id }})">📤 Export n8n JSON</button>
+  <form method="POST" action="{{ url_for('admin.test_workflow', wid=wf.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button class="a-btn a-btn-ghost a-btn-xs" style="border-color:rgba(168,85,247,0.4);color:#c084fc">Test Run</button>
+  </form>
+  {% endif %}
+  <button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="saveWorkflow()">💾 Save Workflow</button>
+  <a href="{{ url_for('admin.automation') }}" class="a-btn a-btn-ghost a-btn-xs">← Return</a>
+</div>
+
+<!-- Import n8n Modal -->
+<div id="n8n-import-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+  <div class="glass border border-white/10 rounded-2xl p-6 max-w-xl w-full text-white shadow-2xl">
+    <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-3">
+      <h3 class="font-bold text-lg text-cyan-400">📥 Import n8n Workflow JSON</h3>
+      <button type="button" onclick="closeImportN8NModal()" class="text-gray-400 hover:text-white text-xl">✕</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-4">Paste the JSON exported from your n8n workflow or drag/drop an .n8n.json file. It will automatically be converted to native nodes and triggers.</p>
+    <textarea id="n8n-json-input" class="w-full h-48 bg-black/50 border border-white/10 rounded-xl p-3 font-mono text-xs text-cyan-300 focus:outline-none focus:border-cyan-500 mb-4" placeholder='{"nodes": [...], "connections": {...}}'></textarea>
+    <div class="flex justify-end gap-3">
+      <button type="button" onclick="closeImportN8NModal()" class="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white bg-white/5 rounded-xl">Cancel</button>
+      <button type="button" onclick="submitImportN8N()" class="px-5 py-2 text-xs font-bold text-black bg-cyan-400 hover:bg-cyan-300 rounded-xl">Import & Open</button>
+    </div>
+  </div>
+</div>
+
+<p id="canvas-status" style="font-size:12px; color:var(--text-secondary); margin:-8px 0 12px; font-weight:500;"></p>
+
+<div id="canvas-layout">
+  <!-- display:none by default, same as every sibling picker view below —
+       this was the ONE view missing that, so it rendered as plain visible
+       page content the instant the page loaded (right in normal document
+       flow near the top of .admin-content, next to the admin nav sidebar)
+       instead of staying hidden until a click moves it into #side-panel.
+       That's the exact "sidebar showing far away / near the admin
+       sidebar" bug — it was never inside the slide-in panel to begin
+       with on first load, only after the first click reparented it. -->
+  <div id="picker-root" style="display:none">
+    <div class="picker-search-wrap">
+      <i data-lucide="search"></i>
+      <input id="picker-search" type="text" placeholder="Search nodes and apps…" oninput="filterPickerRoot(this.value)"/>
+    </div>
+    <div id="picker-search-results" style="display:none"></div>
+    <div id="picker-category-rows">
+      <div id="picker-cat-trigger" class="picker-category-row" onclick="showTriggerCategory()">
+        <div class="picker-category-icon" style="background:rgba(250,204,21,0.15);color:#facc15"><i data-lucide="zap"></i></div>
+        <div><div class="picker-category-title">Trigger</div><div class="picker-category-desc">Start the workflow when something happens</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showAICategory()">
+        <div class="picker-category-icon" style="background:rgba(167,139,250,0.15);color:#a78bfa"><i data-lucide="bot"></i></div>
+        <div><div class="picker-category-title">AI</div><div class="picker-category-desc">Run an AI agent, or call Anthropic, OpenAI, Gemini, and more directly</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showPickerCategory('app')">
+        <div class="picker-category-icon" style="background:rgba(56,189,248,0.15);color:#38bdf8"><i data-lucide="grid-3x3"></i></div>
+        <div><div class="picker-category-title">Action in an app</div><div class="picker-category-desc">Do something in an app like Slack, Gmail, or Notion — {{ integration_count }} apps</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showPickerCategory('builtin')">
+        <div class="picker-category-icon" style="background:rgba(74,222,128,0.15);color:#4ade80"><i data-lucide="message-square"></i></div>
+        <div><div class="picker-category-title">Messaging &amp; notifications</div><div class="picker-category-desc">Email, WhatsApp/Telegram/Facebook, LinkedIn, Google Sheets, webhooks</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showPickerCategory('data')">
+        <div class="picker-category-icon" style="background:rgba(251,191,36,0.15);color:#fbbf24"><i data-lucide="pencil-ruler"></i></div>
+        <div><div class="picker-category-title">Data transformation</div><div class="picker-category-desc">Manipulate, filter, or convert data</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showPickerCategory('flow')">
+        <div class="picker-category-icon" style="background:rgba(34,211,238,0.15);color:#22d3ee"><i data-lucide="git-branch"></i></div>
+        <div><div class="picker-category-title">Flow</div><div class="picker-category-desc">Branch, delay, or route the flow</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showPickerCategory('core')">
+        <div class="picker-category-icon" style="background:rgba(148,163,184,0.15);color:#94a3b8"><i data-lucide="server"></i></div>
+        <div><div class="picker-category-title">Core</div><div class="picker-category-desc">Run database queries, make HTTP requests</div></div>
+      </div>
+      <div class="picker-category-row" onclick="showPickerCategory('hitl')">
+        <div class="picker-category-icon" style="background:rgba(244,114,182,0.15);color:#f472b6"><i data-lucide="user-check"></i></div>
+        <div><div class="picker-category-title">Human in the loop</div><div class="picker-category-desc">Notify an admin and wait before continuing</div></div>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:8px">{{ integration_count }} apps · 18 core node types</p>
+  </div>
+
+  <div id="picker-simple-list" style="display:none">
+    <a href="#" onclick="backToPickerRoot(); return false;" class="sidebar-item" style="font-weight:600">← Back to categories</a>
+    <div id="picker-simple-list-items"></div>
+  </div>
+
+  <!-- Dedicated AI browser: core AI nodes (AI Agent / AI Prompt) up top,
+       then every AI provider app (Anthropic, OpenAI, Gemini, …) grouped
+       the same way "Action in an app" groups everything else. Selecting
+       a provider drops into the same picker-app-operations view used
+       everywhere else — one consistent drill-down pattern. -->
+  <div id="picker-ai-list" style="display:none">
+    <a href="#" onclick="backToPickerRoot(); return false;" class="sidebar-item" style="font-weight:600">← Back to categories</a>
+    <div class="picker-search-wrap">
+      <i data-lucide="search"></i>
+      <input id="picker-ai-search" type="text" placeholder="Search AI nodes and providers…" oninput="renderAICategory(this.value)"/>
+    </div>
+    <div class="sidebar-header">Core AI Nodes</div>
+    <div id="picker-ai-core"></div>
+    <div class="sidebar-header" style="margin-top:10px">AI Providers</div>
+    <div id="picker-ai-providers"></div>
+  </div>
+
+  <!-- LEVEL 1 of the app browser: "Action in an app" opens here — one row
+       PER APP (icon + name + operation count), not one row per operation.
+       This is the piece that was missing before: n8n never lists "Slack —
+       Post Message" as a flat search hit first, it lists the app "Slack"
+       and you go one level deeper to see its operations. -->
+  <div id="picker-app-list" style="display:none">
+    <a href="#" onclick="backToPickerRoot(); return false;" class="sidebar-item" style="font-weight:600">← Back to categories</a>
+    <div class="picker-search-wrap">
+      <i data-lucide="search"></i>
+      <input id="picker-app-search" type="text" placeholder="Search apps…" oninput="renderAppBrowser(this.value)"/>
+    </div>
+    <div id="favorites-section" style="display:none">
+      <div class="sidebar-header"><i data-lucide="star" style="width:12px;height:12px;vertical-align:-2px"></i> Favorites</div>
+      <div id="favorites-list"></div>
+    </div>
+    <div id="recent-section" style="display:none">
+      <div class="sidebar-header"><i data-lucide="history" style="width:12px;height:12px;vertical-align:-2px"></i> Recently Used</div>
+      <div id="recent-list"></div>
+    </div>
+    <div class="sidebar-header">{{ integration_count }} apps</div>
+    <div id="picker-app-list-items"></div>
+    <div class="sidebar-header" style="margin-top:10px">Canvas</div>
+    <a href="#" class="sidebar-item" onclick="createStickyNote(); closeSidePanel(); return false;"><i data-lucide="sticky-note" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"></i> Sticky Note</a>
+    <a href="#" class="sidebar-item" onclick="createGroupBox(); closeSidePanel(); return false;"><i data-lucide="square-dashed" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"></i> Comment Box / Group</a>
+  </div>
+
+  <!-- LEVEL 2: one specific app's real operation list — this is the
+       "Gmail → Actions (26), grouped by Message/Label/Draft…" screen.
+       Every row here is a genuine, distinct preset from integration_catalog
+       (real method+URL+docs link), not a placeholder. -->
+  <div id="picker-app-operations" style="display:none">
+    <a href="#" id="picker-ops-back" onclick="backToAppList(); return false;" class="sidebar-item" style="font-weight:600">← Back to apps</a>
+    <div class="picker-ops-header">
+      <span id="picker-ops-header-icon"></span>
+      <div>
+        <div id="picker-ops-header-title" class="picker-ops-title"></div>
+        <div id="picker-ops-count" class="picker-ops-count"></div>
+      </div>
+    </div>
+    <div class="picker-search-wrap">
+      <i data-lucide="search"></i>
+      <input id="picker-ops-search" type="text" placeholder="Search this app's actions…" oninput="renderAppOperations(this.value)"/>
+    </div>
+    <div id="picker-ops-list"></div>
+  </div>
+
+  <!-- "What triggers this workflow?" — shown by the empty-canvas
+       "+ Add first step" button, and reused any time the trigger node
+       itself is edited would rather show the full picker; kept as its
+       own view (not the generic app browser) since triggers are a
+       distinct list (TRIGGERS), not catalog app operations. -->
+  <div id="picker-trigger-list" style="display:none">
+    <a href="#" onclick="backToPickerRootOrEmpty(); return false;" class="sidebar-item" style="font-weight:600">← Back</a>
+    <!-- "Build with AI" used to be a separate button sitting next to
+         "Add first step" on the empty canvas — two competing entry
+         points instead of one. It now lives here, as the first option in
+         the same single sidebar "Add first step" opens, since generating
+         a whole workflow is just another way to start one. -->
+    <a href="#" onclick="openBuildWithAI(); return false;" class="picker-app-row" style="margin-bottom:8px;background:rgba(168,85,247,0.08);border-color:rgba(168,85,247,0.25)">
+      <div class="picker-category-icon" style="background:rgba(168,85,247,0.15);color:#c084fc"><i data-lucide="sparkles"></i></div>
+      <div class="picker-app-meta">
+        <div class="picker-app-title">Build entire workflow with AI</div>
+        <div class="picker-app-desc">Describe what you want automated, get a full workflow</div>
+      </div>
+      <span class="picker-app-arrow">→</span>
+    </a>
+    <div class="sidebar-header" style="margin-top:4px">What triggers this workflow?</div>
+    <div class="picker-search-wrap">
+      <i data-lucide="search"></i>
+      <input id="picker-trigger-search" type="text" placeholder="Search triggers…" oninput="renderTriggerList(this.value)"/>
+    </div>
+    <div id="picker-trigger-items"></div>
+  </div>
+
+  <!-- Real "Build with AI" — a plain-English request goes to the backend,
+       which asks the platform's own configured AI provider to choose a
+       real trigger + up to 4 real catalog actions (never invented ones,
+       see automation_build_with_ai in routes.py), and the result is
+       actually placed on the canvas, connected — not a canned demo. -->
+  <div id="picker-build-ai" style="display:none">
+    <a href="#" onclick="backToPickerRootOrEmpty(); return false;" class="sidebar-item" style="font-weight:600">← Back</a>
+    <div class="sidebar-header" style="margin-top:4px">✨ Build with AI</div>
+    <p style="font-size:12px;color:var(--text-secondary);padding:0 8px 8px">
+      Describe what you want automated in plain English. This calls your configured AI provider for real and only ever picks from the actual trigger list and app catalog — nothing invented.
+    </p>
+    <textarea id="build-ai-prompt" placeholder="e.g. When someone pays, email them a receipt and post a summary to Slack"
+              style="width:100%;box-sizing:border-box;min-height:90px;padding:10px;font-size:13px;
+                     background:var(--bg-secondary);border:1.5px solid var(--node-border);border-radius:9px;color:var(--text-primary)"></textarea>
+    <button type="button" class="a-btn a-btn-primary a-btn-sm" style="width:100%;margin-top:10px" id="build-ai-submit" onclick="submitBuildWithAI()">✨ Generate workflow</button>
+    <div id="build-ai-status" style="margin-top:12px;font-size:12.5px;color:var(--text-secondary)"></div>
+  </div>
+
+  <div id="canvas-container">
+    <div id="canvas-world">
+      <svg id="canvas-svg"></svg>
+      <!-- Nodes, sticky notes, and group boxes will be appended here dynamically -->
+    </div>
+
+    <!-- Shown only when a workflow has no trigger yet (brand-new, unsaved
+         workflow) — replaces what used to be an always-present "Trigger"
+         node card that sat on the canvas whether you wanted it there yet
+         or not. Once a trigger is picked (either way) this is hidden and
+         never shown again for this workflow. -->
+    <div id="canvas-empty-state">
+      <button type="button" class="canvas-empty-btn" onclick="openFirstStepPicker()">
+        <span class="canvas-empty-icon">+</span>
+        <span>Add first step…</span>
+      </button>
+      <span class="canvas-empty-or">or</span>
+      <button type="button" class="canvas-empty-btn canvas-empty-btn-ai" onclick="openBuildWithAI()">
+        <span class="canvas-empty-icon"><i data-lucide="sparkles"></i></span>
+        <span>Build with AI</span>
+      </button>
+    </div>
+
+    <div class="canvas-controls">
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="zoomCanvas(1.15)">➕</button>
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="zoomCanvas(0.85)">➖</button>
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="resetCanvasView()">🎯 Focus</button>
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="undo()">↩️ Undo</button>
+      <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="clearCanvas()">🧹 Clear</button>
+    </div>
+
+    <button type="button" class="canvas-run-btn" id="canvas-run-btn" onclick="runFullWorkflowTest()">
+      <i data-lucide="play"></i><span>Test workflow</span>
+    </button>
+
+    <div id="execution-log-panel">
+      <div class="exec-log-header">
+        <div class="exec-log-title">
+          <i data-lucide="terminal" style="width:15px;height:15px"></i>
+          <span>Execution log</span>
+          <span id="exec-log-status" class="exec-log-status" style="display:none"></span>
+        </div>
+        <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="closeExecutionLog()">✕ Close</button>
+      </div>
+      <div class="exec-log-body" id="exec-log-body"></div>
+    </div>
+
+    <div class="canvas-minimap" id="canvas-minimap">
+      <div class="canvas-minimap-viewport" id="minimap-viewport"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Slide-in right panel: shows EITHER the "Add Node" picker OR a
+     selected node's settings — never both, never a permanent sidebar. -->
+<div id="side-panel-overlay" onclick="closeSidePanel()"></div>
+<div id="side-panel">
+  <div id="side-panel-header">
+    <div id="side-panel-title">Add Node</div>
+    <button type="button" class="a-btn a-btn-ghost a-btn-xs" onclick="closeSidePanel()">✕</button>
+  </div>
+  <div id="side-panel-body"></div>
+  <div id="side-panel-footer" style="display:none">
+    <button type="button" class="a-btn a-btn-ghost a-btn-sm" onclick="closeSidePanel()">Close</button>
+    <button type="button" class="a-btn a-btn-primary a-btn-sm" onclick="applyNodePanel()">Done</button>
+  </div>
+</div>
+
+<div class="mt-4 p-4 border border-slate-800 rounded-xl bg-slate-900/40 text-xs text-slate-400 space-y-2">
+  <p>💡 <b>Quick shortcuts:</b></p>
+  <ul class="list-disc list-inside space-y-1 pl-2">
+    <li>Drag empty canvas background to <b>Pan</b>. Scroll to <b>Zoom</b>.</li>
+    <li>Drag outgoing anchors (blue circles) and drop onto incoming anchors (green circles) to <b>Connect</b> nodes.</li>
+    <li><b>Double-click</b> any connection line to <b>Delete</b> it.</li>
+    <li>Select a node and hit the <b>Delete</b> or <b>Backspace</b> key to remove it.</li>
+    <li><b>Ctrl+C</b> / <b>Ctrl+V</b> to duplicate selected nodes.</li>
+  </ul>
+</div>
+
+<script>
+const TRIGGERS = {{ triggers | tojson }};
+const ACTION_TYPES = {{ action_types | tojson }};
+const LEAF_ACTION_TYPES = Object.fromEntries(Object.entries(ACTION_TYPES).filter(([k]) => k !== 'condition'));
+const CONDITION_OPERATORS = {{ condition_operators | tojson }};
+const INTEGRATION_CATALOG = {{ integration_catalog | tojson }};
+
+// Real per-app icon badges — not a generic 🔌 for everything. Since exact
+// logo artwork is proprietary/trademarked, each app gets a distinctive
+// colored monogram badge using that company's real brand color (a
+// factual association, not a copy of their logo asset) plus its
+// initials. Apps not in this curated list still get a deterministic,
+// per-app-distinct color from a hash of their name, so nothing ever
+// falls back to one generic look.
+const BRAND_COLORS = {
+  slack: '#4A154B', discord: '#5865F2', telegram: '#26A5E4', 'microsoft teams': '#6264A7',
+  twilio: '#F22F46', sendgrid: '#1A82E2', mailgun: '#C02127', postmark: '#FFDE00',
+  pushover: '#249DF1', onesignal: '#E54B4D',
+  hubspot: '#FF7A59', salesforce: '#00A1E0', pipedrive: '#000000', 'zoho crm': '#C8202F', close: '#181B1D',
+  stripe: '#635BFF', paypal: '#003087', paystack: '#00C3F7', flutterwave: '#F5A623', razorpay: '#0C2451', square: '#000000',
+  trello: '#0079BF', asana: '#F06A6A', notion: '#000000', clickup: '#7B68EE', 'monday.com': '#FF3D57',
+  airtable: '#FCB400', jira: '#0052CC', linear: '#5E6AD2', todoist: '#E44332',
+  github: '#181717', gitlab: '#FC6D26', vercel: '#000000', netlify: '#00C7B7', circleci: '#343434',
+  pagerduty: '#06AC38', sentry: '#362D59',
+  shopify: '#95BF47', woocommerce: '#96588A', bigcommerce: '#121118',
+  mailchimp: '#FFE01B', activecampaign: '#EA1F63', convertkit: '#FB6970', klaviyo: '#000000', brevo: '#0B996E',
+  'x / twitter': '#000000', facebook: '#1877F2', instagram: '#E4405F', linkedin: '#0A66C2', pinterest: '#E60023', youtube: '#FF0000',
+  'google drive': '#4285F4', dropbox: '#0061FF', onedrive: '#0078D4', box: '#0061D5', 'aws s3': '#FF9900',
+  'google calendar': '#4285F4', 'outlook calendar': '#0078D4', calendly: '#006BFF', 'cal.com': '#000000',
+  typeform: '#262627', jotform: '#FF6100', surveymonkey: '#00BF6F',
+  zendesk: '#03363D', intercom: '#1F8DED', freshdesk: '#25C16F', 'help scout': '#1292EE',
+  openai: '#10A37F', anthropic: '#D97757', 'google gemini': '#4285F4', 'stability ai': '#000000', elevenlabs: '#000000', replicate: '#000000',
+  'google analytics 4': '#E37400', segment: '#52BD95', mixpanel: '#7856FF',
+  bitly: '#EE6123', 'qr code': '#000000', openweathermap: '#EB6E4B', currency: '#2E7D32', 'ip geolocation': '#455A64',
+  generic: '#38bdf8',
+};
+function hashColor(str) {
+  const palette = ['#38bdf8','#a78bfa','#fb923c','#4ade80','#f472b6','#facc15','#22d3ee','#fb7185','#818cf8','#34d399'];
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+function appNameFromLabel(label) {
+  return (label || '').split('—')[0].trim() || label || '?';
+}
+// A handful of apps Lucide genuinely ships as brand glyphs — use those.
+// Everything else gets a colored monogram badge (still a real icon
+// system, not text emoji) since Lucide is a general icon set, not a
+// brand-logo library, and reproducing exact trademarked logo artwork
+// for 100+ services isn't something to fake either.
+// Lucide dropped brand/logo icons (github, slack, twitter, etc.) some
+// versions ago — this project loads lucide@latest, so every one of those
+// lookups was failing silently in the console ("icon name was not found
+// in the provided icons object") and, worse, a couple of call sites
+// treated that missing icon as if the click handler itself had failed,
+// which is very plausibly why some buttons read as "not responding."
+// Always use the colored-monogram badge instead — it's a real, working
+// icon in every case, not a fallback for a few unlucky apps.
+const LUCIDE_BRAND_ICONS = {};
+// One shared, properly-styled row for every "core" node type (AI Agent,
+// Condition, Delay, DB Query, …) wherever it's pickable — the AI
+// category's own list, the Data/Flow/Core/Human-in-the-loop categories,
+// and the root search results. All three used to render these as bare
+// text links (no icon tile, no description) while app integrations right
+// next to them got the full icon+title+description row — the exact
+// inconsistency being pointed at. Same picker-app-row markup as an app
+// integration row now, just backed by a lucide icon instead of a brand
+// monogram.
+const CORE_TYPE_META = {
+  ai_agent: { icon: 'bot', desc: 'Plans and executes using tools' },
+  ai_node: { icon: 'sparkles', desc: 'One-shot call to an LLM' },
+  variables: { icon: 'braces', desc: 'Set or read a workflow variable' },
+  math: { icon: 'sigma', desc: 'Calculate a numeric expression' },
+  json_data: { icon: 'file-json-2', desc: 'Parse or shape JSON data' },
+  csv_data: { icon: 'table', desc: 'Read or write CSV data' },
+  file_manage: { icon: 'folder', desc: 'Read, write, or move a file' },
+  condition: { icon: 'git-branch', desc: 'Branch true/false on a check' },
+  switch: { icon: 'shuffle', desc: 'Branch on multiple possible values' },
+  delay: { icon: 'clock', desc: 'Pause before continuing' },
+  db_query: { icon: 'database', desc: 'Run a database query' },
+  api_request: { icon: 'globe', desc: 'Call any REST API' },
+  notify_admin: { icon: 'bell', desc: 'Notify an admin inside the app' },
+  send_email: { icon: 'mail', desc: 'Send a real email' },
+  webhook: { icon: 'link-2', desc: 'POST to any external URL' },
+  send_channel_reply: { icon: 'message-circle', desc: 'Reply on WhatsApp/Telegram/Facebook' },
+  voice_reply: { icon: 'mic', desc: 'Text-to-speech voice reply (Telegram)' },
+  post_to_linkedin: { icon: 'briefcase', desc: 'Post an update to LinkedIn' },
+  append_google_sheet: { icon: 'file-spreadsheet', desc: 'Append a row to a Google Sheet' },
+};
+function coreItemRowHtml(type) {
+  const meta = CORE_TYPE_META[type] || { icon: 'settings-2', desc: '' };
+  return `
+    <div class="picker-app-row" onclick="createNode('${type}'); recordRecentCore('${type}'); closeSidePanel();">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:var(--node-header-bg,#161b22);color:var(--text-secondary);flex-shrink:0">
+        <i data-lucide="${meta.icon}" style="width:16px;height:16px"></i>
+      </span>
+      <div class="picker-app-meta">
+        <div class="picker-app-title">${ACTION_TYPES[type] || type}</div>
+        ${meta.desc ? `<div class="picker-app-desc">${meta.desc}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function refreshIcons() {
+  if (window.lucide && typeof lucide.createIcons === 'function') {
+    try { lucide.createIcons(); } catch (e) { /* icon set still loading */ }
+  }
+}
+function appIconHtml(label, size) {
+  size = size || 22;
+  const app = appNameFromLabel(label);
+  const key = app.toLowerCase();
+  const color = BRAND_COLORS[key] || hashColor(key);
+  if (LUCIDE_BRAND_ICONS[key]) {
+    const glyphSize = Math.round(size * 0.58);
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:6px;background:${color}22;flex-shrink:0">
+      <i data-lucide="${LUCIDE_BRAND_ICONS[key]}" style="width:${glyphSize}px;height:${glyphSize}px;color:${color}"></i>
+    </span>`;
+  }
+  const initials = app.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
+  const fontSize = Math.round(size * 0.4);
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:6px;background:${color};color:#fff;font-weight:700;font-size:${fontSize}px;flex-shrink:0;line-height:1">${initials}</span>`;
+}
+const INTEGRATIONS_BY_ID = Object.fromEntries(
+  INTEGRATION_CATALOG.flatMap(cat => cat.items.map(item => [item.id, item]))
+);
+
+// Group the flat, per-operation catalog ("Slack — Post Message", "Slack —
+// Upload File", …) into per-APP buckets, so the picker can do a real
+// two-level n8n-style browse: pick an app first (Slack, with an icon and
+// an operation count), THEN see that one app's operations — instead of
+// showing every operation as its own top-level row.
+function opProviderKey(item) {
+  return (item.provider || appNameFromLabel(item.name)).toLowerCase();
+}
+const APPS_BY_PROVIDER = {};
+INTEGRATION_CATALOG.forEach(cat => {
+  (cat['items'] || []).forEach(item => {
+    const key = opProviderKey(item);
+    if (!APPS_BY_PROVIDER[key]) {
+      APPS_BY_PROVIDER[key] = { key, label: appNameFromLabel(item.name), category: cat.category, items: [] };
+    }
+    APPS_BY_PROVIDER[key].items.push(item);
+  });
+});
+const APP_LIST = Object.values(APPS_BY_PROVIDER).sort((a, b) => a.label.localeCompare(b.label));
+let currentAppKey = null;
+
+function renderAppBrowser(query) {
+  query = (query || '').trim().toLowerCase();
+  const list = !query ? APP_LIST : APP_LIST.filter(a => a.label.toLowerCase().includes(query));
+  const el = document.getElementById('picker-app-list-items');
+  if (!list.length) {
+    el.innerHTML = `<p style="font-size:11.5px;color:var(--text-secondary);padding:8px">No apps match "${query}". Use "Core &gt; REST API Request" for anything not in the library yet.</p>`;
+    return;
+  }
+  el.innerHTML = list.map(app => `
+    <div class="picker-app-row" onclick="openAppOperations('${app.key}')">
+      ${appIconHtml(app.label, 34)}
+      <div class="picker-app-meta">
+        <div class="picker-app-title">${app.label}</div>
+        <div class="picker-app-desc">${app.items.length} action${app.items.length === 1 ? '' : 's'} · ${app.category}</div>
+      </div>
+      <span class="picker-app-arrow">→</span>
+    </div>`).join('');
+  refreshIcons();
+}
+
+let opsBackTarget = 'app-list';   // where "← Back" in the operations view returns to
+
+function openAppOperations(key, backTo) {
+  const app = APPS_BY_PROVIDER[key];
+  if (!app) return;
+  currentAppKey = key;
+  opsBackTarget = backTo || 'app-list';
+  hideCurrentAddView();
+  document.getElementById('picker-ops-header-icon').innerHTML = appIconHtml(app.label, 30);
+  document.getElementById('picker-ops-header-title').textContent = app.label;
+  document.getElementById('picker-ops-count').textContent = `Actions (${app.items.length})`;
+  document.getElementById('picker-ops-back').textContent = opsBackTarget === 'ai-list' ? '← Back to AI providers' : '← Back to apps';
+  const opsView = document.getElementById('picker-app-operations');
+  document.getElementById('side-panel-body').appendChild(opsView);
+  opsView.style.display = 'block';
+  addPickerView = 'app-ops';
+  const search = document.getElementById('picker-ops-search');
+  if (search) { search.value = ''; search.focus(); }
+  renderAppOperations('');
+  refreshIcons();
+}
+
+function renderAppOperations(query) {
+  const app = APPS_BY_PROVIDER[currentAppKey];
+  if (!app) return;
+  query = (query || '').trim().toLowerCase();
+  const items = !query ? app.items : app.items.filter(it => it.name.toLowerCase().includes(query));
+  const el = document.getElementById('picker-ops-list');
+  if (!items.length) {
+    el.innerHTML = `<p style="font-size:11.5px;color:var(--text-secondary);padding:8px">No matching actions for "${query}".</p>`;
+    return;
+  }
+  const opRow = (item) => {
+    const opName = item.name.includes('—') ? item.name.split('—').slice(1).join('—').trim() : item.name;
+    return `<a href="#" class="picker-op-row" onclick="createIntegrationNode('${item.id}'); closeSidePanel(); return false;">
+      <span class="picker-op-title">${opName}</span>
+      <span onclick="event.stopPropagation(); event.preventDefault(); toggleFavorite('${item.id}');" data-fav-star="${item.id}" class="picker-op-fav">☆</span>
+    </a>`;
+  };
+  // When items carry a real "group" (e.g. Anthropic's Text/Image Actions),
+  // section the list under uppercase headers like a real resource-grouped
+  // action menu, matching the reference screenshots. Providers with just
+  // one implemented operation fall back to a flat list — no fake groups
+  // invented just to look busier.
+  const hasGroups = items.some(it => it.group);
+  if (hasGroups) {
+    const groups = {};
+    items.forEach(it => { const g = it.group || 'Other Actions'; (groups[g] = groups[g] || []).push(it); });
+    el.innerHTML = Object.entries(groups).map(([groupName, groupItems]) => `
+      <div class="picker-op-group-header">${groupName.toUpperCase()}</div>
+      ${groupItems.map(opRow).join('')}
+    `).join('');
+  } else {
+    el.innerHTML = items.map(opRow).join('');
+  }
+  renderRecentAndFavorites();
+}
+
+function backToAppList() {
+  if (opsBackTarget === 'ai-list') { showAICategory(); return; }
+  hideCurrentAddView();
+  const list = document.getElementById('picker-app-list');
+  document.getElementById('side-panel-body').appendChild(list);
+  list.style.display = 'block';
+  addPickerView = 'app-list';
+  renderAppBrowser(document.getElementById('picker-app-search')?.value || '');
+  refreshIcons();
+}
+
+// "Trigger" category — the same trigger-picker view "Add first step"
+// always used, now also reachable from inside the unified root picker
+// (see picker-cat-trigger), instead of living behind a second, separate
+// entry point.
+function showTriggerCategory() {
+  hideCurrentAddView();
+  const view = document.getElementById('picker-trigger-list');
+  document.getElementById('side-panel-body').appendChild(view);
+  view.style.display = 'block';
+  addPickerView = 'trigger-list';
+  renderTriggerList('');
+  const search = document.getElementById('picker-trigger-search');
+  if (search) { search.value = ''; search.focus(); }
+  refreshIcons();
+}
+
+// Dedicated "AI" category — AI Agent / AI Prompt core canvas nodes, then
+// every AI-provider app (Anthropic, OpenAI, Gemini, …) pulled straight
+// out of the same real catalog "Action in an app" uses, just pre-filtered
+// to the "AI & Machine Learning" category so it reads as its own section.
+function showAICategory() {
+  hideCurrentAddView();
+  const list = document.getElementById('picker-ai-list');
+  document.getElementById('side-panel-body').appendChild(list);
+  list.style.display = 'block';
+  addPickerView = 'ai-list';
+  renderAICategory('');
+  const search = document.getElementById('picker-ai-search');
+  if (search) { search.value = ''; search.focus(); }
+}
+
+function renderAICategory(query) {
+  query = (query || '').trim().toLowerCase();
+  const coreItems = [['ai_agent', 'AI Agent — plans and executes with tools'], ['ai_node', 'AI Prompt — one-shot call to an LLM']]
+    .filter(([type, desc]) => !query || (ACTION_TYPES[type] || '').toLowerCase().includes(query) || desc.toLowerCase().includes(query));
+  document.getElementById('picker-ai-core').innerHTML = coreItems.map(([type]) => coreItemRowHtml(type)).join('')
+    || `<p style="font-size:11.5px;color:var(--text-secondary);padding:4px 8px">No matches.</p>`;
+
+  const providers = APP_LIST.filter(a => a.category === 'AI & Machine Learning' && (!query || a.label.toLowerCase().includes(query)));
+  const provEl = document.getElementById('picker-ai-providers');
+  if (!providers.length) {
+    provEl.innerHTML = `<p style="font-size:11.5px;color:var(--text-secondary);padding:4px 8px">No providers match "${query}".</p>`;
+  } else {
+    provEl.innerHTML = providers.map(app => `
+      <div class="picker-app-row" onclick="openAppOperations('${app.key}', 'ai-list')">
+        ${appIconHtml(app.label, 32)}
+        <div class="picker-app-meta">
+          <div class="picker-app-title">${app.label}</div>
+          <div class="picker-app-desc">${app.items.length} action${app.items.length === 1 ? '' : 's'}</div>
+        </div>
+        <span class="picker-app-arrow">→</span>
+      </div>`).join('');
+  }
+  refreshIcons();
+}
+
+// Drag/click an "App Integrations" library entry -> creates a pre-configured
+// api_request node (method/url/headers/body already filled in from the
+// catalog). It's still a plain api_request node under the hood — the graph
+// engine only needs to know how to run one generic HTTP node type — but we
+// stamp a friendly `_label` onto its config so the node card shows
+// "Slack — Post Message" instead of the generic "REST API Request" title,
+// and that label survives save/load (see actionFieldsHtml/addActionNodeEl
+// and the save-time serializer below).
+function createIntegrationNode(itemId) {
+  const item = INTEGRATIONS_BY_ID[itemId];
+  if (!item) return;
+  createNode('api_request', {
+    method: item.method,
+    url: item.url,
+    headers: item.headers || {},
+    body: item.body || '',
+    _label: item.name,
+    _docs: item.docs || null,
+    credential_provider: item.provider || null,
+  });
+  recordRecent(itemId);
+  statusMsg(`Added "${item.name}" — fill in your credentials in the node before running.`, true);
+}
+
+// Real, working Recent/Favorites — backed by localStorage (per-browser,
+// no backend needed for this), not a decorative placeholder. Favorites
+// persist indefinitely; Recent keeps the last 8, most-recent first.
+const LS_FAVORITES_KEY = 'automation_studio_favorites';
+const LS_RECENT_KEY = 'automation_studio_recent';
+
+function getFavorites() {
+  try { return JSON.parse(localStorage.getItem(LS_FAVORITES_KEY) || '[]'); } catch(e) { return []; }
+}
+function getRecent() {
+  try { return JSON.parse(localStorage.getItem(LS_RECENT_KEY) || '[]'); } catch(e) { return []; }
+}
+function toggleFavorite(itemId) {
+  let favs = getFavorites();
+  if (favs.includes(itemId)) {
+    favs = favs.filter(id => id !== itemId);
+  } else {
+    favs.push(itemId);
+  }
+  localStorage.setItem(LS_FAVORITES_KEY, JSON.stringify(favs));
+  renderRecentAndFavorites();
+}
+function recordRecent(itemId) {
+  let recent = getRecent().filter(id => id !== itemId);
+  recent.unshift(itemId);
+  recent = recent.slice(0, 8);
+  localStorage.setItem(LS_RECENT_KEY, JSON.stringify(recent));
+  renderRecentAndFavorites();
+}
+function renderQuickList(ids) {
+  // Now uses the exact same .picker-app-row card (icon + title + desc +
+  // arrow) as the main app browser and AI providers list, instead of a
+  // bare text link — that mismatch is exactly what made Recently
+  // Used/Favorites look unstyled next to everything else in the picker.
+  return ids.map(id => {
+    const item = INTEGRATIONS_BY_ID[id];
+    if (!item) return '';
+    return `
+      <div class="picker-app-row" onclick="createIntegrationNode('${id}')">
+        ${appIconHtml(item.name, 28)}
+        <div class="picker-app-meta">
+          <div class="picker-app-title">${item.name}</div>
+        </div>
+        <span class="picker-app-arrow">+</span>
+      </div>`;
+  }).join('');
+}
+function renderRecentAndFavorites() {
+  const favs = getFavorites();
+  const recent = getRecent();
+  const favSection = document.getElementById('favorites-section');
+  const recentSection = document.getElementById('recent-section');
+  if (!favSection || !recentSection) return;
+  favSection.style.display = favs.length ? '' : 'none';
+  document.getElementById('favorites-list').innerHTML = renderQuickList(favs);
+  recentSection.style.display = recent.length ? '' : 'none';
+  document.getElementById('recent-list').innerHTML = renderQuickList(recent);
+  document.querySelectorAll('[data-fav-star]').forEach(el => {
+    el.textContent = favs.includes(el.dataset.favStar) ? '★' : '☆';
+    el.style.opacity = favs.includes(el.dataset.favStar) ? '1' : '0.5';
+    el.style.color = favs.includes(el.dataset.favStar) ? '#facc15' : '';
+  });
+}
+
+function toggleIntegrationCategory(headerEl) {
+  const wrap = headerEl.parentElement;
+  const items = wrap.querySelector('.integration-category-items');
+  const chevron = headerEl.querySelector('.cat-chevron');
+  const hidden = items.style.display === 'none';
+  items.style.display = hidden ? '' : 'none';
+  if (chevron) chevron.textContent = hidden ? '▾' : '▸';
+}
+
+function filterIntegrations(query) {
+  query = (query || '').trim().toLowerCase();
+  const categories = document.querySelectorAll('.integration-category');
+  let anyVisible = false;
+  categories.forEach(catEl => {
+    let catHasMatch = false;
+    catEl.querySelectorAll('.integration-item').forEach(itemEl => {
+      const match = !query || itemEl.dataset.search.includes(query);
+      itemEl.style.display = match ? '' : 'none';
+      if (match) catHasMatch = true;
+    });
+    catEl.style.display = catHasMatch ? '' : 'none';
+    const itemsWrap = catEl.querySelector('.integration-category-items');
+    if (query && catHasMatch) itemsWrap.style.display = '';
+    if (catHasMatch) anyVisible = true;
+  });
+  document.getElementById('integration-empty').style.display = anyVisible ? 'none' : '';
+}
+const CHANNELS = {{ channels_json | tojson }};
+const AGENTS = {{ agents_json | tojson }};
+const CONNECTIONS = {{ connections_json | tojson }};
+const EXISTING_WF = {{ (wf.actions if wf else []) | tojson }};
+const EXISTING_TRIGGER = {{ (wf.trigger_type if wf else '') | tojson }};
+const EXISTING_TRIGGER_CFG = {{ (wf.trigger_config if wf else {}) | tojson }};
+const EXISTING_POSITIONS = {{ (wf.canvas_positions if wf and wf.canvas_positions else {}) | tojson }};
+const WF_ID = {{ wf.id if wf else 'null' }};
+const SAVE_URL = WF_ID ? "{{ url_for('admin.automation_canvas_save', wid=0) }}".replace('/0/', '/' + WF_ID + '/')
+                       : "{{ url_for('admin.automation_canvas_save') }}";
+
+let scale = 1, panX = 100, panY = 100;
+let nextNodeId = 1;
+const nodes = {};        // id -> { id, type, config, x, y, el, height }
+let connections = [];    // list of { fromId, fromPin, toId, toPin }
+let selectedNodeId = null;
+let activeConnectionDrag = null; // { fromId, fromPin, startX, startY }
+
+// History stack for Undo/Redo
+const historyStack = [];
+
+const container = document.getElementById('canvas-container');
+const world = document.getElementById('canvas-world');
+const svg = document.getElementById('canvas-svg');
+
+function pushHistory() {
+  const state = JSON.stringify({
+    nodes: Object.values(nodes).map(n => ({ id: n.id, type: n.type, config: n.config, x: n.x, y: n.y })),
+    connections: connections
+  });
+  if (historyStack.length === 0 || historyStack[historyStack.length - 1] !== state) {
+    historyStack.push(state);
+    if (historyStack.length > 30) historyStack.shift();
+  }
+}
+
+function undo() {
+  if (historyStack.length <= 1) return;
+  historyStack.pop(); // remove current state
+  const state = JSON.parse(historyStack[historyStack.length - 1]);
+  
+  // Clear canvas elements
+  Object.keys(nodes).forEach(id => nodes[id].el.remove());
+  Object.keys(nodes).forEach(id => delete nodes[id]);
+  connections = [];
+
+  // Re-build nodes
+  state.nodes.forEach(n => {
+    if (n.type === 'trigger') {
+      addTriggerNode(n.config.trigger_type, n.config.trigger_config, n.x, n.y);
+    } else if (n.type === 'sticky_note') {
+      addStickyNoteEl(n.id, n.config.text, n.x, n.y);
+    } else if (n.type === 'group') {
+      addGroupEl(n.id, n.config.title, n.x, n.y, n.config.width, n.config.height);
+    } else {
+      addActionNodeEl(n.id, n.type, n.config, n.x, n.y);
+    }
+  });
+  connections = state.connections;
+  drawConnections();
+}
+
+function applyTransform() {
+  world.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  drawConnections();
+  updateMinimap();
+}
+
+function zoomCanvas(factor) {
+  scale = Math.min(1.8, Math.max(0.4, scale * factor));
+  applyTransform();
+}
+
+function resetCanvasView() {
+  scale = 1;
+  panX = 100;
+  panY = 100;
+  applyTransform();
+}
+
+function toggleDropdown(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.dropdown-trigger')) {
+    document.querySelectorAll('.a-dropdown').forEach(d => d.style.display = 'none');
+  }
+});
+
+// ---- Canvas Panning ----
+let isPanning = false;
+let startPanX, startPanY;
+container.addEventListener('mousedown', (e) => {
+  if (e.target !== container && e.target !== svg) return;
+  isPanning = true;
+  startPanX = e.clientX - panX;
+  startPanY = e.clientY - panY;
+  container.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (isPanning) {
+    panX = e.clientX - startPanX;
+    panY = e.clientY - startPanY;
+    applyTransform();
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  isPanning = false;
+  container.style.cursor = 'default';
+});
+
+container.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+  zoomCanvas(zoomFactor);
+}, { passive: false });
+
+// ---- Node Draggability ----
+function makeNodeDraggable(nodeId) {
+  const node = nodes[nodeId];
+  const header = node.el.querySelector('.canvas-node-header') || node.el;
+  node._dragMoved = false;
+
+  header.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
+    e.preventDefault();
+    selectNode(nodeId);
+    node._dragMoved = false;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialNodeX = node.x;
+    const initialNodeY = node.y;
+
+    function onMouseMove(ev) {
+      const dx = (ev.clientX - startX) / scale;
+      const dy = (ev.clientY - startY) / scale;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) node._dragMoved = true;
+
+      // Snap to grid (20px)
+      node.x = Math.round((initialNodeX + dx) / 20) * 20;
+      node.y = Math.round((initialNodeY + dy) / 20) * 20;
+      
+      node.el.style.left = node.x + 'px';
+      node.el.style.top = node.y + 'px';
+      drawConnections();
+      updateMinimap();
+    }
+
+    function onMouseUp() {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      pushHistory();
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
+
+  // A plain click (mousedown+mouseup with no real movement) still fires a
+  // native `click` event after a drag completes, per the DOM spec — so
+  // without this guard, releasing a drag would also immediately reopen
+  // the node's config panel. _dragMoved (set above) tells them apart.
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    if (node._dragMoved) { node._dragMoved = false; return; }
+    openNodePanel(nodeId);
+  });
+
+  // The caption (title + subtitle below the icon tile) isn't part of the
+  // draggable header, but should still open the node on click — without
+  // this, only the icon square itself would be clickable, and the label
+  // right underneath it would look clickable but silently do nothing.
+  const caption = node.el.querySelector('.canvas-node-caption');
+  if (caption) {
+    caption.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      openNodePanel(nodeId);
+    });
+  }
+}
+
+function selectNode(nodeId) {
+  selectedNodeId = nodeId;
+  document.querySelectorAll('.canvas-node, .canvas-note, .canvas-group').forEach(el => {
+    el.classList.remove('selected');
+  });
+  if (nodeId && nodes[nodeId]) {
+    nodes[nodeId].el.classList.add('selected');
+  }
+}
+
+// Keyboard shortcuts for delete & duplicate
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId) {
+    deleteNode(selectedNodeId);
+  }
+  if (e.ctrlKey && e.key === 'c' && selectedNodeId) {
+    // Copy node
+    const srcNode = nodes[selectedNodeId];
+    if (srcNode && srcNode.type !== 'trigger') {
+      window.copiedNodeData = {
+        type: srcNode.type,
+        config: JSON.parse(JSON.stringify(srcNode.config))
+      };
+    }
+  }
+  if (e.ctrlKey && e.key === 'v' && window.copiedNodeData) {
+    // Paste node
+    const newX = (nodes[selectedNodeId]?.x || 200) + 40;
+    const newY = (nodes[selectedNodeId]?.y || 200) + 40;
+    createNode(window.copiedNodeData.type, window.copiedNodeData.config, newX, newY);
+  }
+});
+
+function deleteNode(nodeId) {
+  if (nodeId === 'trigger') {
+    statusMsg("Trigger node cannot be deleted.", false);
+    return;
+  }
+  if (currentPanelNodeId === nodeId) {
+    // Its settings are open in the side panel right now — close that
+    // first so we don't leave a panel showing a now-deleted node's form.
+    panelMode = null; currentPanelNodeId = null;
+    document.getElementById('side-panel-overlay').classList.remove('open');
+    document.getElementById('side-panel').classList.remove('open');
+  }
+  const node = nodes[nodeId];
+  if (node) {
+    node.el.remove();
+    delete nodes[nodeId];
+    connections = connections.filter(c => c.fromId !== nodeId && c.toId !== nodeId);
+    if (selectedNodeId === nodeId) selectedNodeId = null;
+    drawConnections();
+    pushHistory();
+    updateMinimap();
+  }
+}
+
+// "..." context menu — Open / Rename / Duplicate / Deactivate / Delete,
+// matching the real per-node menu (screenshot 7) instead of only the
+// three always-visible hover icons.
+function openNodeContextMenu(evt, nodeId) {
+  document.querySelectorAll('.node-context-menu').forEach(m => m.remove());
+  const node = nodes[nodeId];
+  if (!node) return;
+  const menu = document.createElement('div');
+  menu.className = 'node-context-menu';
+  const isTrigger = nodeId === 'trigger';
+  menu.innerHTML = `
+    <button type="button" onclick="openNodePanel('${nodeId}'); closeNodeContextMenu();"><i data-lucide="external-link"></i> Open…</button>
+    <button type="button" onclick="renameNode('${nodeId}'); closeNodeContextMenu();"><i data-lucide="type"></i> Rename</button>
+    ${!isTrigger ? `<button type="button" onclick="duplicateNode('${nodeId}'); closeNodeContextMenu();"><i data-lucide="copy"></i> Duplicate</button>` : ''}
+    <button type="button" onclick="toggleNodeDisabled('${nodeId}'); closeNodeContextMenu();"><i data-lucide="${node.config.disabled ? 'play' : 'pause'}"></i> ${node.config.disabled ? 'Activate' : 'Deactivate'}</button>
+    <hr/>
+    <button type="button" onclick="closeNodeContextMenu(); openBuildWithAI();"><i data-lucide="sparkles"></i> Build with AI…</button>
+    <hr/>
+    ${!isTrigger ? `<button type="button" class="danger" onclick="deleteNode('${nodeId}'); closeNodeContextMenu();"><i data-lucide="trash-2"></i> Delete</button>`
+                  // No Duplicate/Delete for the trigger — a workflow always needs
+                  // exactly one trigger (it's a required field on the workflow
+                  // itself, not a node you can add a second of or remove
+                  // entirely), so those two specifically don't apply here. Change
+                  // trigger type from "Open…" instead — that's a real, complete
+                  // replacement for what Delete+re-add would mean anyway.
+                  : `<p style="font-size:11px;color:var(--text-secondary);padding:6px 10px;margin:0">A workflow always needs one trigger — use "Open…" to change its type instead of deleting it.</p>`}
+  `;
+  document.body.appendChild(menu);
+  refreshIcons();
+  // Position at the actual click point, not the clicked element's
+  // bounding rect — the click lands on the tiny <i data-lucide> icon
+  // inside the button, and depending on exactly when Lucide has swapped
+  // it for its real inline <svg>, that element's rect can read as
+  // effectively zero-sized at the document origin, which is what was
+  // throwing the menu into the top-left corner instead of by the node.
+  const menuWidth = 180;
+  let left = evt.clientX;
+  let top = evt.clientY;
+  if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+  if (top + 160 > window.innerHeight - 8) top = window.innerHeight - 160 - 8;
+  menu.style.left = Math.max(8, left) + 'px';
+  menu.style.top = Math.max(8, top) + 'px';
+  setTimeout(() => document.addEventListener('mousedown', onOutsideContextMenuClick), 0);
+}
+function onOutsideContextMenuClick(e) {
+  if (!e.target.closest('.node-context-menu')) closeNodeContextMenu();
+}
+function closeNodeContextMenu() {
+  document.querySelectorAll('.node-context-menu').forEach(m => m.remove());
+  document.removeEventListener('mousedown', onOutsideContextMenuClick);
+}
+
+function renameNode(nodeId) {
+  const node = nodes[nodeId];
+  if (!node) return;
+  const current = node.config._label || (nodeId === 'trigger' ? 'Trigger' : (ACTION_TYPES[node.type] || node.type));
+  const next = prompt('Rename node', current);
+  if (!next || !next.trim()) return;
+  node.config._label = next.trim();
+  const titleEl = node.el.querySelector('.node-title-text');
+  if (titleEl) titleEl.textContent = next.trim();
+  pushHistory();
+}
+
+function duplicateNode(nodeId) {
+  const node = nodes[nodeId];
+  if (!node || nodeId === 'trigger') return;
+  const liveConfig = { ...readLiveNodeConfig(node), ...(node.config._label ? { _label: node.config._label } : {}), ...(node.config._docs ? { _docs: node.config._docs } : {}) };
+  const newId = generateNodeId('node');
+  addActionNodeEl(newId, node.type, liveConfig, node.x + 40, node.y + 40);
+  pushHistory();
+  updateMinimap();
+  statusMsg('Node duplicated.', true);
+}
+
+
+function getAnchorCoords(nodeId, pinName, type) {
+  const node = nodes[nodeId];
+  if (!node) return { x: 0, y: 0 };
+
+  // Node width/anchor-y match the icon-tile redesign: an 88x88 tile is
+  // the whole node now (the caption below it doesn't count for anchor
+  // math, same as it didn't before when the subtitle line sat below the
+  // header) — was w=168/y=31 for the old text-forward box shape.
+  const w = 88;
+
+  if (node.type === 'trigger') {
+    return { x: node.x + w, y: node.y + 44 };
+  }
+
+  if (node.type === 'condition') {
+    if (pinName === 'in') return { x: node.x, y: node.y + 44 };
+    if (pinName === 'true') return { x: node.x + w, y: node.y + 30 };
+    if (pinName === 'false') return { x: node.x + w, y: node.y + 58 };
+  }
+
+  // Standard action nodes
+  if (pinName === 'in') return { x: node.x, y: node.y + 44 };
+  return { x: node.x + w, y: node.y + 44 };
+}
+
+// Draw paths between nodes
+function drawConnections() {
+  let paths = '';
+  
+  connections.forEach((conn, index) => {
+    const start = getAnchorCoords(conn.fromId, conn.fromPin, 'out');
+    const end = getAnchorCoords(conn.toId, conn.toPin, 'in');
+    const dx = Math.abs(end.x - start.x) * 0.45;
+    
+    paths += `<path class="connection-line" data-index="${index}" d="M ${start.x} ${start.y} C ${start.x + dx} ${start.y}, ${end.x - dx} ${end.y}, ${end.x} ${end.y}" stroke="var(--accent-blue)" stroke-width="2.5" fill="none" opacity="0.8" style="pointer-events: stroke; cursor: pointer;"/>`;
+  });
+  
+  if (activeConnectionDrag) {
+    const start = getAnchorCoords(activeConnectionDrag.fromId, activeConnectionDrag.fromPin, 'out');
+    const dx = Math.abs(activeConnectionDrag.currentX - start.x) * 0.45;
+    paths += `<path d="M ${start.x} ${start.y} C ${start.x + dx} ${start.y}, ${activeConnectionDrag.currentX - dx} ${activeConnectionDrag.currentY}, ${activeConnectionDrag.currentX} ${activeConnectionDrag.currentY}" stroke="var(--accent-blue)" stroke-dasharray="4" stroke-width="2" fill="none" opacity="0.6"/>`;
+  }
+  
+  svg.innerHTML = paths;
+  
+  // Attach event listeners to double click to delete connections
+  document.querySelectorAll('.connection-line').forEach(line => {
+    line.addEventListener('dblclick', (e) => {
+      const idx = parseInt(line.dataset.index);
+      connections.splice(idx, 1);
+      drawConnections();
+      pushHistory();
+    });
+    line.addEventListener('mouseover', () => {
+      line.style.stroke = 'var(--accent-red)';
+    });
+    line.addEventListener('mouseout', () => {
+      line.style.stroke = 'var(--accent-blue)';
+    });
+  });
+}
+
+// Setup connection dragging from out anchors
+function setupAnchorDragging(nodeId, anchorEl, pinName) {
+  anchorEl.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    const rect = container.getBoundingClientRect();
+    const startX = (e.clientX - rect.left - panX) / scale;
+    const startY = (e.clientY - rect.top - panY) / scale;
+    
+    activeConnectionDrag = {
+      fromId: nodeId,
+      fromPin: pinName,
+      currentX: startX,
+      currentY: startY
+    };
+    
+    function onMouseMove(ev) {
+      activeConnectionDrag.currentX = (ev.clientX - rect.left - panX) / scale;
+      activeConnectionDrag.currentY = (ev.clientY - rect.top - panY) / scale;
+      drawConnections();
+    }
+    
+    function onMouseUp(ev) {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      
+      // Check if dropped near an IN pin of another node
+      const dropTarget = ev.target.closest('.anchor.in');
+      if (dropTarget) {
+        const toNodeId = dropTarget.dataset.nodeId;
+        const toPin = dropTarget.dataset.pin;
+        
+        // Prevent self connection & duplicate connections
+        if (toNodeId !== nodeId && !connections.some(c => c.fromId === nodeId && c.fromPin === pinName && c.toId === toNodeId)) {
+          connections.push({
+            fromId: nodeId,
+            fromPin: pinName,
+            toId: toNodeId,
+            toPin: toPin
+          });
+          pushHistory();
+        }
+      }
+      
+      activeConnectionDrag = null;
+      drawConnections();
+    }
+    
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
+}
+
+// Generate unique ID for new nodes
+function generateNodeId(prefix = 'node') {
+  return prefix + '-' + (nextNodeId++);
+}
+
+// Render dynamic html fields for each node type configuration
+function actionFieldsHtml(type, cfg) {
+  cfg = cfg || {};
+  if (type === 'send_email') {
+    return `<input data-key="to" placeholder="To: email / 'admin'" value="${(cfg.to ?? 'admin')}"/>
+      <input data-key="subject" placeholder="Subject" value="${cfg.subject ?? ''}"/>
+      <textarea data-key="body" rows="3" placeholder="Email Body (HTML)">${cfg.body ?? ''}</textarea>
+      <input data-key="from_name" placeholder="Display name override (optional)" value="${cfg.from_name ?? ''}"/>
+      <input data-key="reply_to" placeholder="Reply-To address (optional)" value="${cfg.reply_to ?? ''}"/>`;
+  }
+  if (type === 'webhook') {
+    return `<input data-key="url" placeholder="https://endpoint-url.com" value="${cfg.url ?? ''}"/>`;
+  }
+  if (type === 'notify_admin') {
+    return `<input data-key="message" placeholder="Message text" value="${cfg.message ?? ''}"/>`;
+  }
+  if (type === 'send_channel_reply') {
+    const options = CHANNELS.map(c => `<option value="${c.id}" ${String(c.id)===String(cfg.channel_id)?'selected':''}>${c.label} (${c.platform})</option>`).join('')
+      || '<option value="">No channels connected</option>';
+    return `<select data-key="channel_id">${options}</select>
+      <input data-key="to" placeholder="Recipient (leave empty to use the trigger's contact)" value="${cfg.to ?? ''}"/>
+      <textarea data-key="message" rows="2" placeholder="Message content">${cfg.message ?? ''}</textarea>`;
+  }
+  if (type === 'voice_reply') {
+    // Telegram only for now — see the ValueError this raises at
+    // execution time for any other platform (WhatsApp/Facebook voice
+    // delivery isn't built). Filtering the dropdown to Telegram channels
+    // here means that failure mode is rare in practice, not just handled.
+    const tgChannels = CHANNELS.filter(c => c.platform === 'telegram');
+    const options = tgChannels.map(c => `<option value="${c.id}" ${String(c.id)===String(cfg.channel_id)?'selected':''}>${c.label}</option>`).join('')
+      || '<option value="">No Telegram channels connected</option>';
+    const voices = [
+      ['en-US-JennyNeural', 'Jenny (US English, female)'],
+      ['en-US-GuyNeural', 'Guy (US English, male)'],
+      ['en-GB-SoniaNeural', 'Sonia (British English, female)'],
+      ['en-GB-RyanNeural', 'Ryan (British English, male)'],
+    ];
+    const voiceOptions = voices.map(([id, label]) => `<option value="${id}" ${cfg.voice_id===id?'selected':''}>${label}</option>`).join('');
+    return `<select data-key="channel_id">${options}</select>
+      <input data-key="to" placeholder="Recipient (leave empty to use the trigger's contact)" value="${cfg.to ?? ''}"/>
+      <label class="a-label">Voice</label>
+      <select data-key="voice_id">${voiceOptions}</select>
+      <textarea data-key="message" rows="3" placeholder="Text to speak">${cfg.message ?? ''}</textarea>
+      <input data-key="caption" placeholder="Caption shown with the audio (optional)" value="${cfg.caption ?? ''}"/>`;
+  }
+  if (type === 'post_to_linkedin') {
+    const options = CHANNELS.filter(c => c.platform === 'linkedin').map(c => `<option value="${c.id}" ${String(c.id)===String(cfg.channel_id)?'selected':''}>${c.label}</option>`).join('')
+      || '<option value="">No LinkedIn connection</option>';
+    return `<select data-key="channel_id">${options}</select>
+      <textarea data-key="message" rows="3" placeholder="Post text">${cfg.message ?? ''}</textarea>`;
+  }
+  if (type === 'ai_agent') {
+    const options = AGENTS.map(a => `<option value="${a.id}" ${String(a.id)===String(cfg.agent_id)?'selected':''}>${a.label}</option>`).join('')
+      || '<option value="">No active agents</option>';
+    return `<select data-key="agent_id">${options}</select>
+      <textarea data-key="message" rows="3" placeholder="Task Prompt">${cfg.message ?? ''}</textarea>`;
+  }
+  if (type === 'delay') {
+    return `<input data-key="seconds" type="number" placeholder="Seconds to wait" min="1" max="5" value="${cfg.seconds ?? 2}"/>`;
+  }
+  if (type === 'variables') {
+    return `<input data-key="var_name" placeholder="Variable Name" value="${cfg.var_name ?? 'variable'}"/>
+      <input data-key="var_value" placeholder="Variable Value" value="${cfg.var_value ?? ''}"/>`;
+  }
+  if (type === 'math') {
+    return `<input data-key="expression" placeholder="Expression, e.g. amount * 1.1" value="${cfg.expression ?? ''}"/>`;
+  }
+  if (type === 'json_data') {
+    return `<select data-key="mode"><option value="parse" ${cfg.mode==='parse'?'selected':''}>Parse JSON String</option><option value="stringify" ${cfg.mode==='stringify'?'selected':''}>Stringify JSON Object</option></select>
+      <input data-key="data" placeholder="Path or string to run" value="${cfg.data ?? ''}"/>`;
+  }
+  if (type === 'csv_data') {
+    return `<select data-key="mode"><option value="parse" ${cfg.mode==='parse'?'selected':''}>Parse CSV String</option><option value="stringify" ${cfg.mode==='stringify'?'selected':''}>Build CSV String</option></select>
+      <input data-key="data" placeholder="Data context path" value="${cfg.data ?? ''}"/>`;
+  }
+  if (type === 'db_query') {
+    return `<textarea data-key="query" rows="2" placeholder="SELECT * FROM table WHERE x=:x">${cfg.query ?? ''}</textarea>
+      <input data-key="params" placeholder='Params JSON (optional), e.g. {"x": 1}' value='${cfg.params ? JSON.stringify(cfg.params) : ""}'/>`;
+  }
+  if (type === 'api_request') {
+    let connectionField = '';
+    if (cfg.credential_provider) {
+      const matches = CONNECTIONS.filter(c => c.provider === cfg.credential_provider);
+      const options = matches.map(c =>
+        `<option value="${c.id}" ${cfg.credential_id == c.id ? 'selected' : ''}>${c.name}${c.ok === false ? ' (last test failed)' : ''}</option>`
+      ).join('');
+      connectionField = `
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-top:4px">Connection (${cfg.credential_provider})</label>
+        <select data-key="credential_id">
+          <option value="">— No saved connection (use placeholder header) —</option>
+          ${options}
+        </select>
+        <a href="/admin/automation/connections" target="_blank" style="font-size:11px;color:var(--accent)">+ New Connection ↗</a>`;
+    }
+    return `${connectionField}
+      <select data-key="method"><option value="GET" ${cfg.method==='GET'?'selected':''}>GET</option><option value="POST" ${cfg.method==='POST'?'selected':''}>POST</option><option value="PUT" ${cfg.method==='PUT'?'selected':''}>PUT</option><option value="PATCH" ${cfg.method==='PATCH'?'selected':''}>PATCH</option><option value="DELETE" ${cfg.method==='DELETE'?'selected':''}>DELETE</option></select>
+      <input data-key="url" placeholder="https://api.site.com/resource" value="${cfg.url ?? ''}"/>
+      <input data-key="headers" placeholder='Headers JSON, e.g. {"Authorization":"Bearer key"}' value='${cfg.headers ? JSON.stringify(cfg.headers) : ""}'/>
+      <textarea data-key="body" rows="2" placeholder="Body payload string/JSON (optional)">${cfg.body ?? ''}</textarea>`;
+  }
+  if (type === 'ai_node') {
+    return `<select data-key="provider"><option value="gemini" ${cfg.provider==='gemini'?'selected':''}>Google Gemini</option><option value="openai" ${cfg.provider==='openai'?'selected':''}>OpenAI</option><option value="anthropic" ${cfg.provider==='anthropic'?'selected':''}>Anthropic Claude</option></select>
+      <input data-key="system_prompt" placeholder="System Prompt (Optional)" value="${cfg.system_prompt ?? ''}"/>
+      <textarea data-key="prompt" rows="3" placeholder="Prompt for LLM">${cfg.prompt ?? ''}</textarea>`;
+  }
+  return '';
+}
+
+// CREATE TRIGGERS
+function addTriggerNode(triggerType, cfg, x, y) {
+  x = x ?? 50;
+  y = y ?? 200;
+  const el = document.createElement('div');
+  el.className = 'canvas-node';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  
+  const triggerOptions = Object.entries(TRIGGERS).map(([k, v]) => `<option value="${k}" ${k===triggerType?'selected':''}>${v}</option>`).join('');
+  
+  el.innerHTML = `
+    <div class="anchor out" data-node-id="trigger" data-pin="out"></div>
+    <button type="button" class="anchor-add" style="top:44px" title="Add node" onclick="event.stopPropagation(); openAddNodeFrom('trigger','out')">+</button>
+    <div class="canvas-node-header" style="color: var(--accent-blue);">
+      <i data-lucide="zap"></i>
+      <div class="node-hover-actions">
+        <button type="button" onclick="event.stopPropagation(); openNodePanel('trigger')" title="Edit"><i data-lucide="pencil"></i></button>
+        <button type="button" onclick="event.stopPropagation(); toggleNodeDisabled('trigger')" title="Enable/Disable" data-pause-btn="trigger"><i data-lucide="${cfg && cfg.disabled ? 'play' : 'pause'}"></i></button>
+        <button type="button" onclick="event.stopPropagation(); openNodeContextMenu(event, 'trigger')" title="More"><i data-lucide="more-horizontal"></i></button>
+      </div>
+    </div>
+    <div class="canvas-node-caption">
+      <span class="node-title-text">${(cfg && cfg._label) ? cfg._label : 'Trigger'}</span>
+      <div class="canvas-node-subtitle" id="subtitle-trigger">${TRIGGERS[triggerType] || triggerType}</div>
+    </div>
+    <div class="canvas-node-body-wrap">
+      <div class="canvas-node-body">
+        <label class="a-label">Trigger type</label>
+        <select data-role="trigger-type" onchange="toggleScheduleField(this)">${triggerOptions}</select>
+        <div data-role="schedule-field" style="display:${triggerType === 'schedule' ? 'block' : 'none'}">
+          <label class="a-label">Run every</label>
+          <select data-role="trigger-interval">
+            <option value="5" ${cfg && cfg.interval_minutes==5?'selected':''}>5 minutes</option>
+            <option value="15" ${cfg && cfg.interval_minutes==15?'selected':''}>15 minutes</option>
+            <option value="60" ${!cfg || !cfg.interval_minutes || cfg.interval_minutes==60?'selected':''}>1 hour</option>
+            <option value="360" ${cfg && cfg.interval_minutes==360?'selected':''}>6 hours</option>
+            <option value="1440" ${cfg && cfg.interval_minutes==1440?'selected':''}>Daily</option>
+            <option value="10080" ${cfg && cfg.interval_minutes==10080?'selected':''}>Weekly</option>
+          </select>
+        </div>
+        <div data-role="filter-field" style="display:${triggerType === 'schedule' ? 'none' : 'block'}">
+          <label class="a-label">Filter (optional)</label>
+          <input data-role="trigger-cfg" placeholder='Filter JSON, e.g. {"active": true}' value='${cfg && Object.keys(cfg).length && triggerType !== "schedule" ? JSON.stringify(cfg) : ''}'/>
+        </div>
+      </div>
+    </div>`;
+    
+  world.appendChild(el);
+  refreshIcons();
+  nodes['trigger'] = { id: 'trigger', type: 'trigger', config: cfg, x, y, el, bodyWrapEl: el.querySelector('.canvas-node-body-wrap') };
+  makeNodeDraggable('trigger');
+  setupAnchorDragging('trigger', el.querySelector('.anchor.out'), 'out');
+}
+
+// n8n-style: clicking a trigger entry in "+ Add Node" reconfigures the
+// one trigger node this workflow has (the engine/backend only supports a
+// single trigger_type per workflow — see AutomationWorkflow.trigger_type
+// — so unlike action nodes, trigger "types" aren't separate draggable
+// nodes; picking one here sets what the existing trigger node fires on).
+// Toggles between the interval dropdown (schedule triggers — see
+// run_scheduled_workflow/job_queue.py's scheduler) and the generic
+// filter-JSON input every other trigger type uses, since a schedule
+// trigger's config is fundamentally different (an interval, not a
+// match-filter) and a raw JSON box was a poor way to set that.
+function toggleScheduleField(selectEl) {
+  const scope = selectEl.closest('.canvas-node-body');
+  const isSchedule = selectEl.value === 'schedule';
+  scope.querySelector('[data-role="schedule-field"]').style.display = isSchedule ? 'block' : 'none';
+  scope.querySelector('[data-role="filter-field"]').style.display = isSchedule ? 'none' : 'block';
+}
+
+function setTriggerType(triggerKey) {
+  toggleDropdown('action-dropdown');
+  const trig = nodes['trigger'];
+  if (!trig || !trig.el) return;
+  const scope = trig.bodyWrapEl || trig.el;
+  const select = scope.querySelector('[data-role="trigger-type"]');
+  if (select) { select.value = triggerKey; toggleScheduleField(select); }
+  trig.config = {};
+  const cfgInput = scope.querySelector('[data-role="trigger-cfg"]');
+  if (cfgInput) cfgInput.value = '';
+  refreshNodeSummary('trigger');
+  trig.el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  trig.el.style.transition = 'box-shadow 0.15s';
+  trig.el.style.boxShadow = '0 0 0 3px var(--accent-green)';
+  setTimeout(() => { trig.el.style.boxShadow = ''; }, 900);
+  statusMsg(`Trigger set to: ${TRIGGERS[triggerKey] || triggerKey}`, true);
+}
+
+// CREATE ACTIONS / LOGIC NODES
+function addActionNodeEl(id, type, cfg, x, y) {
+  cfg = cfg || {};
+  x = x ?? 350;
+  y = y ?? 200;
+  const el = document.createElement('div');
+  el.className = 'canvas-node' + (cfg.disabled ? ' node-disabled' : '');
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  
+  const options = Object.entries(LEAF_ACTION_TYPES).map(([k, v]) => `<option value="${k}" ${k===type?'selected':''}>${v}</option>`).join('');
+  
+  let anchorsHtml = `<div class="anchor in" data-node-id="${id}" data-pin="in"></div>`;
+  if (type === 'condition') {
+    anchorsHtml += `
+      <div class="anchor out-true" data-node-id="${id}" data-pin="true"></div>
+      <button type="button" class="anchor-add out-true-add" style="top:30px" title="Add node" onclick="event.stopPropagation(); openAddNodeFrom('${id}','true')">+</button>
+      <div class="anchor-label" style="right: 8px; top: 24px; font-size: 8px; font-weight: 700; color: var(--accent-green);">TRUE</div>
+      <div class="anchor out-false" data-node-id="${id}" data-pin="false"></div>
+      <button type="button" class="anchor-add out-false-add" style="top:58px" title="Add node" onclick="event.stopPropagation(); openAddNodeFrom('${id}','false')">+</button>
+      <div class="anchor-label" style="right: 8px; top: 48px; font-size: 8px; font-weight: 700; color: var(--accent-red);">FALSE</div>`;
+  } else {
+    anchorsHtml += `<div class="anchor out" data-node-id="${id}" data-pin="out"></div>
+      <button type="button" class="anchor-add" style="top:44px" title="Add node" onclick="event.stopPropagation(); openAddNodeFrom('${id}','out')">+</button>`;
+  }
+  
+  let headerTitle = cfg._label || ACTION_TYPES[type] || 'Action Node';
+  let headerIcon = cfg._label ? appIconHtml(cfg._label, 34) : '<i data-lucide="settings-2"></i>';
+  let bodyContentHtml = '';
+  
+  if (type === 'condition') {
+    const opOptions = Object.entries(CONDITION_OPERATORS).map(([k, v]) => `<option value="${k}" ${k===cfg.operator?'selected':''}>${v}</option>`).join('');
+    bodyContentHtml = `
+      <label class="a-label">Field to check</label>
+      <input data-role="field" placeholder="Trigger context field path" value="${cfg.field ?? ''}"/>
+      <label class="a-label">Condition</label>
+      <select data-role="operator">${opOptions}</select>
+      <label class="a-label">Compare against</label>
+      <input data-role="value" placeholder="Value to compare against" value="${cfg.value ?? ''}"/>`;
+  } else {
+    bodyContentHtml = `
+      <label class="a-label">Node type</label>
+      <select data-role="type" onchange="onNodeTypeChange('${id}')">${options}</select>
+      <div data-role="fields" class="space-y-2 mt-1">${actionFieldsHtml(type, cfg)}</div>`;
+  }
+
+  el.innerHTML = `
+    ${anchorsHtml}
+    <div class="canvas-node-header">
+      ${headerIcon}
+      <span class="node-status-dot" title="Last Execute step result"></span>
+      <div class="node-hover-actions">
+        <button type="button" onclick="event.stopPropagation(); openNodePanel('${id}')" title="Edit"><i data-lucide="pencil"></i></button>
+        <button type="button" onclick="event.stopPropagation(); toggleNodeDisabled('${id}')" title="Enable/Disable" data-pause-btn="${id}"><i data-lucide="${cfg.disabled ? 'play' : 'pause'}"></i></button>
+        <button type="button" onclick="event.stopPropagation(); deleteNode('${id}')" title="Delete"><i data-lucide="trash-2"></i></button>
+        <button type="button" onclick="event.stopPropagation(); openNodeContextMenu(event, '${id}')" title="More"><i data-lucide="more-horizontal"></i></button>
+      </div>
+    </div>
+    <div class="canvas-node-caption">
+      <span class="node-title-text">${headerTitle}</span>
+      <div class="canvas-node-subtitle" id="subtitle-${id}">${nodeSubtitleText(type, cfg)}</div>
+    </div>
+    <div class="canvas-node-body-wrap">
+      <div class="canvas-node-body">
+        ${bodyContentHtml}
+      </div>
+    </div>`;
+
+  world.appendChild(el);
+  refreshIcons();
+  
+  nodes[id] = { id, type, config: cfg, x, y, el, bodyWrapEl: el.querySelector('.canvas-node-body-wrap') };
+  makeNodeDraggable(id);
+  
+  // Bind anchors events
+  el.querySelectorAll('.anchor.out, .anchor.out-true, .anchor.out-false').forEach(anc => {
+    setupAnchorDragging(id, anc, anc.dataset.pin);
+  });
+  
+  drawConnections();
+}
+
+// A short, human-readable summary line shown under the node's title while
+// its full settings are collapsed — e.g. "POST slack.com/api/chat..." or
+// "amount > 100" — so the canvas stays scannable without opening every
+// node, matching a proper compact node card instead of an always-expanded
+// settings form sitting on the canvas.
+function nodeSubtitleText(type, cfg) {
+  if (type === 'trigger') {
+    return TRIGGERS[cfg.trigger_type] || 'not configured';
+  }
+  if (type === 'condition') {
+    const op = CONDITION_OPERATORS[cfg.operator] || cfg.operator || '';
+    return [cfg.field, op, cfg.value].filter(Boolean).join(' ') || 'not configured';
+  }
+  if (type === 'api_request') {
+    // Was showing the raw "POST https://api.airtable.com/..." request
+    // line here — exactly the clutter that's not wanted on the canvas
+    // card itself (that detail belongs in the node's Parameters panel,
+    // which already shows it in full). A node added from the app
+    // library already has a friendly _label ("Gmail — Send Email") shown
+    // in the header right above this, so the subtitle should say
+    // something that ADDS information instead of repeating the app name
+    // in raw HTTP form — the credential/provider it'll run as, or a
+    // plain "not configured" for a bare REST API Request node with no
+    // URL yet.
+    if (!cfg.url) return 'not configured';
+    if (cfg._label) return cfg.credential_provider ? `via ${cfg.credential_provider}` : 'configured';
+    return `${cfg.method || 'GET'} request`;
+  }
+  return ACTION_TYPES[type] || type;
+}
+
+function refreshNodeSummary(id) {
+  const node = nodes[id];
+  if (!node) return;
+  const cfg = {};
+  if (node.type === 'trigger') {
+    cfg.trigger_type = node.bodyWrapEl.querySelector('[data-role="trigger-type"]')?.value;
+  } else {
+    const type = node.bodyWrapEl.querySelector('[data-role="type"]');
+    if (type) node.type = type.value;
+    if (node.type === 'condition') {
+      cfg.field = node.bodyWrapEl.querySelector('[data-role="field"]')?.value;
+      cfg.operator = node.bodyWrapEl.querySelector('[data-role="operator"]')?.value;
+      cfg.value = node.bodyWrapEl.querySelector('[data-role="value"]')?.value;
+    } else {
+      node.bodyWrapEl.querySelectorAll('[data-key]').forEach(f => { cfg[f.dataset.key] = f.value; });
+    }
+  }
+  const subtitleEl = document.getElementById(`subtitle-${id}`);
+  if (subtitleEl) subtitleEl.textContent = nodeSubtitleText(node.type, { ...node.config, ...cfg });
+}
+
+function toggleNodeDisabled(id) {
+  const node = nodes[id];
+  if (!node) return;
+  node.config.disabled = !node.config.disabled;
+  node.el.classList.toggle('node-disabled', !!node.config.disabled);
+  const btn = node.el.querySelector(`[data-pause-btn="${id}"]`);
+  if (btn) btn.innerHTML = `<i data-lucide="${node.config.disabled ? 'play' : 'pause'}"></i>`;
+  refreshIcons();
+  pushHistory();
+}
+
+// ── Slide-in right panel: replaces the old always-visible sidebar. Used
+// for BOTH picking a new node ("+") and configuring an existing one
+// (click a node, or its hover Edit icon) — only one at a time, never a
+// permanent sidebar taking up canvas space. ──────────────────────────
+let currentPanelNodeId = null;   // set while editing a node's settings
+let panelMode = null;            // 'edit' | 'add' | null
+let addPickerView = null;        // 'root' | 'simple' | 'app' — which view is showing while panelMode === 'add'
+let pendingConnectFrom = null;   // { nodeId, pin } — set by a node's own "+" button; the next node
+                                  // created while this is set is auto-positioned and auto-wired to
+                                  // that exact output instead of landing unconnected.
+
+const PICKER_CATEGORIES = {
+  builtin: { icon: '💬', types: [['send_email','📧'], ['webhook','🔗'], ['send_channel_reply','💬'], ['voice_reply','🎙️'], ['post_to_linkedin','💼'], ['append_google_sheet','📊']] },
+  data:    { icon: '✏️', types: [['variables','🧮'], ['math','➗'], ['json_data','📦'], ['csv_data','📄'], ['file_manage','🗂️']] },
+  flow:    { icon: '🔀', types: [['condition','🔀'], ['switch','🔁'], ['delay','⏳']] },
+  core:    { icon: '🏢', types: [['db_query','🗄️'], ['api_request','🌐']] },
+  hitl:    { icon: '🧑‍💼', types: [['notify_admin','🔔']] },
+};
+
+function showPickerCategory(catId) {
+  hideCurrentAddView();
+  if (catId === 'app') {
+    const list = document.getElementById('picker-app-list');
+    document.getElementById('side-panel-body').appendChild(list);
+    list.style.display = 'block';
+    addPickerView = 'app-list';
+    renderAppBrowser('');
+    const search = document.getElementById('picker-app-search');
+    if (search) { search.value = ''; search.focus(); }
+    refreshIcons();
+    return;
+  }
+  const cat = PICKER_CATEGORIES[catId];
+  if (!cat) return;
+  const list = document.getElementById('picker-simple-list');
+  const itemsEl = document.getElementById('picker-simple-list-items');
+  itemsEl.innerHTML = cat.types.map(([type]) => coreItemRowHtml(type)).join('');
+  document.getElementById('side-panel-body').appendChild(list);
+  list.style.display = 'block';
+  addPickerView = 'simple';
+  refreshIcons();
+}
+
+function backToPickerRoot() {
+  hideCurrentAddView();
+  const root = document.getElementById('picker-root');
+  document.getElementById('side-panel-body').appendChild(root);
+  root.style.display = 'block';
+  addPickerView = 'root';
+  const search = document.getElementById('picker-search');
+  if (search) { search.value = ''; filterPickerRoot(''); }
+}
+
+// Internal: hides whichever add-mode sub-view is currently showing and
+// returns it to its stable home container, without touching panelMode —
+// used both when switching between picker views and when the whole panel
+// closes.
+function hideCurrentAddView() {
+  const home = document.getElementById('canvas-layout');
+  ['picker-root', 'picker-simple-list', 'picker-app-list', 'picker-app-operations', 'picker-ai-list', 'picker-trigger-list', 'picker-build-ai'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.parentElement && el.parentElement.id === 'side-panel-body') {
+      home.appendChild(el);
+      el.style.display = 'none';
+    }
+  });
+}
+
+function filterPickerRoot(query) {
+  query = (query || '').trim().toLowerCase();
+  const rows = document.getElementById('picker-category-rows');
+  const results = document.getElementById('picker-search-results');
+  if (!query) {
+    rows.style.display = '';
+    results.style.display = 'none';
+    return;
+  }
+  rows.style.display = 'none';
+  results.style.display = 'block';
+
+  const coreMatches = Object.entries(ACTION_TYPES)
+    .filter(([type, label]) => label.toLowerCase().includes(query) || type.includes(query));
+  // Every app match — whether the query hit the APP's name ("gmail") or
+  // one of its individual operations' names ("send message" -> matches
+  // Gmail, Slack, Telegram, ...) — collapses to ONE row per app here.
+  // This used to branch into two different shapes (one app-level row per
+  // app-name match, but a separate raw per-OPERATION row for each
+  // "Telegram — Send Photo" / "Mailgun — Send Email" style match), which
+  // is exactly the clutter that's not wanted: searching should always
+  // surface "Telegram" / "Mailgun" as a single app row, the same way
+  // browsing does — never one row per operation on the results screen.
+  const appMatches = APP_LIST.filter(a =>
+    a.label.toLowerCase().includes(query) ||
+    a.items.some(item => item.name.toLowerCase().includes(query))
+  ).slice(0, 20);
+
+  if (!coreMatches.length && !appMatches.length) {
+    results.innerHTML = `<p style="font-size:11.5px;color:var(--text-secondary);padding:8px">No matches for "${query}".</p>`;
+    return;
+  }
+  let html = '';
+  if (coreMatches.length) {
+    html += `<div class="sidebar-header">Core &amp; Logic</div>` + coreMatches.map(([type]) => coreItemRowHtml(type)).join('');
+  }
+  if (appMatches.length) {
+    html += `<div class="sidebar-header">Apps</div>` + appMatches.map(app => `
+      <a href="#" class="sidebar-item" onclick="openAppOperations('${app.key}'); return false;" style="display:flex;align-items:center;gap:10px;padding-top:6px;padding-bottom:6px">
+        ${appIconHtml(app.label, 30)}<span style="flex:1">${app.label}</span><span style="opacity:.5;font-size:10.5px">${app.items.length} →</span>
+      </a>`).join('');
+  }
+  results.innerHTML = html;
+  refreshIcons();
+}
+
+// Recent tracking for core/logic node types too (Favorites/Recent in the
+// app browser already track integration items via recordRecent — this
+// mirrors it for the simple built-in node types picked from a category).
+function recordRecentCore(type) {
+  // Currently a no-op placeholder for parity — core node types aren't
+  // shown in the Recent rail today (that's scoped to app integrations,
+  // where "recently used" matters most given the sheer number of them).
+}
+
+const nodeMockInputCache = {};   // per-node "Execute step" mock input, kept only in-browser
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function openNodePanel(nodeId) {
+  const node = nodes[nodeId];
+  if (!node || !node.bodyWrapEl) return;
+  closeSidePanelInternal();  // return whatever was open before to its home first
+
+  currentPanelNodeId = nodeId;
+  panelMode = 'edit';
+
+  const icon = node.type === 'trigger' ? '<i data-lucide="zap" style="width:16px;height:16px"></i>' : (node.config._label ? appIconHtml(node.config._label, 20) : '<i data-lucide="settings-2" style="width:16px;height:16px"></i>');
+  const title = node.type === 'trigger' ? 'Trigger' : (node.config._label || ACTION_TYPES[node.type] || node.type);
+  document.getElementById('side-panel-title').innerHTML = `${icon} <span>${title}</span>`;
+
+  const docsUrl = node.config._docs || null;
+  const panelBody = document.getElementById('side-panel-body');
+
+  // Input (mock) / Parameters+Settings+Execute step / Output — stacked
+  // vertically in the SAME 420px panel Add Node uses, not side-by-side
+  // columns in a widened panel.
+  panelBody.classList.add('no-pad');
+
+  const paramsSettingsHtml = `
+    <div class="node-panel-tabs">
+      <button type="button" class="node-panel-tab active" data-tab="params" onclick="switchNodeTab('params')">Parameters</button>
+      <button type="button" class="node-panel-tab" data-tab="settings" onclick="switchNodeTab('settings')">Settings</button>
+      <div class="node-panel-tabs-spacer"></div>
+      ${docsUrl ? `<a href="${docsUrl}" target="_blank" rel="noopener" class="node-panel-docs">Docs ↗</a>` : ''}
+      ${node.type !== 'trigger' ? `<button type="button" class="a-btn a-btn-primary a-btn-xs" onclick="executeNodeStep('${nodeId}')" id="execute-step-btn" style="margin-left:8px">▶ Execute step</button>` : ''}
+    </div>
+    <div id="node-tab-params" class="node-tab-content"></div>
+    <div id="node-tab-settings" class="node-tab-content" style="display:none">
+      <label class="a-label">Notes</label>
+      <textarea id="node-notes-input" placeholder="Optional note about what this node does (saved with the workflow)"
+                style="width:100%;box-sizing:border-box;min-height:64px;padding:8px;font-size:12px;
+                       background:var(--bg-secondary);border:1px solid var(--node-border);border-radius:8px;color:var(--text-primary)"
+                >${escapeHtml(node.config._notes || '')}</textarea>
+      ${node.type !== 'trigger' ? `
+      <label class="a-label" style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="node-disabled-toggle" ${node.config.disabled ? 'checked' : ''} onchange="toggleNodeDisabled('${nodeId}'); this.checked = nodes['${nodeId}'].config.disabled;"/>
+        Disable this node — skip it and pass data straight through when the workflow runs
+      </label>` : ''}
+    </div>`;
+
+  if (node.type === 'trigger') {
+    // Triggers don't have a per-node "Execute step" (there's no upstream
+    // data to simulate), so they just get the Parameters/Settings column
+    // full-width instead of a padded-out empty Input/Output either side.
+    panelBody.innerHTML = `<div class="node-editor-col" style="border:none">${paramsSettingsHtml}</div>`;
+  } else {
+    panelBody.innerHTML = `
+      <div class="node-editor-grid">
+        <div class="node-editor-col">
+          <div class="node-editor-col-label">Input (mock)</div>
+          <p class="node-io-empty" style="margin-bottom:8px">Used only by "Execute step" — simulates what an upstream node would hand this one. Not saved to the workflow.</p>
+          <textarea id="node-mock-input" class="node-mock-input" style="min-height:160px"
+                    placeholder='{"email": "someone@example.com", "name": "Ada"}'
+                    oninput="nodeMockInputCache['${nodeId}'] = this.value"
+                    >${escapeHtml(nodeMockInputCache[nodeId] || '{}')}</textarea>
+        </div>
+        <div class="node-editor-col">${paramsSettingsHtml}</div>
+        <div class="node-editor-col">
+          <div class="node-editor-col-label">Output <span id="execute-step-meta" class="node-execute-meta"></span></div>
+          <div id="node-execute-output" class="node-execute-output" style="min-height:160px">
+            <p class="node-io-empty">Not run yet. This really executes this node's real logic — real HTTP call, real DB read, real AI call, etc. — against the mock input on the left. Nothing here is simulated, so it will use whatever connection/credential the node is configured with.</p>
+          </div>
+        </div>
+      </div>`;
+  }
+  document.getElementById('node-tab-params').appendChild(node.bodyWrapEl);
+  node.bodyWrapEl.style.display = 'block';
+
+  document.getElementById('side-panel-footer').style.display = 'flex';
+  document.getElementById('side-panel-overlay').classList.add('open');
+  document.getElementById('side-panel').classList.add('open');
+  refreshIcons();
+}
+
+function switchNodeTab(tab) {
+  document.querySelectorAll('.node-panel-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const paramsEl = document.getElementById('node-tab-params');
+  const settingsEl = document.getElementById('node-tab-settings');
+  if (paramsEl) paramsEl.style.display = tab === 'params' ? 'block' : 'none';
+  if (settingsEl) settingsEl.style.display = tab === 'settings' ? 'block' : 'none';
+}
+
+// Reads whatever is CURRENTLY typed into a node's open form (not the last
+// saved snapshot) — so "Execute step" always tests exactly what's on
+// screen, matching the real per-node fields defined in actionFieldsHtml().
+function readLiveNodeConfig(node) {
+  const scope = node.bodyWrapEl || node.el;
+  if (node.type === 'condition') {
+    return {
+      field: scope.querySelector('[data-role="field"]')?.value.trim() || '',
+      operator: scope.querySelector('[data-role="operator"]')?.value || 'eq',
+      value: scope.querySelector('[data-role="value"]')?.value || '',
+    };
+  }
+  const config = {};
+  if (node.config && node.config._label) config._label = node.config._label;
+  if (node.config && node.config.credential_provider) config.credential_provider = node.config.credential_provider;
+  scope.querySelectorAll('[data-key]').forEach(f => {
+    let val = f.value;
+    if (f.dataset.key === 'params' || f.dataset.key === 'headers') {
+      try { val = JSON.parse(val.trim()); } catch (e) {}
+    }
+    config[f.dataset.key] = val;
+  });
+  return config;
+}
+
+async function executeNodeStep(nodeId) {
+  const node = nodes[nodeId];
+  if (!node) return;
+  const mockEl = document.getElementById('node-mock-input');
+  const outEl = document.getElementById('node-execute-output');
+  const metaEl = document.getElementById('execute-step-meta');
+  const btn = document.getElementById('execute-step-btn');
+
+  let mockInput = {};
+  if (mockEl && mockEl.value.trim()) {
+    try { mockInput = JSON.parse(mockEl.value); }
+    catch (e) {
+      outEl.innerHTML = `<p class="node-io-error">Mock input isn't valid JSON: ${escapeHtml(e.message)}</p>`;
+      return;
+    }
+  }
+
+  const liveType = node.type === 'condition' ? 'condition'
+    : (node.bodyWrapEl.querySelector('[data-role="type"]')?.value || node.type);
+  const cfg = readLiveNodeConfig(node);
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  outEl.innerHTML = `<p class="node-io-empty">Running…</p>`;
+  // Input/Parameters/Output are stacked vertically in this panel now
+  // (not side-by-side columns), so Output can genuinely be scrolled out
+  // of view below Parameters when you click Execute step — scroll it
+  // into view immediately so the result is visible the moment it lands,
+  // instead of it silently updating off-screen.
+  outEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try {
+    const res = await fetch("{{ url_for('admin.automation_node_test') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+      body: JSON.stringify({ type: liveType, config: cfg, mock_input: mockInput }),
+    });
+    const data = await res.json();
+    setNodeStatus(nodeId, data.ok ? 'ok' : 'error');
+    if (!data.ok) {
+      outEl.innerHTML = `<p class="node-io-error">✕ ${escapeHtml(data.error || 'Execution failed.')}</p>`;
+      metaEl.textContent = data.duration_ms != null ? `${data.duration_ms}ms` : '';
+    } else {
+      const pretty = typeof data.output === 'string' ? data.output : JSON.stringify(data.output, null, 2);
+      outEl.innerHTML = `<pre class="node-io-success">${escapeHtml(pretty)}</pre>`;
+      metaEl.textContent = `✓ ${data.duration_ms}ms${data.output_pin ? ' · out: ' + data.output_pin : ''}`;
+    }
+  } catch (e) {
+    setNodeStatus(nodeId, 'error');
+    outEl.innerHTML = `<p class="node-io-error">✕ Request failed: ${escapeHtml(e.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Execute step';
+  }
+}
+
+// Paints a small real status dot on the node card itself (screenshots 13/
+//14 style ✓/✕) reflecting the outcome of the last "Execute step" run —
+// cleared whenever the node's config changes so it never shows a stale
+// pass/fail after an edit.
+function setNodeStatus(nodeId, status) {
+  const node = nodes[nodeId];
+  if (!node) return;
+  const dot = node.el.querySelector('.node-status-dot');
+  if (dot) dot.className = 'node-status-dot' + (status ? ' ' + status : '');
+}
+
+// Toolbar "Trigger" button — edits the existing trigger if there is one,
+// otherwise a brand-new workflow has no trigger node to edit yet, so this
+// routes to the same first-step picker the empty canvas placeholder uses.
+function openTriggerOrPicker() {
+  if (nodes['trigger']) { openNodePanel('trigger'); }
+  else { openFirstStepPicker(); }
+}
+
+function updateCanvasEmptyState() {
+  const empty = document.getElementById('canvas-empty-state');
+  if (!empty) return;
+  empty.classList.toggle('show', !nodes['trigger']);
+}
+
+function renderTriggerList(query) {
+  query = (query || '').trim().toLowerCase();
+  const entries = Object.entries(TRIGGERS).filter(([k, v]) => !query || v.toLowerCase().includes(query) || k.includes(query));
+  const el = document.getElementById('picker-trigger-items');
+  el.innerHTML = entries.length ? entries.map(([key, label]) => `
+    <a href="#" class="sidebar-item" onclick="selectFirstStepTrigger('${key}'); return false;" style="display:flex;align-items:center;gap:8px">
+      <i data-lucide="zap" style="width:15px;height:15px;flex-shrink:0;color:var(--accent-blue)"></i><span>${label}</span>
+    </a>`).join('') : `<p style="font-size:11.5px;color:var(--text-secondary);padding:8px">No matches for "${query}".</p>`;
+  refreshIcons();
+}
+
+function selectFirstStepTrigger(key) {
+  addTriggerNode(key, {}, 250, 220);
+  updateCanvasEmptyState();
+  closeSidePanel();
+  statusMsg(`Trigger set to: ${TRIGGERS[key] || key}`, true);
+}
+
+function openBuildWithAI() {
+  closeSidePanelInternal();
+  panelMode = 'add';
+  currentPanelNodeId = null;
+  document.getElementById('side-panel-title').innerHTML = `<i data-lucide="sparkles" style="width:16px;height:16px;color:#a78bfa"></i> <span>Build with AI</span>`;
+  document.getElementById('side-panel').classList.remove('side-panel-wide');
+  document.getElementById('side-panel-body').classList.remove('no-pad');
+  const view = document.getElementById('picker-build-ai');
+  const panelBody = document.getElementById('side-panel-body');
+  panelBody.innerHTML = '';
+  panelBody.appendChild(view);
+  view.style.display = 'block';
+  addPickerView = 'build-ai';
+  document.getElementById('side-panel-footer').style.display = 'none';
+  document.getElementById('side-panel-overlay').classList.add('open');
+  document.getElementById('side-panel').classList.add('open');
+  const status = document.getElementById('build-ai-status');
+  if (status) status.innerHTML = '';
+  const ta = document.getElementById('build-ai-prompt');
+  if (ta) { ta.value = ''; ta.focus(); }
+}
+
+async function submitBuildWithAI() {
+  const ta = document.getElementById('build-ai-prompt');
+  const status = document.getElementById('build-ai-status');
+  const btn = document.getElementById('build-ai-submit');
+  const prompt = (ta?.value || '').trim();
+  if (!prompt) { status.innerHTML = `<span style="color:var(--accent-red)">Describe the automation first.</span>`; return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Thinking…';
+  status.innerHTML = `<span class="node-io-empty">Calling your configured AI provider…</span>`;
+  try {
+    const res = await fetch("{{ url_for('admin.automation_build_with_ai') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      status.innerHTML = `<span style="color:var(--accent-red)">${escapeHtml(data.error || 'Something went wrong.')}</span>`;
+      return;
+    }
+    // Real placement: trigger, then each returned catalog id, connected
+    // linearly left to right — exactly the same node-creation calls a
+    // person clicking through the picker manually would trigger.
+    addTriggerNode(data.trigger, {}, 60, 220);
+    updateCanvasEmptyState();
+    let lastId = 'trigger';
+    let x = 380;
+    (data.steps || []).forEach(itemId => {
+      const item = INTEGRATIONS_BY_ID[itemId];
+      if (!item) return;
+      const nodeId = generateNodeId('node');
+      addActionNodeEl(nodeId, 'api_request', {
+        method: item.method, url: item.url, headers: item.headers || {}, body: item.body || '',
+        _label: item.name, _docs: item.docs || null, credential_provider: item.provider || null,
+      }, x, 220);
+      connections.push({ fromId: lastId, fromPin: 'out', toId: nodeId, toPin: 'in' });
+      lastId = nodeId;
+      x += 300;
+    });
+    drawConnections();
+    pushHistory();
+    updateMinimap();
+    status.innerHTML = `<span style="color:var(--accent-green)">✓ ${escapeHtml(data.explanation || 'Workflow built.')}</span>`;
+    setTimeout(closeSidePanel, 1400);
+  } catch (e) {
+    status.innerHTML = `<span style="color:var(--accent-red)">Request failed: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Generate workflow';
+  }
+}
+
+// "← Back" from the trigger picker / Build-with-AI views. Both are now
+// reached only through the unified root categories (Trigger is one of
+// them — see picker-cat-trigger), so there's always a root to return to.
+function backToPickerRootOrEmpty() {
+  backToPickerRoot();
+}
+
+function openAddNodePanel(title) {
+  closeSidePanelInternal();
+  panelMode = 'add';
+  currentPanelNodeId = null;
+
+  document.getElementById('side-panel-title').innerHTML = title
+    ? `<i data-lucide="zap" style="width:16px;height:16px"></i> <span>${title}</span>`
+    : `<i data-lucide="plus" style="width:16px;height:16px"></i> <span>Add Node</span>`;
+  // Adding a node always uses the normal-width panel — only editing an
+  // existing node's Parameters/Settings widens it.
+  document.getElementById('side-panel').classList.remove('side-panel-wide');
+  document.getElementById('side-panel-body').classList.remove('no-pad');
+  const root = document.getElementById('picker-root');
+  const panelBody = document.getElementById('side-panel-body');
+  panelBody.innerHTML = '';
+  panelBody.appendChild(root);
+  root.style.display = 'block';
+  addPickerView = 'root';
+  // The engine only supports one trigger per workflow (see the note by
+  // addTriggerNode / setTriggerType), so once a trigger node exists this
+  // category has nothing valid to do — hide it rather than let it open a
+  // dead end. Before that, it's how "Add first step" and the unified "+"
+  // both reach the trigger list (see showTriggerCategory()).
+  const trigRow = document.getElementById('picker-cat-trigger');
+  if (trigRow) trigRow.style.display = nodes['trigger'] ? 'none' : '';
+
+  document.getElementById('side-panel-footer').style.display = 'none';
+  document.getElementById('side-panel-overlay').classList.add('open');
+  document.getElementById('side-panel').classList.add('open');
+  refreshIcons();
+
+  const search = document.getElementById('picker-search');
+  if (search) { search.value = ''; filterPickerRoot(''); search.focus(); }
+}
+
+// "Add first step" (empty-canvas placeholder) and the old floating "+"
+// FAB used to be two separate entry points into two different pickers —
+// one trigger-only, one everything-but-trigger. Both now open the exact
+// same unified category picker (Trigger is just one more category in it,
+// see picker-cat-trigger above), so "Add first step" really does do the
+// floating FAB's whole job and a separate FAB isn't needed once a first
+// node exists — see the per-node "+" on every node's own output instead.
+function openFirstStepPicker() {
+  openAddNodePanel('Add first step');
+}
+
+// A node's own "+" (next to its out / true / false anchor) — adds a new
+// node pre-wired to that exact output instead of landing unconnected.
+// Set pendingConnectFrom AFTER opening the panel, not before — opening
+// runs closeSidePanelInternal() first (to tidy up whatever was open
+// before), which clears pendingConnectFrom as part of that cleanup.
+function openAddNodeFrom(nodeId, pin) {
+  openAddNodePanel('Add Node');
+  pendingConnectFrom = { nodeId, pin };
+}
+
+// Internal: returns whatever content is currently in the panel back to
+// its real home in the DOM (a node's card, or the hidden canvas-layout
+// holder), without hiding the panel chrome itself. Used both by the
+// public closeSidePanel() and right before switching what the panel shows.
+function closeSidePanelInternal() {
+  if (panelMode === 'edit' && currentPanelNodeId && nodes[currentPanelNodeId]) {
+    const node = nodes[currentPanelNodeId];
+    // Capture the Settings-tab Notes field back onto the node before its
+    // DOM is torn down — it lives outside bodyWrapEl (which only holds
+    // the Parameters form) so it isn't picked up by [data-key] scraping.
+    const notesEl = document.getElementById('node-notes-input');
+    if (notesEl) node.config._notes = notesEl.value;
+    refreshNodeSummary(currentPanelNodeId);
+    node.el.appendChild(node.bodyWrapEl);
+    node.bodyWrapEl.style.display = 'none';
+  } else if (panelMode === 'add') {
+    hideCurrentAddView();
+  }
+  currentPanelNodeId = null;
+  panelMode = null;
+  addPickerView = null;
+  pendingConnectFrom = null;
+}
+
+function closeSidePanel() {
+  closeSidePanelInternal();
+  document.getElementById('side-panel-overlay').classList.remove('open');
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('side-panel').classList.remove('side-panel-wide');
+  document.getElementById('side-panel-body').classList.remove('no-pad');
+  pushHistory();
+}
+
+function applyNodePanel() {
+  closeSidePanel();
+}
+
+function onNodeTypeChange(nodeId) {
+  const node = nodes[nodeId];
+  const select = node.bodyWrapEl.querySelector('[data-role="type"]');
+  node.type = select.value;
+  node.bodyWrapEl.querySelector('[data-role="fields"]').innerHTML = actionFieldsHtml(node.type, {});
+  drawConnections();
+}
+
+function createNode(type, config = {}, x = null, y = null) {
+  const id = generateNodeId('node');
+  // If this node is being added from a specific node's own "+" (see
+  // openAddNodeFrom), place it just to the right of that source node and
+  // wire the connection immediately — this is the actual mechanic behind
+  // the per-node "+" buttons; without it they'd just be a fancier way to
+  // open the same picker and still leave the node unconnected.
+  const pending = pendingConnectFrom;
+  if (pending && nodes[pending.nodeId] && x === null && y === null) {
+    const src = nodes[pending.nodeId];
+    x = src.x + 320;
+    y = pending.pin === 'true' ? src.y - 40 : pending.pin === 'false' ? src.y + 80 : src.y;
+  }
+  addActionNodeEl(id, type, config, x, y);
+  if (pending && nodes[pending.nodeId]) {
+    connections.push({ fromId: pending.nodeId, fromPin: pending.pin, toId: id, toPin: 'in' });
+    drawConnections();
+  }
+  pendingConnectFrom = null;
+  pushHistory();
+  updateMinimap();
+  return id;
+}
+
+// STICKY NOTES
+function createStickyNote() {
+  const id = generateNodeId('note');
+  const x = 300 + Math.random() * 80;
+  const y = 200 + Math.random() * 80;
+  addStickyNoteEl(id, '', x, y);
+  pushHistory();
+}
+
+function addStickyNoteEl(id, text = '', x, y) {
+  const el = document.createElement('div');
+  el.className = 'canvas-note';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.innerHTML = `
+    <button type="button" onclick="deleteNode('${id}')" style="position:absolute; top:4px; right:4px; border:none; background:none; color:#777; cursor:pointer; font-size:10px;">✕</button>
+    <textarea placeholder="Write workflow note here...">${text}</textarea>`;
+    
+  world.appendChild(el);
+  
+  const textarea = el.querySelector('textarea');
+  textarea.addEventListener('input', () => {
+    nodes[id].config.text = textarea.value;
+  });
+  
+  nodes[id] = { id, type: 'sticky_note', config: { text }, x, y, el };
+  makeNodeDraggable(id);
+}
+
+// COMMENT/GROUP BOX
+function createGroupBox() {
+  const id = generateNodeId('group');
+  const x = 200 + Math.random() * 80;
+  const y = 150 + Math.random() * 80;
+  addGroupEl(id, 'Group Title', x, y, 400, 260);
+  pushHistory();
+}
+
+function addGroupEl(id, title = 'Group Title', x, y, w = 400, h = 260) {
+  const el = document.createElement('div');
+  el.className = 'canvas-group';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
+  
+  el.innerHTML = `
+    <div class="canvas-group-header" style="pointer-events: auto; display: flex; justify-content: space-between;">
+      <input style="background:transparent; border:none; color:var(--text-secondary); width:80%; font-size:10px; font-weight:700; outline:none;" value="${title}"/>
+      <button type="button" onclick="deleteNode('${id}')" style="background:none; border:none; color:var(--accent-red); cursor:pointer; font-size:10px;">✕</button>
+    </div>`;
+    
+  world.appendChild(el);
+  
+  const input = el.querySelector('input');
+  input.addEventListener('input', () => {
+    nodes[id].config.title = input.value;
+  });
+  
+  nodes[id] = { id, type: 'group', config: { title, width: w, height: h }, x, y, el };
+  makeNodeDraggable(id);
+}
+
+function clearCanvas() {
+  if (confirm("Are you sure you want to clear all nodes?")) {
+    Object.keys(nodes).forEach(id => {
+      if (id !== 'trigger') deleteNode(id);
+    });
+    connections = [];
+    drawConnections();
+    pushHistory();
+  }
+}
+
+// Minmap rendering
+function updateMinimap() {
+  const minimap = document.getElementById('canvas-minimap');
+  const viewportBox = document.getElementById('minimap-viewport');
+  
+  // Calculate bounding box of all nodes
+  let minX = 0, maxX = 800, minY = 0, maxY = 600;
+  Object.values(nodes).forEach(n => {
+    minX = Math.min(minX, n.x);
+    maxX = Math.max(maxX, n.x + 250);
+    minY = Math.min(minY, n.y);
+    maxY = Math.max(maxY, n.y + 150);
+  });
+  
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  
+  // Draw minimap nodes
+  let nodesHtml = '';
+  Object.values(nodes).forEach(n => {
+    const rx = ((n.x - minX) / spanX) * 160;
+    const ry = ((n.y - minY) / spanY) * 110;
+    const rw = (250 / spanX) * 160;
+    const rh = (100 / spanY) * 110;
+    
+    let color = 'var(--accent-blue)';
+    if (n.type === 'trigger') color = 'var(--accent-green)';
+    if (n.type === 'condition') color = 'var(--accent-yellow)';
+    if (n.type === 'sticky_note') color = '#fef5c1';
+    if (n.type === 'group') color = 'rgba(255,255,255,0.05)';
+    
+    nodesHtml += `<div style="position:absolute; left:${rx}px; top:${ry}px; width:${Math.max(4, rw)}px; height:${Math.max(3, rh)}px; background:${color}; border-radius:1px; opacity:0.6;"></div>`;
+  });
+  
+  // Viewport box mapping
+  const containerW = container.clientWidth;
+  const containerH = container.clientHeight;
+  
+  const rxViewport = ((-panX / scale - minX) / spanX) * 160;
+  const ryViewport = ((-panY / scale - minY) / spanY) * 110;
+  const rwViewport = ((containerW / scale) / spanX) * 160;
+  const rhViewport = ((containerH / scale) / spanY) * 110;
+  
+  viewportBox.style.left = Math.max(0, Math.min(160, rxViewport)) + 'px';
+  viewportBox.style.top = Math.max(0, Math.min(110, ryViewport)) + 'px';
+  viewportBox.style.width = Math.max(8, Math.min(160, rwViewport)) + 'px';
+  viewportBox.style.height = Math.max(6, Math.min(110, rhViewport)) + 'px';
+  
+  // Clean other minimap divs and append
+  minimap.querySelectorAll('.m-node').forEach(n => n.remove());
+  const div = document.createElement('div');
+  div.className = 'm-node';
+  div.style.position = 'absolute';
+  div.style.width = '100%';
+  div.style.height = '100%';
+  div.style.pointerEvents = 'none';
+  div.innerHTML = nodesHtml;
+  minimap.appendChild(div);
+}
+
+// Status updates
+function statusMsg(text, ok) {
+  const el = document.getElementById('canvas-status');
+  el.textContent = text;
+  el.style.color = ok ? 'var(--accent-green)' : 'var(--accent-red)';
+}
+
+function getCsrf() {
+  return document.querySelector('input[name="csrf_token"]')?.value || '';
+}
+
+// Assemble and save workflow
+// Shared by saveWorkflow() and runFullWorkflowTest() — reads whatever is
+// currently on the canvas (including live, unsaved edits in an open node
+// panel) into the same {trigger_type, trigger_config, nodesList,
+// connections} shape the backend expects. Returns {error: '...'} instead
+// if the graph isn't in a submittable state (no trigger yet, or the
+// trigger's filter JSON doesn't parse) so both callers show the same
+// message instead of drifting.
+function serializeCanvasGraph() {
+  if (!nodes['trigger']) return { error: 'Add a trigger first — click "+ Add first step" or the Trigger button.' };
+
+  const triggerEl = nodes['trigger'].bodyWrapEl || nodes['trigger'].el;
+  const trigger_type = triggerEl.querySelector('[data-role="trigger-type"]').value;
+  let trigger_config = {};
+  if (trigger_type === 'schedule') {
+    const intervalEl = triggerEl.querySelector('[data-role="trigger-interval"]');
+    trigger_config = { interval_minutes: parseInt(intervalEl ? intervalEl.value : 60, 10) };
+  } else {
+    const rawCfg = triggerEl.querySelector('[data-role="trigger-cfg"]').value.trim();
+    if (rawCfg) {
+      try { trigger_config = JSON.parse(rawCfg); }
+      catch { return { error: 'Trigger filter must be valid JSON, e.g. {"platform":"telegram"}' }; }
+    }
+  }
+
+  const nodesList = Object.values(nodes).map(n => {
+    const config = {};
+    if (n.type === 'trigger') {
+      config.trigger_type = trigger_type;
+      config.trigger_config = trigger_config;
+    } else if (n.type === 'condition') {
+      const scope = n.bodyWrapEl || n.el;
+      config.field = scope.querySelector('[data-role="field"]').value.trim();
+      config.operator = scope.querySelector('[data-role="operator"]').value;
+      config.value = scope.querySelector('[data-role="value"]').value;
+      if (n.config && n.config.disabled) config.disabled = true;
+    } else if (n.type === 'sticky_note' || n.type === 'group') {
+      Object.assign(config, n.config);
+    } else {
+      // Preserve the friendly integration-library label (e.g. "Slack —
+      // Post Message") across saves — it's not a form field on the node
+      // (nothing here should let you hand-edit it), just metadata carried
+      // through from n.config so the node keeps its real name on reload.
+      if (n.config && n.config._label) config._label = n.config._label;
+      if (n.config && n.config._docs) config._docs = n.config._docs;
+      if (n.config && n.config._notes) config._notes = n.config._notes;
+      if (n.config && n.config.credential_provider) config.credential_provider = n.config.credential_provider;
+      if (n.config && n.config.disabled) config.disabled = true;
+      // Query via bodyWrapEl (a stable reference) rather than n.el — if
+      // this node's settings panel is open right now, its fields have been
+      // physically relocated into the side panel and are no longer inside
+      // n.el at all, so n.el.querySelectorAll would silently find nothing.
+      const scope = n.bodyWrapEl || n.el;
+      scope.querySelectorAll('[data-key]').forEach(f => {
+        let val = f.value;
+        if (f.dataset.key === 'params' || f.dataset.key === 'headers') {
+          try { val = JSON.parse(val.trim()); } catch(e) {}
+        }
+        config[f.dataset.key] = val;
+      });
+    }
+    return {
+      id: n.id,
+      type: n.type,
+      config: config
+    };
+  });
+
+  return { trigger_type, trigger_config, nodesList, connections };
+}
+
+async function saveWorkflow() {
+  const name = document.getElementById('wf-name').value.trim();
+  if (!name) { statusMsg('Give the workflow a name first.', false); return; }
+
+  const graph = serializeCanvasGraph();
+  if (graph.error) { statusMsg(graph.error, false); return; }
+  const { trigger_type, trigger_config, nodesList, connections } = graph;
+
+  // Canvas metadata details
+  const canvas_positions = {};
+  Object.values(nodes).forEach(n => {
+    canvas_positions[n.id] = { x: n.x, y: n.y };
+  });
+  
+  const actionsPayload = {
+    nodes: nodesList,
+    connections: connections
+  };
+
+  statusMsg('Saving changes...', true);
+  try {
+    const res = await fetch(SAVE_URL, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token() }}'
+      },
+      body: JSON.stringify({ 
+        name, 
+        trigger_type, 
+        trigger_config, 
+        actions: actionsPayload, 
+        canvas_positions 
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusMsg('Error: ' + (data.error || res.statusText), false); return; }
+    statusMsg('Saved workflow successfully ✓', true);
+    if (!WF_ID && data.redirect) {
+      setTimeout(() => window.location.href = data.redirect, 800);
+    }
+  } catch (e) {
+    statusMsg('Save failed: ' + e.message, false);
+  }
+}
+
+// "Test workflow" — runs the ENTIRE graph exactly as it currently sits on
+// canvas (including unsaved edits) through the real GraphExecutor, the
+// same engine a live trigger uses, via a throwaway (non-DB, non-saving)
+// backend call. Mirrors the existing per-node "Execute step" pattern,
+// just for the whole graph instead of one node — this is the missing
+// half of that feature; the button + log panel didn't exist before.
+async function runFullWorkflowTest() {
+  const graph = serializeCanvasGraph();
+  if (graph.error) { statusMsg(graph.error, false); return; }
+
+  const btn = document.getElementById('canvas-run-btn');
+  const panel = document.getElementById('execution-log-panel');
+  const body = document.getElementById('exec-log-body');
+  const statusEl = document.getElementById('exec-log-status');
+
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader" style="width:15px;height:15px"></i><span>Running…</span>';
+  refreshIcons();
+  statusEl.style.display = 'none';
+  body.innerHTML = '<p class="exec-log-line is-info">Running…</p>';
+  panel.classList.add('open');
+
+  try {
+    const res = await fetch("{{ url_for('admin.automation_graph_test') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+      body: JSON.stringify({ nodes: graph.nodesList, connections: graph.connections }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      body.innerHTML = `<p class="exec-log-line is-failed">✕ ${escapeHtml(data.error || 'Test run failed.')}</p>`;
+      statusEl.textContent = 'Failed';
+      statusEl.className = 'exec-log-status failed';
+      statusEl.style.display = 'inline-block';
+      return;
+    }
+    const lineClass = (line) => line.includes('FAILED') ? 'is-failed'
+      : line.includes('SUCCESS') ? 'is-success'
+      : line.includes('SKIPPED') ? 'is-skipped' : 'is-info';
+    body.innerHTML = (data.log_lines || []).map(l => `<p class="exec-log-line ${lineClass(l)}">${escapeHtml(l)}</p>`).join('')
+      || '<p class="exec-log-line is-info">No log output.</p>';
+    statusEl.textContent = data.status;
+    statusEl.className = 'exec-log-status ' + (data.status === 'success' ? 'success' : data.status === 'partial' ? 'partial' : 'failed');
+    statusEl.style.display = 'inline-block';
+    // Reflect the same result on each node card that actually ran, same
+    // dot used by the single-node "Execute step" flow, so a full-graph
+    // test run leaves the canvas showing which nodes passed/failed too.
+    (data.node_results || []).forEach(r => setNodeStatus(r.id, r.status));
+  } catch (e) {
+    body.innerHTML = `<p class="exec-log-line is-failed">✕ Request failed: ${escapeHtml(e.message)}</p>`;
+    statusEl.textContent = 'Failed';
+    statusEl.className = 'exec-log-status failed';
+    statusEl.style.display = 'inline-block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="play"></i><span>Test workflow</span>';
+    refreshIcons();
+  }
+}
+
+function closeExecutionLog() {
+  document.getElementById('execution-log-panel').classList.remove('open');
+}
+
+// Initialize layout from existing database workflow
+function initLayout() {
+  const triggerType = EXISTING_TRIGGER || 'manual';
+  const triggerCfg = EXISTING_TRIGGER_CFG || {};
+  // A workflow that has never been saved (WF_ID is null) and has no
+  // trigger or actions yet gets the real empty-canvas placeholder
+  // ("+ Add first step" / "Build with AI") instead of a Trigger node
+  // nobody asked for being auto-created and sitting there by default.
+  const isBrandNewWorkflow = !WF_ID && !EXISTING_TRIGGER &&
+    (!EXISTING_WF || (Array.isArray(EXISTING_WF) ? EXISTING_WF.length === 0 : !EXISTING_WF.nodes || !EXISTING_WF.nodes.length));
+
+  // Check if existing workflow is Graph-based or Legacy sequential list
+  if (EXISTING_WF && !Array.isArray(EXISTING_WF) && EXISTING_WF.nodes) {
+    // Loaded Graph format
+    const stateNodes = EXISTING_WF.nodes;
+    stateNodes.forEach(n => {
+      nextNodeId = Math.max(nextNodeId, parseInt(n.id.split('-')[1] || 0) + 1);
+      const pos = EXISTING_POSITIONS[n.id] || { x: n.x, y: n.y };
+      
+      if (n.type === 'trigger') {
+        addTriggerNode(triggerType, triggerCfg, pos.x, pos.y);
+      } else if (n.type === 'sticky_note') {
+        addStickyNoteEl(n.id, n.config.text, pos.x, pos.y);
+      } else if (n.type === 'group') {
+        addGroupEl(n.id, n.config.title, pos.x, pos.y, n.config.width, n.config.height);
+      } else {
+        addActionNodeEl(n.id, n.type, n.config, pos.x, pos.y);
+      }
+    });
+    connections = EXISTING_WF.connections || [];
+  } else if (isBrandNewWorkflow) {
+    // Nothing to lay out — leave the canvas empty and let
+    // updateCanvasEmptyState() below show the real placeholder.
+  } else {
+    // Legacy list schema backfill conversion
+    addTriggerNode(triggerType, triggerCfg, 50, 200);
+    
+    let lastId = 'trigger';
+    let currentX = 350;
+    
+    (EXISTING_WF || []).forEach((action, index) => {
+      const nodeId = generateNodeId('node');
+      const pos = EXISTING_POSITIONS[nodeId] || { x: currentX, y: 200 };
+      
+      addActionNodeEl(nodeId, action.type, action.config, pos.x, pos.y);
+      
+      // Connect legacy list linearly
+      connections.push({
+        fromId: lastId,
+        fromPin: lastId === 'trigger' ? 'out' : 'out',
+        toId: nodeId,
+        toPin: 'in'
+      });
+      
+      lastId = nodeId;
+      currentX += 300;
+    });
+  }
+  
+  updateCanvasEmptyState();
+  applyTransform();
+  pushHistory();
+}
+
+function getCsrfToken() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta) return meta.getAttribute('content');
+  const inp = document.querySelector('input[name="csrf_token"]');
+  return inp ? inp.value : '';
+}
+
+function openImportN8NModal() {
+  document.getElementById('n8n-import-modal').classList.remove('hidden');
+}
+function closeImportN8NModal() {
+  document.getElementById('n8n-import-modal').classList.add('hidden');
+}
+async function submitImportN8N() {
+  const jsonText = document.getElementById('n8n-json-input').value.trim();
+  if(!jsonText) { alert("Please paste n8n workflow JSON"); return; }
+  try {
+    const res = await fetch('/admin/automation/import-n8n', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ n8n_json: jsonText })
+    });
+    const data = await res.json();
+    if(data.success) {
+      window.location.href = data.redirect;
+    } else {
+      alert(data.error || "Failed to import n8n JSON");
+    }
+  } catch(e) {
+    alert("Error parsing n8n JSON: " + e.message);
+  }
+}
+async function exportN8NWorkflow(wid) {
+  try {
+    const res = await fetch(`/admin/automation/${wid}/export-n8n`);
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (data.name || 'workflow').replace(/[^a-z0-9_-]/gi, '_') + '.n8n.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert("Failed to export n8n workflow: " + e.message);
+  }
+}
+
+function loadN8NPreset(presetKey) {
+  if (presetKey === 'lead_outreach') {
+    document.getElementById('wf-name').value = "Google Lead Finder & Cold Email Campaign";
+    canvasNodes = [
+      { id: 'node_1', type: 'webhook', title: '🔗 Google Lead Trigger', x: 80, y: 100, data: { url: '/api/leads/trigger' } },
+      { id: 'node_2', type: 'api_request', title: '🌐 Fetch Google Niche Leads', x: 380, y: 100, data: { endpoint: '/leads/search-niche-google' } },
+      { id: 'node_3', type: 'ai_agent', title: '🤖 AI Sales Rep Personalizer', x: 680, y: 100, data: { persona: 'sales_rep' } },
+      { id: 'node_4', type: 'send_email', title: '📧 Send Personal Cold Email', x: 980, y: 100, data: { template: 'cold_intro' } }
+    ];
+    canvasLinks = [
+      { id: 'l1', from: 'node_1', to: 'node_2' },
+      { id: 'l2', from: 'node_2', to: 'node_3' },
+      { id: 'l3', from: 'node_3', to: 'node_4' }
+    ];
+  } else if (presetKey === 'social_bot') {
+    document.getElementById('wf-name').value = "Social Multi-Platform Auto-Reply Bot";
+    canvasNodes = [
+      { id: 'node_1', type: 'webhook', title: '💬 Social Mention Trigger', x: 80, y: 120, data: {} },
+      { id: 'node_2', type: 'condition', title: '🔀 Filter Intent Keyword', x: 380, y: 120, data: { keyword: 'pricing' } },
+      { id: 'node_3', type: 'ai_node', title: '🧠 AI Sales Rep Response', x: 680, y: 80, data: {} },
+      { id: 'node_4', type: 'send_channel_reply', title: '💬 Post Live Channel Reply', x: 980, y: 80, data: {} }
+    ];
+    canvasLinks = [
+      { id: 'l1', from: 'node_1', to: 'node_2' },
+      { id: 'l2', from: 'node_2', to: 'node_3' },
+      { id: 'l3', from: 'node_3', to: 'node_4' }
+    ];
+  }
+  renderAllNodes();
+  renderAllLinks();
+  const dropdown = document.getElementById('preset-dropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  alert("n8n Preset Workflow loaded onto canvas successfully!");
+}
+
+window.addEventListener('load', () => {
+  initLayout();
+  renderIntegrationIcons();
+  renderRecentAndFavorites();
+});
+
+function renderIntegrationIcons() {
+  document.querySelectorAll('.integration-icon-slot').forEach(el => {
+    el.innerHTML = appIconHtml(el.dataset.label, 18);
+  });
+}
+</script>
+{% endblock %}

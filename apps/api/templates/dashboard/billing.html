@@ -1,0 +1,121 @@
+{% extends "dashboard/base_dashboard.html" %}
+{% block page_title %}Billing{% endblock %}
+{% block page_subtitle %}Credits, subscriptions, and order history{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-8">
+
+  <!-- AI Credits summary -->
+  <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-primary/15 to-white/[0.03] backdrop-blur-md p-6 md:p-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div class="flex items-center gap-6">
+        <div>
+          <p class="text-sm text-muted mb-1">AI Credits</p>
+          <p class="text-3xl font-display font-bold text-white">{{ "{:,}".format(credit_status.total) }}</p>
+        </div>
+        <div class="text-sm text-muted">
+          <p>Free: <span class="text-white font-medium">{{ credit_status.free }}/{{ credit_status.free_cap }}</span></p>
+          <p>Purchased: <span class="text-white font-medium">{{ "{:,}".format(credit_status.purchased) }}</span></p>
+        </div>
+      </div>
+      <a href="{{ url_for('dashboard.credits_home') }}" class="px-5 py-2.5 rounded-xl bg-primary text-black font-semibold hover:bg-primary/80 transition-colors text-center">
+        Buy More Credits
+      </a>
+    </div>
+  </div>
+
+  <!-- Products & Subscriptions -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-6 md:p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <i data-lucide="package" class="w-5 h-5 text-primary"></i>
+      <h2 class="text-xl font-display font-semibold text-white">Products &amp; Subscriptions</h2>
+    </div>
+    {% if not subscriptions %}
+    <p class="text-sm text-muted">You haven't purchased any premium products yet. <a href="/marketplace" class="text-primary hover:underline">Browse the marketplace</a>.</p>
+    {% else %}
+    <div class="space-y-3">
+      {% for s in subscriptions %}
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white/5 border border-white/10 p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:{{ s.color }}20">
+            <i data-lucide="{{ s.icon }}" class="w-4 h-4" style="color:{{ s.color }}"></i>
+          </div>
+          <div>
+            <p class="text-white font-medium">{{ s.name }}</p>
+            <p class="text-xs text-muted">
+              {{ s.billing_period|replace('_',' ')|title }}
+              {% if s.activated_at %} · Since {{ s.activated_at.strftime('%b %d, %Y') }}{% endif %}
+              {% if s.expires_at %} · {{ 'Expired' if s.expired else 'Renews' }} {{ s.expires_at.strftime('%b %d, %Y') }}{% endif %}
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          {% if s.expired %}
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-500/15 text-red-400">Expired</span>
+            <a href="{{ url_for('marketplace.product_detail', slug=s.slug) }}" class="px-3 py-1.5 rounded-lg bg-primary text-black text-xs font-semibold hover:bg-primary/80 transition-colors">Renew</a>
+          {% elif s.active %}
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/15 text-primary">Active</span>
+          {% else %}
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/10 text-muted">Inactive</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Credit purchase history -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md overflow-hidden">
+    <div class="flex items-center gap-3 p-6 md:p-8 pb-4">
+      <i data-lucide="zap" class="w-5 h-5 text-[#F59E0B]"></i>
+      <h2 class="text-xl font-display font-semibold text-white">Credit Purchases</h2>
+    </div>
+    {% if not credit_purchases %}
+    <p class="text-sm text-muted px-6 md:px-8 pb-6">No credit purchases yet.</p>
+    {% else %}
+    <div class="divide-y divide-white/5">
+      {% for pu in credit_purchases %}
+      <div class="flex items-center justify-between px-6 md:px-8 py-3">
+        <div>
+          <p class="text-sm text-white">{{ "{:,}".format(pu.credits) }} credits — {{ pu.label }}</p>
+          <p class="text-xs text-muted">{{ pu.created_at.strftime('%b %d, %Y %H:%M') if pu.created_at else '' }} · {{ currency_symbol }}{{ "{:,.2f}".format(pu.amount) }}</p>
+        </div>
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full
+          {{ 'bg-primary/15 text-primary' if pu.status == 'paid' else ('bg-red-500/15 text-red-400' if pu.status == 'failed' else 'bg-yellow-500/15 text-yellow-400') }}">
+          {{ pu.status|title }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Order history -->
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md overflow-hidden">
+    <div class="flex items-center gap-3 p-6 md:p-8 pb-4">
+      <i data-lucide="receipt" class="w-5 h-5 text-secondary"></i>
+      <h2 class="text-xl font-display font-semibold text-white">Order History</h2>
+    </div>
+    {% if not orders %}
+    <p class="text-sm text-muted px-6 md:px-8 pb-6">No orders yet.</p>
+    {% else %}
+    <div class="divide-y divide-white/5">
+      {% for o in orders %}
+      <div class="flex items-center justify-between px-6 md:px-8 py-3">
+        <div>
+          <p class="text-sm text-white">{{ o.product.title if o.product else 'Order #' + o.id|string }}</p>
+          <p class="text-xs text-muted">{{ o.created_at.strftime('%b %d, %Y %H:%M') if o.created_at else '' }} · {{ currency_symbol }}{{ "{:,.2f}".format(o.amount or 0) }}</p>
+        </div>
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full
+          {{ 'bg-primary/15 text-primary' if o.status == 'paid' else ('bg-red-500/15 text-red-400' if o.status == 'failed' else 'bg-yellow-500/15 text-yellow-400') }}">
+          {{ o.status|title }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

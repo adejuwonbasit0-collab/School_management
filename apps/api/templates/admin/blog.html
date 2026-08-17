@@ -1,0 +1,252 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Blog Posts{% endblock %}
+{% block page_subtitle %}{{ posts.total }} total posts{% endblock %}
+
+{% block topbar_actions %}
+<button onclick="openModal('create-post-modal')" class="topbar-btn primary">
+  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  New Post
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="a-panel">
+  <div class="a-table-wrap">
+    <table class="a-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Author</th>
+          <th>Views</th>
+          <th>Published</th>
+          <th>Date</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in posts.items %}
+        <tr>
+          <td>
+            <div style="font-weight:600;font-size:13px;color:var(--text);max-width:280px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ p.title }}</div>
+            {% if p.featured %}<span class="badge badge-warning" style="margin-top:3px">★ Featured</span>{% endif %}
+          </td>
+          <td><span class="badge badge-purple">{{ p.category }}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="a-avatar-fallback a-avatar-sm">{{ (p.author.name or 'A')[0]|upper if p.author else 'A' }}</div>
+              <span class="text-muted">{{ p.author.name if p.author else '—' }}</span>
+            </div>
+          </td>
+          <td><span class="mono" style="color:var(--cyan)">{{ p.views }}</span></td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.toggle_publish_post', pid=p.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="a-btn {{ 'a-btn-success' if p.published else 'a-btn-ghost' }} a-btn-xs">
+                {{ 'Published' if p.published else 'Draft' }}
+              </button>
+            </form>
+          </td>
+          <td><span class="text-muted">{{ p.created_at | timeago }}</span></td>
+          <td style="text-align:right">
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              {% if p.published %}
+              <a href="{{ url_for('cms.blog_post', slug=p.slug) }}" target="_blank" class="a-btn a-btn-ghost a-btn-xs">View</a>
+              {% endif %}
+              <button onclick="openEditPost({{ p.id }})"
+                class="a-btn a-btn-ghost a-btn-xs">Edit</button>
+              <form method="POST" action="{{ url_for('admin.delete_post', pid=p.id) }}" style="display:inline"
+                onsubmit="return confirm('Delete this post permanently?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="a-btn a-btn-danger a-btn-xs">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">
+          <div class="a-empty">
+            <div class="a-empty-icon">📝</div>
+            <div class="a-empty-title">No posts yet</div>
+            <div class="a-empty-desc">Write your first article</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if posts.pages > 1 %}
+  <div class="a-pagination">
+    {% if posts.has_prev %}<a href="{{ url_for('admin.blog', page=posts.prev_num) }}" class="a-page-btn">←</a>{% endif %}
+    <span style="font-size:12px;color:var(--text-muted)">{{ posts.page }}/{{ posts.pages }}</span>
+    {% if posts.has_next %}<a href="{{ url_for('admin.blog', page=posts.next_num) }}" class="a-page-btn">→</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Create Post Modal -->
+<div id="create-post-modal" class="a-modal-overlay">
+  <div class="a-modal a-modal-xl">
+    <div class="a-modal-header">
+      <div class="a-modal-title">New Blog Post</div>
+      <button class="a-modal-close" onclick="closeModal('create-post-modal')">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin.create_post') }}">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:16px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2">
+          <label class="a-label">Title *</label>
+          <input name="title" required class="a-input" placeholder="How I Built a SaaS in 30 Days"/>
+        </div>
+        <div>
+          <label class="a-label">Category</label>
+          <select name="category" class="a-input">
+            {% for c in ['tutorial','ai','design','news','opinion','case-study','devtools','career'] %}
+            <option value="{{ c }}">{{ c|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="a-label">Tags (comma separated)</label>
+          <input name="tags" class="a-input" placeholder="flask, python, saas, tutorial"/>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Excerpt (shown in listings)</label>
+          <textarea name="excerpt" rows="2" class="a-input" placeholder="A brief summary of what this article covers…"></textarea>
+        </div>
+        <div>
+          <label class="a-label">Cover Image URL</label>
+          <input name="cover_image" type="url" class="a-input" placeholder="https://…/cover.jpg"/>
+        </div>
+        <div>
+          <label class="a-label">SEO Title (optional override)</label>
+          <input name="seo_title" class="a-input" placeholder="Leave blank to use the post title"/>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">SEO Meta Description (optional override)</label>
+          <textarea name="seo_desc" rows="2" class="a-input" placeholder="Leave blank to use the excerpt"></textarea>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:16px">
+          <label class="a-toggle">
+            <input type="checkbox" name="published"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div>
+              <div class="a-toggle-label">Publish Immediately</div>
+              <div class="a-toggle-sublabel">Visible to all visitors</div>
+            </div>
+          </label>
+          <label class="a-toggle">
+            <input type="checkbox" name="featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div>
+              <div class="a-toggle-label">Feature on Homepage</div>
+              <div class="a-toggle-sublabel">Show in hero blog section</div>
+            </div>
+          </label>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Content (Markdown supported)</label>
+          <textarea name="content" rows="12" class="a-input mono" style="font-size:12px;line-height:1.6"
+            placeholder="## Introduction&#10;&#10;Start writing your article here…&#10;&#10;## Code Example&#10;&#10;```python&#10;print('Hello World')&#10;```"></textarea>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('create-post-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Create Post</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Post Modal -->
+<div id="edit-post-modal" class="a-modal-overlay">
+  <div class="a-modal-box" style="max-width:700px">
+    <div class="a-modal-header">
+      <div class="a-modal-title">Edit Post</div>
+      <button class="a-modal-close" onclick="closeModal('edit-post-modal')">✕</button>
+    </div>
+    <form method="POST" id="edit-post-form">
+      <div class="a-modal-body responsive-grid-2" style="display:grid;gap:16px;max-height:65vh;overflow-y:auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="grid-column:span 2">
+          <label class="a-label">Title *</label>
+          <input name="title" id="edit-title" required class="a-input"/>
+        </div>
+        <div>
+          <label class="a-label">Category</label>
+          <select name="category" id="edit-category" class="a-input">
+            {% for c in ['tutorial','ai','design','news','opinion','case-study','devtools','career'] %}
+            <option value="{{ c }}">{{ c|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="a-label">Tags (comma separated)</label>
+          <input name="tags" id="edit-tags" class="a-input"/>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Excerpt</label>
+          <textarea name="excerpt" id="edit-excerpt" rows="2" class="a-input"></textarea>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Cover Image URL</label>
+          <input name="cover_image" id="edit-cover_image" type="url" class="a-input"/>
+        </div>
+        <div>
+          <label class="a-label">SEO Title (optional override)</label>
+          <input name="seo_title" id="edit-seo_title" class="a-input"/>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">SEO Meta Description (optional override)</label>
+          <textarea name="seo_desc" id="edit-seo_desc" rows="2" class="a-input"></textarea>
+        </div>
+        <div style="display:flex;gap:16px">
+          <label class="a-toggle">
+            <input type="checkbox" name="published" id="edit-published"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Published</div></div>
+          </label>
+          <label class="a-toggle">
+            <input type="checkbox" name="featured" id="edit-featured"/>
+            <div class="a-toggle-track"><div class="a-toggle-thumb"></div></div>
+            <div><div class="a-toggle-label">Featured</div></div>
+          </label>
+        </div>
+        <div style="grid-column:span 2">
+          <label class="a-label">Content (Markdown supported)</label>
+          <textarea name="content" id="edit-content" rows="10" class="a-input mono" style="font-size:12px;line-height:1.6"></textarea>
+        </div>
+      </div>
+      <div class="a-modal-footer">
+        <button type="button" onclick="closeModal('edit-post-modal')" class="a-btn a-btn-ghost">Cancel</button>
+        <button type="submit" class="a-btn a-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function openEditPost(id) {
+  try {
+    const res = await fetch(`/admin/blog/${id}`);
+    const data = await res.json();
+    document.getElementById('edit-post-form').action = `/admin/blog/${id}/update`;
+    document.getElementById('edit-title').value = data.title || '';
+    document.getElementById('edit-category').value = data.category || 'tutorial';
+    document.getElementById('edit-tags').value = data.tags || '';
+    document.getElementById('edit-excerpt').value = data.excerpt || '';
+    document.getElementById('edit-cover_image').value = data.cover_image || '';
+    document.getElementById('edit-seo_title').value = data.seo_title || '';
+    document.getElementById('edit-seo_desc').value = data.seo_desc || '';
+    document.getElementById('edit-content').value = data.content || '';
+    document.getElementById('edit-published').checked = !!data.published;
+    document.getElementById('edit-featured').checked = !!data.featured;
+    openModal('edit-post-modal');
+  } catch (e) {
+    showToast('Could not load post', 'error');
+  }
+}
+</script>
+{% endblock %}
